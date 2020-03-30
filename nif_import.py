@@ -1,5 +1,6 @@
 import bpy
 
+import os
 import math
 import timeit
 import pathlib
@@ -852,22 +853,24 @@ class Material(SceneNode):
         path = pathlib.Path(relpath.lower())
 
         # discard "data files" prefix
-        if path.parts[0] == "data files":
+        if (path.parts[0]).lower() == "data files":
             path = path.relative_to("data files")
 
         # discard "textures" prefix
-        if path.parts[0] == "textures":
+        if (path.parts[0]).lower() == "textures":
             path = path.relative_to("textures")
 
         # evaluate final image path
         prefs = bpy.context.preferences.addons["io_scene_mw"].preferences
         for item in prefs.texture_paths:
             abspath = item.name / path
-            if abspath.parent.exists():
-                for extension in (".dds", ".tga", ".bmp"):
-                    abspath = abspath.with_suffix(extension)
-                    if abspath.exists():
-                        return abspath
+            if not abspath.parent.exists():
+                continue 
+            for extension in (".dds", ".tga", ".bmp"):
+                abspath = abspath.with_suffix(extension)
+                for filename in os.listdir(abspath.parent):
+                    if filename.lower() == str(abspath.stem + extension).lower():
+                        return pathlib.Path(os.path.join(abspath.parent, filename))
 
         return ("textures" / path)
 
