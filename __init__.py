@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 1),
+    "version": (0, 8, 2),
     "blender": (2, 82, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
@@ -345,6 +345,16 @@ class ImportScene(bpy.types.Operator, ImportHelper):
             "\n(e.g. when enabled importing 'xbase_anim.nif' will attach animations from 'xbase_anim.kf')"
         ),
         default=False,
+    )
+
+    discard_root_transforms: bpy.props.BoolProperty(
+        name="Discard Root Transforms",
+        description=(
+            "Discard the root object's transformations. In-game root transforms are overwriten with the values"
+            " provided by individual cell references. Despite this some meshes do define root transformations,"
+            " which can lead to unintended results if accidentally applied before exporting."
+        ),
+        default=True,
     )
 
     def execute(self, context):

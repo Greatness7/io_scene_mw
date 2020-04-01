@@ -43,6 +43,7 @@ def load(context, filepath, **config):
 class Importer:
     vertex_precision = 0.001
     attach_keyframe_data = False
+    discard_root_transforms = True
 
     def __init__(self, config):
         vars(self).update(config)
@@ -55,6 +56,10 @@ class Importer:
     def load(self, filepath):
         data = nif.NiStream()
         data.load(filepath)
+
+        # fix transforms
+        if self.discard_root_transforms:
+            data.root.matrix = ID44
 
         # attach kf file
         if self.attach_keyframe_data:
