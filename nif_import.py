@@ -992,7 +992,7 @@ class Animation(SceneNode):
             # build blender fcurves
             fc = action.fcurves.new(data_path, index=i, action_group=self.output.name)
             fc.keyframe_points.add(len(data.keys))
-            fc.keyframe_points.foreach_set("co", keys.ravel())
+            fc.keyframe_points.foreach_set("co", data.keys.ravel())
             fc.update()
 
     def create_kf_quaternion_rotations(self, controller, action, posed_offset):
