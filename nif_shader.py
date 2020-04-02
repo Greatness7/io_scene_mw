@@ -6,12 +6,14 @@ SHADER_PATH = pathlib.Path(__file__).parent / "assets" / "shader.blend"
 
 def execute(mesh):
     name = getattr(mesh.active_material, "name", "")
+    image = get_base_texture_image(mesh.active_material)
 
     material = create_material(name)
-    mesh.data.materials.clear()
-    mesh.data.materials.append(material)
+    try:  # assign to active index if viable
+        mesh.data.materials[mesh.active_material_index] = material
+    except IndexError:
+        mesh.data.materials.append(material)
 
-    image = get_base_texture_image(mesh.active_material)
     try:
         material.mw.base_texture.image = image
         material.mw.base_texture.layer = mesh.data.uv_layers.active.name
