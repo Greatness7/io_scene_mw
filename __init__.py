@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 3),
+    "version": (0, 8, 4),
     "blender": (2, 82, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
@@ -279,17 +279,16 @@ class Preferences(bpy.types.AddonPreferences):
     def draw(self, context):
         layout = self.layout
 
-        col = layout.column(align=True)
         if self.update_status == 'UPDATE_UNCHECKED':
-            col.operator("preferences.mw_update_check", icon='URL')
+            layout.operator("preferences.mw_update_check", icon='URL')
         elif self.update_status == 'UPDATE_AVAILABLE':
-            col.operator("preferences.mw_update_apply", icon='URL')
+            layout.operator("preferences.mw_update_apply", icon='URL')
         elif self.update_status == 'UPDATE_INSTALLED':
             text = "Restart Blender to finish install" if self.update_url else None
-            col.operator("preferences.mw_update_notes", icon='URL', text=text)
+            layout.operator("preferences.mw_update_notes", icon='URL', text=text)
         elif self.update_status == 'UPDATE_FORBIDDEN':
             text = "An update is available, but requires manual installation"
-            col.operator("preferences.mw_update_notes", icon='URL', text=text)
+            layout.operator("preferences.mw_update_notes", icon='URL', text=text)
         layout.separator()
 
         layout.label(text="Import/Export:")
@@ -425,13 +424,7 @@ class ObjectPanel(bpy.types.Panel):
 
     def draw(self, context):
         ob = context.active_object
-
-        # col = self.layout.column(align=True)
-        # col.prop(ob.mw, "object_type")
-        # col.enabled = (ob.type == 'EMPTY')
-
-        col = self.layout.column(align=True)
-        col.prop(ob.mw, "object_flags")
+        self.layout.prop(ob.mw, "object_flags")
 
 
 # ---------------
