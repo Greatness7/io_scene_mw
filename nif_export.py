@@ -1013,6 +1013,9 @@ class Animation(SceneNode):
         # text keys
         self.create_text_keys()
 
+        # visibility data
+        self.create_vis_controller(anims)
+
         # translation data
         self.create_translations(anims)
 
@@ -1040,6 +1043,34 @@ class Animation(SceneNode):
             text_data.keys[i] = time, name
 
         text_data.keys.sort()
+
+    def create_vis_controller(self, anims):
+        path = self.get_anim_path("hide_viewport")
+        fcurves = anims[path]
+        if len(fcurves) == 0:
+            return False
+
+        keys = self.collect_keyframe_points(fcurves, 1)
+        if len(keys) == 0:
+            return False
+
+        controller = nif.NiVisController(
+            frequency = 1.0,
+            target = self.output,
+            data = nif.NiVisData(),
+        )
+        controller.data.keys.resize(len(keys))
+        controller.data.keys["f0"] = keys[:, 0]
+        controller.data.keys["f1"] = 1 - keys[:, 1]
+
+        # update controller times
+        controller.update_start_stop_times()
+
+        self.output.controllers.appendleft(controller)
+
+        return True
+
+    # -- transform controllers --
 
     def create_translations(self, anims):
         path = self.get_anim_path("location")
@@ -1184,7 +1215,7 @@ class Animation(SceneNode):
 
         return True
 
-    # -- specific controllers --
+    # -- shader controllers --
 
     def create_uv_controller(self, bl_prop, bl_slot):
         anims = self.collect_animations(bl_prop.texture_group.node_tree)

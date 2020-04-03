@@ -896,6 +896,8 @@ class Animation(SceneNode):
         self.create_kf_controller(bl_object)
         # NiUVController
         self.create_uv_controller(bl_object)
+        # NiVisController
+        self.create_vis_controller(bl_object)
 
     # -- NiTextKeyExtraData --
 
@@ -1041,6 +1043,38 @@ class Animation(SceneNode):
             fc.keyframe_points.add(len(keys))
             fc.keyframe_points.foreach_set("co", keys.ravel())
             fc.update()
+
+    # -- NiVisController --
+
+    def create_vis_controller(self, bl_object):
+        controller = self.source.controllers.find_type(nif.NiVisController)
+        if controller is None:
+            return
+
+        data = controller.data
+        if (data is None) or len(data.keys) == 0:
+            return
+
+        keys = np.empty((len(data.keys), 2), dtype=np.float32)
+
+        # convert time to frame
+        keys[:, 0] = data.times * bpy.context.scene.render.fps
+
+        # invert appculled flag
+        keys[:, 1] = 1 - data.values
+
+        # get animations action
+        action = self.get_action(bl_object)
+
+        # get blender data path
+        data_path = self.output.path_from_id("hide_viewport")
+
+        # build blender fcurves
+        fc = action.fcurves.new(data_path, index=0, action_group=self.output.name)
+        fc.keyframe_points.add(len(keys))
+        fc.keyframe_points.foreach_set("co", keys.ravel())
+        fc.update()
+
 
     # -- NiUVController --
 

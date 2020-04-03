@@ -18,6 +18,20 @@ class NiVisData(NiObject):
         stream.write_uint(len(self.keys))
         stream.write_array(self.keys, _dtype)
 
+    @property
+    def times(self):
+        return self.keys["f0"]
+
+    @property
+    def values(self):
+        return self.keys["f1"]
+
+    def get_start_stop_times(self):
+        if len(self.keys) == 0:
+            return (0, 0)
+        else:
+            return (self.times[0], self.times[-1])
+
 
 if __name__ == "__main__":
     from es3.utils.typing import *
