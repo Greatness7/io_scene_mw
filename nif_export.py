@@ -410,7 +410,7 @@ class Empty(SceneNode):
         if isinstance(data, nif.NiTriShapeData):
             self.output = nif.NiTriShape(data=data)
         else:
-            if self.is_collider:
+            if self.source in self.exporter.colliders:
                 self.output = nif.RootCollisionNode(app_culled=True)
             else:
                 self.output = nif.NiNode()
