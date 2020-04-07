@@ -905,7 +905,7 @@ class Material(SceneNode):
         # Test Threshold
         ni_prop.test_ref = int(bl_prop.material.alpha_threshold * 255)
         # Test Method
-        ni_prop.test_mode = 'ALWAYS'
+        ni_prop.test_mode = 'GREATER'
         # Apply Property
         ni_object.properties.append(ni_prop)
 
