@@ -1126,7 +1126,8 @@ class Animation(SceneNode):
 
         # require uniform scaling
         if not np.allclose(keys[:, 1:].min(1), keys[:, 1:].max(1), rtol=0, atol=1e-04):
-            raise Exception(f"({self.name}) non-uniform scale animations are not supported")
+            print(f"({self.name}) non-uniform scale animations are not supported")
+            return False
 
         # set the controller keys
         controller.data.scales.keys = keys[:, :2]
