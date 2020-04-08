@@ -854,18 +854,6 @@ class Material(SceneNode):
         self.exporter.materials[material] = ni_object.properties
 
     def create_material_property(self, ni_object, bl_prop):
-        """ TODO
-            name           : DONE
-            extra_data     :
-            controller     :
-            flags          : WIP
-            ambient_color  : DONE
-            diffuse_color  : DONE
-            specular_color : DONE
-            emissive_color : DONE
-            shine          : DONE
-            alpha          : DONE
-        """
         ni_prop = nif.NiMaterialProperty()
         # Material Name
         ni_prop.name = bl_prop.material.name
@@ -886,11 +874,6 @@ class Material(SceneNode):
         ni_object.properties.append(ni_prop)
 
     def create_alpha_property(self, ni_object, bl_prop):
-        """ TODO:
-            src_blend_mode
-            dst_blend_mode
-            test_mode
-        """
         if not (bl_prop.use_alpha_blend or bl_prop.use_alpha_clip):
             return
         ni_prop = nif.NiAlphaProperty()
@@ -910,17 +893,6 @@ class Material(SceneNode):
         ni_object.properties.append(ni_prop)
 
     def create_texturing_property(self, ni_object, bl_prop):
-        """ TODO
-            name           :
-            extra_data     :
-            controller     :
-            flags          :
-            apply_mode     :
-            tex_source(s)  : WIP
-            clamp_mode(s)  : -- bl_tex.extension ?
-            filter_mode(s) : -- bl_tex.projection ?
-            uv_set(s)      :
-        """
         if not any(slot.image for slot in bl_prop.texture_slots):
             return
         ni_prop = nif.NiTexturingProperty()
@@ -933,17 +905,6 @@ class Material(SceneNode):
         ni_object.properties.append(ni_prop)
 
     def create_texturing_property_map(self, bl_prop, ni_prop, name):
-        """ TODO
-            name         :
-            extra_data   :
-            controller   :
-            use_external :
-            filename    : DONE
-            pixel_data   :
-            pixel_layout :
-            use_mipmaps  : ?
-            is_static    :
-        """
         try:
             bl_slot = getattr(bl_prop, name)
             filepath = bl_slot.image.filepath
