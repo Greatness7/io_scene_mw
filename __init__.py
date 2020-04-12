@@ -465,22 +465,25 @@ class MarkersPanel(bpy.types.Panel):
         return context.space_data.ui_mode == 'ACTION'
 
     def draw(self, context):
-        self.layout.prop(context.space_data, "show_pose_markers", text="Show Text Keys")
-
+        space_data = context.space_data
         try:
             action = context.active_object.animation_data.action
-            marker = action.pose_markers[0]
         except (AttributeError, IndexError):
+            self.layout.template_ID(space_data, "action", new="action.new", unlink="action.unlink")
             return
+
+        self.layout.prop(space_data, "show_pose_markers", text="Show Text Keys")
 
         # Markers List
         row = self.layout.row()
         row.template_list("DOPESHEET_UL_MW_MarkersList", "", action, "pose_markers", action, "active_pose_marker_index")
+        row.enabled = space_data.show_pose_markers
 
         # Markers Operators
         col = row.column(align=True)
         col.operator("marker.add", icon='ADD', text="")
         col.operator("marker.delete", icon='REMOVE', text="")
+        col.enabled = space_data.show_pose_markers
 
 
 # --------------

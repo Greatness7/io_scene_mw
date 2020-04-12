@@ -988,12 +988,12 @@ class Animation(SceneNode):
         self.__dict__ = node.__dict__
 
     def create(self):
+        # create text keys even if no animations as assigned
+        self.create_text_keys()
+
         anims = self.collect_animations(self.source.id_data)
         if len(anims) == 0:
             return
-
-        # text keys
-        self.create_text_keys()
 
         # visibility data
         self.create_vis_controller(anims)
