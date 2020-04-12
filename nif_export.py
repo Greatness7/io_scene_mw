@@ -704,23 +704,44 @@ class Mesh(SceneNode):
             # source object does not have morph data
             return morph_data
 
-        morph_data.keys = [np.empty(0)]  # empty basis layer
-        for fc in action.fcurves:
-            # allocate keyframe array
-            kf_array = np.empty((len(fc.keyframe_points), 2))
-            # populate keyframe array
-            fc.keyframe_points.foreach_get("co", kf_array.ravel())
-            # convert frames to times
-            kf_array[:, 0] /= bpy.context.scene.render.fps
-            # collect the final array
-            morph_data.keys.append(kf_array)
+        if not (shape_keys.key_blocks and action.fcurves):
+            return morph_data
+
+        basis = shape_keys.key_blocks[0]
+        fcurves = {fc.data_path: fc for fc in action.fcurves}
+
+        # isolate unmuted
+        fcurves_to_shape_keys = {None: basis}
+        for sk in shape_keys.key_blocks:
+            fc = fcurves.get(sk.path_from_id('value'))
+            if fc and not sk.mute:
+                fcurves_to_shape_keys[fc] = sk
+                assert sk.relative_key == basis
 
         # allocate morph targets
-        morph_targets = np.empty((len(shape_keys.key_blocks), len(bl_data.vertices), 3))
+        morph_targets = np.empty((len(fcurves_to_shape_keys), len(bl_data.vertices), 3))
 
-        # populate morph targets
-        for i, shape_key in enumerate(shape_keys.key_blocks):
-            shape_key.data.foreach_get("co", morph_targets[i].ravel())
+        # allocate morph sk list
+        morph_data.keys = [None] * len(fcurves_to_shape_keys)
+
+        # collect animation data
+        for i, (fc, sk) in enumerate(fcurves_to_shape_keys.items()):
+            if i == 0:
+                # this is basis shape key
+                kf_array = np.empty(0)
+            else:
+                # allocate keyframe array
+                kf_array = np.empty((len(fc.keyframe_points), 2))
+                # populate keyframe array
+                fc.keyframe_points.foreach_get("co", kf_array.ravel())
+                # convert frames to times
+                kf_array[:, 0] /= bpy.context.scene.render.fps
+
+            # collect keyframe array
+            morph_data.keys[i] = kf_array
+
+            # populate morph targets
+            sk.data.foreach_get("co", morph_targets[i].ravel())
 
         # make relative to basis
         morph_targets[1:] -= morph_targets[0]
