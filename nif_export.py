@@ -842,23 +842,25 @@ class Material(SceneNode):
     def create(self, material, ni_object):
         if self.is_collider:
             return  # no properties on colliders
-
         if not (material and material.use_nodes):
             return  # not an applicable material
 
-        if not material.mw.use_vertex_colors:
-            try:
+        try:
+            bl_prop = material.mw.validate()
+        except TypeError:
+            bl_prop = None
+
+        try:
+            if not bl_prop.use_vertex_colors:
                 del ni_object.data.vertex_colors
-            except AttributeError:
-                pass
+        except AttributeError:
+            pass
 
         if material in self.exporter.materials:
             ni_object.properties = self.exporter.materials[material]
             return  # material already processed
 
-        try:
-            bl_prop = material.mw.validate()
-        except TypeError:
+        if bl_prop is None:
             # Not a MW Material
             self.create_fallback_property(ni_object, material)
         else:
@@ -975,7 +977,7 @@ class Material(SceneNode):
             ni_prop = nif.NiTexturingProperty()
             ni_object.properties.append(ni_prop)
             # Base Texture Map
-            m = ni_prop.base_texture = ni_prop.TexturingPropertyMap()
+            m = ni_prop.base_texture = nif.NiTexturingPropertyMap()
             # Base Texture Source
             m.source = nif.NiSourceTexture()
             m.source.filename = bpy.path.abspath(bl_image.filepath)
