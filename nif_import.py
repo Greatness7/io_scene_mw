@@ -665,8 +665,11 @@ class Mesh(SceneNode):
             vertex_colors = vertex_colors[triangles].reshape(-1, 3)
 
         # remove doubles
+        scale = decompose(self.matrix_world)[-1]
         indices, inverse = nif_utils.unique_rows(
-            vertices, *vertex_weights, *vertex_morphs,
+            vertices * scale,
+            *vertex_weights,
+            *vertex_morphs,
             precision=self.importer.vertex_precision,
         )
         if len(vertices) > len(indices) > 3:
