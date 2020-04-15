@@ -72,19 +72,19 @@ class NiSourceTexture(NiTexture):
         stream.write_int(self.alpha_format)
         stream.write_ubyte(self.is_static)
 
-    def sanitize_filename(self, suffix=".dds"):
+    def sanitize_filename(self):
         filename = self.filename.replace("/", "\\").lstrip("\\.").lower()
 
-        # convert to pathlib object and apply suffix
         try:
-            path = pathlib.Path(filename).with_suffix(suffix)
+            path = pathlib.Path(filename)
         except ValueError:
-            self.filename = ""  # path was not valid
-            return
+            path = pathlib.Path()
 
         # temporary file name so we can return early
         self.filename = path.name
 
+        if not path.suffix:
+            return
         if len(path.parts) <= 1:
             return
         if len(path.parts) == 2:

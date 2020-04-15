@@ -869,8 +869,8 @@ class Material(SceneNode):
         for item in prefs.texture_paths:
             abspath = item.name / path
             if abspath.parent.exists():
-                for extension in (".dds", ".tga", ".bmp"):
-                    abspath = abspath.with_suffix(extension)
+                for suffix in {abspath.suffix, ".dds", ".tga", ".bmp"}:
+                    abspath = abspath.with_suffix(suffix)
                     if abspath.exists():
                         return abspath
 
