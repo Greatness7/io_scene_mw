@@ -869,12 +869,15 @@ class Material(SceneNode):
         if path.parts[0] == "textures":
             path = path.relative_to("textures")
 
+        # potential file extensions
+        suffixes = {path.suffix, ".dds", ".tga", ".bmp"}
+
         # evaluate final image path
         prefs = bpy.context.preferences.addons["io_scene_mw"].preferences
         for item in prefs.texture_paths:
             abspath = item.name / path
             if abspath.parent.exists():
-                for suffix in {abspath.suffix, ".dds", ".tga", ".bmp"}:
+                for suffix in suffixes:
                     abspath = abspath.with_suffix(suffix)
                     if abspath.exists():
                         return abspath
