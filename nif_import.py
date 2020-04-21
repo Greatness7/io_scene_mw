@@ -724,6 +724,8 @@ class Material(SceneNode):
 
     def create(self):
         properties = self.properties
+        if len(properties) == 0:
+            return
 
         # Merge Duplicates
         props_hash = len(self.output.data.vertex_colors), *properties.values()
