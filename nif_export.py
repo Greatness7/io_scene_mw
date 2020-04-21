@@ -424,7 +424,7 @@ class Empty(SceneNode):
             self.parent.output.children.append(self.output)
 
         # set flags
-        self.output.flags = self.source.mw.object_flags
+        self.output.flags |= self.source.mw.object_flags
 
         # set hidden
         if self.output.is_shadow:
