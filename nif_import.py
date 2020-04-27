@@ -928,7 +928,7 @@ class Animation(SceneNode):
 
     def create_kf_controller(self, bl_object):
         controller = self.source.controllers.find_type(nif.NiKeyframeController)
-        if controller is None:
+        if not (controller and controller.data):
             return
 
         # get animation action
