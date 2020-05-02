@@ -43,6 +43,7 @@ def save(context, filepath, **config):
 class Exporter:
     vertex_precision = 0.001
     extract_keyframe_data = False
+    export_animations = True
 
     def __init__(self, config):
         vars(self).update(config)
@@ -693,6 +694,9 @@ class Mesh(SceneNode):
     def get_morph_data(self, bl_data, ni_data):
         morph_data = nif_utils.Namespace(targets=())
 
+        if not self.exporter.export_animations:
+            return morph_data
+
         # ignore collider meshes
         if self.is_collider:
             return morph_data
@@ -990,6 +994,9 @@ class Animation(SceneNode):
         self.__dict__ = node.__dict__
 
     def create(self):
+        if not self.exporter.export_animations:
+            return
+
         # create text keys even if no animations as assigned
         self.create_text_keys()
 
@@ -1203,6 +1210,9 @@ class Animation(SceneNode):
     # -- shader controllers --
 
     def create_uv_controller(self, bl_prop, bl_slot):
+        if not self.exporter.export_animations:
+            return
+
         anims = self.collect_animations(bl_prop.texture_group.node_tree)
         if len(anims) == 0:
             return
@@ -1254,6 +1264,9 @@ class Animation(SceneNode):
         self.output.controllers.appendleft(controller)
 
     def create_material_controllers(self, ni_prop, bl_prop):
+        if not self.exporter.export_animations:
+            return
+
         anims = self.collect_animations(bl_prop.material.node_tree)
         if len(anims) == 0:
             return

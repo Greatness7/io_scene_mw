@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 11),
+    "version": (0, 8, 12),
     "blender": (2, 82, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
@@ -394,6 +394,12 @@ class ExportScene(bpy.types.Operator, ExportHelper):
         name="Only Selected",
         description="Only export objects that are selected",
         default=False,
+    )
+
+    export_animations: bpy.props.BoolProperty(
+        name="Export Animations",
+        description="Animations will be exported. Uncheck to skip all animation data during export.",
+        default=True,
     )
 
     extract_keyframe_data: bpy.props.BoolProperty(
