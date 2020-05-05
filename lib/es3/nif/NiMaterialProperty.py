@@ -10,7 +10,7 @@ class NiMaterialProperty(NiProperty):
     specular_color: NiPoint3 = ZERO3
     emissive_color: NiPoint3 = ZERO3
     shine: float32 = 0.0
-    alpha: float32 = 0.0
+    alpha: float32 = 1.0
 
     def load(self, stream):
         super().load(stream)
