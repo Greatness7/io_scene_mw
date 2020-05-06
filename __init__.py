@@ -351,7 +351,7 @@ class ImportScene(bpy.types.Operator, ImportHelper):
         description=(
             "Discard the root object's transformations. In-game root transforms are overwriten with the values"
             " provided by individual cell references. Despite this some meshes do define root transformations,"
-            " which can lead to unintended results if accidentally applied before exporting."
+            " which can lead to unintended results if accidentally applied before exporting"
         ),
         default=True,
     )
@@ -360,7 +360,7 @@ class ImportScene(bpy.types.Operator, ImportHelper):
         name="Preserve Material Names",
         description=(
             "Preserve material names from the source file. If unchecked materials will be renamed based on the"
-            " assigned textures."
+            " assigned textures"
         ),
         default=True,
     )
@@ -407,7 +407,7 @@ class ExportScene(bpy.types.Operator, ExportHelper):
 
     export_animations: bpy.props.BoolProperty(
         name="Export Animations",
-        description="Animations will be exported. Uncheck to skip all animation data during export.",
+        description="Animations will be exported. Uncheck to skip all animation data during export",
         default=True,
     )
 
@@ -424,7 +424,7 @@ class ExportScene(bpy.types.Operator, ExportHelper):
         name="Preserve Material Names",
         description=(
             "Preserve material names from the source file. If unchecked materials will be renamed based on the"
-            " assigned textures."
+            " assigned textures"
         ),
         default=True,
     )
