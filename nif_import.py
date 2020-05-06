@@ -765,12 +765,6 @@ class Material(SceneNode):
             self.create_wireframe_property(bl_prop, ni_wireframe)
 
     def create_alpha_property(self, bl_prop, ni_prop):
-        """ TODO:
-            src_blend_mode :
-            dst_blend_mode :
-            test_mode      :
-            no_sorter      :
-        """
         # Alpha Flags
         bl_prop.alpha_flags = ni_prop.flags
         # Alpha Threshold
