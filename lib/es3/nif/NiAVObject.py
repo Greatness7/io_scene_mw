@@ -57,6 +57,11 @@ class NiAVObject(NiObjectNET):
         if self.bounding_volume:
             self.bounding_volume.apply_scale(scale)
 
+    def get_property(self, property_type):
+        for prop in self.properties:
+            if isinstance(prop, property_type):
+                return prop
+
     @property
     def matrix(self):
         return compose(self.translation, self.rotation, self.scale)

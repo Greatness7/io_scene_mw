@@ -44,6 +44,7 @@ class Importer:
     vertex_precision = 0.001
     attach_keyframe_data = False
     discard_root_transforms = True
+    preserve_material_names = True
 
     def __init__(self, config):
         vars(self).update(config)
@@ -826,6 +827,11 @@ class Material(SceneNode):
             image = self.create_image(ni_slot.source.filename)
         except AttributeError:
             return
+
+        # material name
+        if not self.importer.preserve_material_names:
+            if (name == "base_texture") and image.filepath:
+                bl_prop.material.name = pathlib.Path(image.filepath).stem
 
         # texture image
         bl_slot.image = image

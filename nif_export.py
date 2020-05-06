@@ -44,6 +44,7 @@ class Exporter:
     vertex_precision = 0.001
     extract_keyframe_data = False
     export_animations = True
+    preserve_material_names = True
 
     def __init__(self, config):
         vars(self).update(config)
@@ -939,6 +940,13 @@ class Material(SceneNode):
             return
 
         ni_slot = nif.NiTexturingPropertyMap()
+
+        # material name
+        if not self.exporter.preserve_material_names:
+            if (name == "base_texture") and filepath:
+                prop = self.output.get_property(nif.NiMaterialProperty)
+                if prop is not None:
+                    prop.name = pathlib.Path(filepath).stem
 
         # texture index
         for i, uv in enumerate(self.source.data.uv_layers):

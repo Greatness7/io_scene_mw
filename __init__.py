@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 12),
+    "version": (0, 8, 13),
     "blender": (2, 82, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
@@ -356,6 +356,15 @@ class ImportScene(bpy.types.Operator, ImportHelper):
         default=True,
     )
 
+    preserve_material_names: bpy.props.BoolProperty(
+        name="Preserve Material Names",
+        description=(
+            "Preserve material names from the source file. If unchecked materials will be renamed based on the"
+            " assigned textures."
+        ),
+        default=True,
+    )
+
     def execute(self, context):
         from . import nif_import
         kwargs = self.as_keywords(ignore=("filename_ext", "filter_glob", "check_existing"))
@@ -409,6 +418,15 @@ class ExportScene(bpy.types.Operator, ExportHelper):
             "\n(e.g. exporting 'base_anim.nif' will create 'xbase_anim.nif' and 'xbase_anim.kf' files)"
         ),
         default=False,
+    )
+
+    preserve_material_names: bpy.props.BoolProperty(
+        name="Preserve Material Names",
+        description=(
+            "Preserve material names from the source file. If unchecked materials will be renamed based on the"
+            " assigned textures."
+        ),
+        default=True,
     )
 
     def execute(self, context):
