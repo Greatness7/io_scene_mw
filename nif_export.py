@@ -599,9 +599,8 @@ class Mesh(SceneNode):
             return
 
         # create controller
-        controller = nif.NiGeomMorpherController(flags=12)
+        controller = nif.NiGeomMorpherController(target=trishape, flags=12)
         controller.stop_time = max(kf[-1, 0] for kf in filter(len, morph_data.keys))
-        controller.target, trishape.controller = trishape, controller
 
         # create morph data
         controller.data = nif.NiMorphData(relative_targets=1)
@@ -612,6 +611,8 @@ class Mesh(SceneNode):
             target.interpolation = 1  # LINEAR_KEY
             target.keys = morph_data.keys[i]
             target.vertices = morph_data.targets[i]
+
+        trishape.controllers.appendleft(controller)
 
     # -- get blender data --
 
