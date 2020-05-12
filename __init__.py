@@ -260,6 +260,7 @@ class Preferences(bpy.types.AddonPreferences):
             ('UPDATE_INSTALLED', "", ""),
         ],
         options={'SKIP_SAVE'},
+        default='UPDATE_UNCHECKED',
     )
 
     update_url: bpy.props.StringProperty(options={'SKIP_SAVE'})
