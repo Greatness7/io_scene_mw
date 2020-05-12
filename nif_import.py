@@ -499,6 +499,8 @@ class Mesh(SceneNode):
     def create(self):
         bl_data = bpy.data.meshes.new(self.name)
         bl_object = Empty(self).create(bl_data)
+        if len(self.source.data.vertices) == 0:
+            return bl_object
 
         ni_data = self.get_mesh_data()
 
