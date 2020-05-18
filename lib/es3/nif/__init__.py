@@ -26,6 +26,7 @@ __all__ = [
     "NiFlipController",
     "NiFloatController",
     "NiFloatData",
+    "NiFltAnimationNode",
     "NiFogProperty",
     "NiGeometry",
     "NiGeometryData",
@@ -140,6 +141,7 @@ from .NiExtraData import NiExtraData
 from .NiFlipController import NiFlipController
 from .NiFloatController import NiFloatController
 from .NiFloatData import NiFloatData
+from .NiFltAnimationNode import NiFltAnimationNode
 from .NiFogProperty import NiFogProperty
 from .NiGeometry import NiGeometry
 from .NiGeometryData import NiGeometryData
