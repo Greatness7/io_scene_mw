@@ -1,6 +1,8 @@
 __all__ = [
     "AvoidNode",
     "BSMirroredNode",
+    "NiAccumulator",
+    "NiAlphaAccumulator",
     "NiAlphaController",
     "NiAlphaProperty",
     "NiAmbientLight",
@@ -16,6 +18,7 @@ __all__ = [
     "NiBSPArrayController",
     "NiBSParticleNode",
     "NiCamera",
+    "NiClusterAccumulator",
     "NiCollisionSwitch",
     "NiColorData",
     "NiDirectionalLight",
@@ -79,6 +82,7 @@ __all__ = [
     "NiSkinDataBoneData",
     "NiSkinInstance",
     "NiSkinPartition",
+    "NiSortAdjustNode",
     "NiSourceTexture",
     "NiSpecularProperty",
     "NiSphereBV",
@@ -116,6 +120,8 @@ __all__ = [
 ]
 from .AvoidNode import AvoidNode
 from .BSMirroredNode import BSMirroredNode
+from .NiAccumulator import NiAccumulator
+from .NiAlphaAccumulator import NiAlphaAccumulator
 from .NiAlphaController import NiAlphaController
 from .NiAlphaProperty import NiAlphaProperty
 from .NiAmbientLight import NiAmbientLight
@@ -131,6 +137,7 @@ from .NiBSAnimationNode import NiBSAnimationNode
 from .NiBSPArrayController import NiBSPArrayController
 from .NiBSParticleNode import NiBSParticleNode
 from .NiCamera import NiCamera
+from .NiClusterAccumulator import NiClusterAccumulator
 from .NiCollisionSwitch import NiCollisionSwitch
 from .NiColorData import NiColorData
 from .NiDirectionalLight import NiDirectionalLight
@@ -194,6 +201,7 @@ from .NiSkinData import NiSkinData
 from .NiSkinDataBoneData import NiSkinDataBoneData
 from .NiSkinInstance import NiSkinInstance
 from .NiSkinPartition import NiSkinPartition
+from .NiSortAdjustNode import NiSortAdjustNode
 from .NiSourceTexture import NiSourceTexture
 from .NiSpecularProperty import NiSpecularProperty
 from .NiSphereBV import NiSphereBV
