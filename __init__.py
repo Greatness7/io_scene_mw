@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 15),
+    "version": (0, 8, 16),
     "blender": (2, 82, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
@@ -682,6 +682,46 @@ class NiObjectBoneProps:
     object_flags = 12
 
 
+# --------------
+# MISC OPERATORS
+# --------------
+
+class CreateRadiusSphere(bpy.types.Operator):
+    bl_idname = "mesh.mw_create_radius_sphere"
+    bl_options = {"REGISTER", "UNDO"}
+    bl_label = "Create Radius Sphere"
+    bl_description = "Create a sphere representing the selected meshes radius."
+
+    def execute(self, context):
+        for mesh in context.selected_objects:
+            try:
+                center, radius = self.get_center_radius(mesh.data.vertices)
+            except (AttributeError, ValueError):
+                continue
+
+            ob = bpy.data.objects.new("Radius", None)
+            ob.empty_display_type = 'SPHERE'
+            ob.empty_display_size = 1.0
+            ob.scale = [radius] * 3
+            ob.location = center
+            ob.parent = mesh
+
+            context.scene.collection.objects.link(ob)
+
+        return {'FINISHED'}
+
+    @staticmethod
+    def get_center_radius(vertices):
+        # convert to numpy array
+        import numpy as np
+        array = np.empty((len(vertices), 3))
+        vertices.foreach_get("co", array.ravel())
+        # calc center and radius
+        center = (array.min(axis=0) + array.max(axis=0)) / 2
+        radius = np.linalg.norm(center - array, axis=1).max()
+        return center, radius
+
+
 # --------
 # REGISTER
 # --------
@@ -708,6 +748,7 @@ classes = (
     MaterialPanelSettings,
     *MaterialPanelTextures,
     NiObjectProps,
+    CreateRadiusSphere,
     nif_shader.TextureSlot,
     nif_shader.NiMaterialProps,
 )

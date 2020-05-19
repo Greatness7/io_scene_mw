@@ -519,9 +519,6 @@ class Mesh(SceneNode):
         # if self.source.is_shadow:
         #     bl_object.display_type = "WIRE"
 
-        # if self.importer.show_mesh_radius:
-        #     self.create_mesh_radius()
-
         try:
             self.output.display_type = self.parent.output.display_type
         except AttributeError:
@@ -633,16 +630,6 @@ class Mesh(SceneNode):
 
         # update frame range
         self.animation.update_frame_range(self.source.controller)
-
-    def create_mesh_radius(self):
-        ob = Empty(self).create_object()
-        ob.parent = self.output
-        ob.name = "Radius"
-        ob.empty_display_size = 1.0
-        ob.empty_display_type = 'SPHERE'
-        ob.location = self.source.data.center
-        ob.scale = [self.source.data.radius] * 3
-        return ob
 
     def get_mesh_data(self):
         vertices = self.source.data.vertices
