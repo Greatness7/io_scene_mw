@@ -32,7 +32,7 @@ class NiSequence(NiObject):
     def save(self, stream):
         stream.write_str(self.sequence_name)
 
-        stream.write_ubtye(bool(self.keyframe_file))
+        stream.write_ubyte(bool(self.keyframe_file))
         if self.keyframe_file:
             stream.write_str(self.keyframe_file)
         else:
