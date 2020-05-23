@@ -1039,7 +1039,7 @@ class Animation(SceneNode):
         for i in range(3):
             fc = action.fcurves.new(data_path, index=i, action_group=self.output.name)
             fc.keyframe_points.add(len(keys))
-            fc.keyframe_points.foreach_set("co", keys.ravel())
+            fc.keyframe_points.foreach_set("co", keys[:, :2].ravel())
             fc.update()
 
     # -- NiVisController --
