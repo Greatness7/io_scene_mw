@@ -974,8 +974,9 @@ class Animation(SceneNode):
             else:
                 self.output.rotation_mode = controller.data.rotations.euler_axis_order.name
                 self.create_kf_euler_rotations(controller, action, posed_offset)
-                return
-        self.create_kf_quaternion_rotations(controller, action, posed_offset)
+        else:
+            self.output.rotation_mode = 'QUATERNION'
+            self.create_kf_quaternion_rotations(controller, action, posed_offset)
 
     def create_kf_euler_rotations(self, controller, action, posed_offset):
         for i, data in enumerate(controller.data.rotations.euler_data):
