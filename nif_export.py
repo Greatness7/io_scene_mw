@@ -267,7 +267,7 @@ class Exporter:
         if len(roots) == 1:
             return roots[0].output
         # return nif.NiBSAnimationNode(name="Scene Root", flags=32, children=[r.output for r in roots])
-        return nif.NiNode(name="Scene Root", flags=32, children=[r.output for r in roots])
+        return nif.NiNode(name="Scene Root", flags=12, children=[r.output for r in roots])
 
     @property
     def scale_correction(self):
@@ -641,7 +641,7 @@ class Mesh(SceneNode):
         return bl_object, bl_data
 
     def get_skin_data(self, bl_data, ni_data):
-        skin_data = nif_utils.Namespace(weights=())
+        skin_data = nif_utils.Namespace(root=None, bones=(), weights=())
 
         # ignore collider meshes
         if self.is_collider:
@@ -694,7 +694,7 @@ class Mesh(SceneNode):
         return skin_data
 
     def get_morph_data(self, bl_data, ni_data):
-        morph_data = nif_utils.Namespace(targets=())
+        morph_data = nif_utils.Namespace(targets=(), keys=())
 
         if not self.exporter.export_animations:
             return morph_data
@@ -798,8 +798,7 @@ class Mesh(SceneNode):
         )
 
         # update face data
-        data.triangles = np.arange(inverse.size, dtype=int).reshape(-1, 3)
-        data.triangles = inverse[data.triangles]
+        data.triangles = inverse[np.arange(inverse.size, dtype=int).reshape(-1, 3)]
 
         # update vert data
         self.extract_vertex_data(indices, data, data, skin_data, skin_data, morph_data, morph_data)
