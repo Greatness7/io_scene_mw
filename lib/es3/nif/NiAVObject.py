@@ -50,6 +50,7 @@ class NiAVObject(NiObjectNET):
             self.bounding_volume.save(stream)
 
     def sort(self, key=lambda prop: prop.type):
+        super().sort()
         self.properties.sort(key=key)
 
     def apply_scale(self, scale):

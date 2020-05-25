@@ -4,6 +4,15 @@ from es3.utils.math import ID44, la, np
 from .NiAVObject import NiAVObject
 
 
+def _sort_children_key(child):
+    name = getattr(child, "name", "").lower()
+    if name.startswith("tri "):
+        prefix, suffix = name.rsplit(" ", 1)
+        if suffix.isnumeric():
+            return prefix, True, int(suffix)
+    return name, False, 0
+
+
 class NiNode(NiAVObject):
     children: List[Optional[NiAVObject]] = []
     effects: List[Optional[NiDynamicEffect]] = []
@@ -20,14 +29,15 @@ class NiNode(NiAVObject):
         stream.write_links(self.children)
         stream.write_links(self.effects)
 
-    def sort(self, key=None):
+    def sort(self, key=_sort_children_key):
         """Sort the NiNode's children list.
 
         If no key is provided children will be sorted by their name, with
         special handling for the "Tri (...) N" naming convention, where N
         is interpreted as an integer rather than a string.
         """
-        self.children.sort(key=(key or self._default_sort_key))
+        super().sort()
+        self.children.sort(key=key)
 
     def skinned_meshes(self):
         for mesh in self.descendants():
@@ -94,15 +104,6 @@ class NiNode(NiAVObject):
                     diff_inv = la.inv(diff)
                     for child in bone.children:
                         child.matrix = child.matrix @ diff_inv
-
-    @staticmethod
-    def _default_sort_key(child):
-        name = getattr(child, "name", "").lower()
-        if name.startswith("tri "):
-            prefix, suffix = name.rsplit(" ", 1)
-            if suffix.isnumeric():
-                return prefix, True, int(suffix)
-        return name, False, 0
 
 
 if __name__ == "__main__":
