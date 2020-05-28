@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 19),
+    "version": (0, 8, 20),
     "blender": (2, 82, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
@@ -75,12 +75,14 @@ class UpdateCheck(bpy.types.Operator):
 
     @staticmethod
     def get_latest_version_info():
+        import ssl
         import json
         import urllib.request
 
         tags_url = "https://api.github.com/repos/Greatness7/io_scene_mw/tags"
 
-        with urllib.request.urlopen(tags_url) as response:
+        ctx = ssl._create_unverified_context()
+        with urllib.request.urlopen(tags_url, context=ctx) as response:
             data = response.read()
 
         latest, *_ = json.loads(data)
@@ -123,10 +125,12 @@ class UpdateApply(bpy.types.Operator):
 
     def install_files(self, zipball_url):
         import io
+        import ssl
         import zipfile as zf
         import urllib.request
 
-        with urllib.request.urlopen(zipball_url) as response:
+        ctx = ssl._create_unverified_context()
+        with urllib.request.urlopen(zipball_url, context=ctx) as response:
             zipball = zf.ZipFile(io.BytesIO(response.read()))
 
         root = Path(PATH.name)
