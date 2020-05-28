@@ -95,7 +95,7 @@ class NiFloatData(NiObject):
             handles[0, ..., 1] = (values - self.in_tans / 3.0).T
             # outgoing handles
             handles[1, ..., 0] = (times + dt)
-            handles[1, ..., 1] = (values + self.out_tans / 3.0).T
+            handles[1, ..., 1] = (values - self.out_tans / 3.0).T
 
         return handles
 
