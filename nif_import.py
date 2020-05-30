@@ -274,9 +274,6 @@ class Importer:
 
 
 class SceneNode:
-    """ TODO
-        support for multiple armatures
-    """
 
     def __init__(self, importer, source, parent=None):
         self.importer = importer
@@ -570,7 +567,7 @@ class Mesh(SceneNode):
 
     @staticmethod
     def create_uv_sets(ob, uv_sets):
-        for i, uv in enumerate(uv_sets):
+        for i, uv in enumerate(uv_sets[:8]):  # max 8 uv sets (blender limitation)
             ob.data.uv_layers.new()
             ob.data.uv_layers[i].data.foreach_set("uv", uv.ravel())
 
@@ -896,8 +893,6 @@ class Animation(SceneNode):
         # NiVisController
         self.create_vis_controller(bl_object)
 
-    # -- NiTextKeyExtraData --
-
     def create_text_keys(self, bl_object):
         text_data = self.source.extra_datas.find_type(nif.NiTextKeyExtraData)
         if text_data is None:
@@ -906,14 +901,12 @@ class Animation(SceneNode):
         action = self.get_action(bl_object)
 
         # convert time to frame
-        text_data.keys["f0"] *= bpy.context.scene.render.fps
+        text_data.times *= bpy.context.scene.render.fps
 
-        for time, text in text_data.keys:
+        for time, text in text_data.keys.tolist():
             text = text.replace("\r\n", "; ")
             m = action.pose_markers.new(text)
             m.frame = math.ceil(time)  # TODO warn if not on an integer frame
-
-    # -- NiKeyframeController --
 
     def create_kf_controller(self, bl_object):
         controller = self.source.controllers.find_type(nif.NiKeyframeController)
@@ -926,15 +919,15 @@ class Animation(SceneNode):
         posed_offset = self.get_posed_offset(bl_object)
 
         # translation keys
-        self.create_kf_translations(controller, action, posed_offset)
+        self.create_translations(controller, action, posed_offset)
         # rotation keys
-        self.create_kf_rotations(controller, action, posed_offset)
+        self.create_rotations(controller, action, posed_offset)
         # scale keys
-        self.create_kf_scales(controller, action, posed_offset)
+        self.create_scales(controller, action, posed_offset)
 
         self.update_frame_range(controller)
 
-    def create_kf_translations(self, controller, action, posed_offset):
+    def create_translations(self, controller, action, posed_offset):
         data = controller.data.translations
         if len(data.keys) == 0:
             return
@@ -949,9 +942,6 @@ class Animation(SceneNode):
         if hasattr(self, "matrix_posed"):
             values[:] = values @ posed_offset[:3, :3].T + posed_offset[:3, 3]
 
-        # bezier tangent handles
-        handles = data.get_tangent_handles()
-
         # get blender data path
         data_path = self.output.path_from_id("location")
 
@@ -960,25 +950,23 @@ class Animation(SceneNode):
             fc = action.fcurves.new(data_path, index=i, action_group=self.bone_name)
             fc.keyframe_points.add(len(data.keys))
             fc.keyframe_points.foreach_set("co", data.keys[:, (0, i+1)].ravel())
-            if data.interpolation.name != 'LIN_KEY':
-                self.set_handle_types(fc.keyframe_points, 'FREE')
-                fc.keyframe_points.foreach_set("handle_left", handles[0, i].ravel())
-                fc.keyframe_points.foreach_set("handle_right", handles[1, i].ravel())
+            self.create_interpolation_data(data, fc, axis=i)
             fc.update()
 
-    def create_kf_rotations(self, controller, action, posed_offset):
+    def create_rotations(self, controller, action, posed_offset):
         if controller.data.rotations.euler_data:
             if isinstance(self.output, bpy.types.PoseBone):
                 print("[INFO] Euler animations on bones are not currently supported.")
                 controller.data.rotations.convert_to_quaternions()
             else:
                 self.output.rotation_mode = controller.data.rotations.euler_axis_order.name
-                self.create_kf_euler_rotations(controller, action, posed_offset)
-        else:
-            self.output.rotation_mode = 'QUATERNION'
-            self.create_kf_quaternion_rotations(controller, action, posed_offset)
+                self.create_euler_rotations(controller, action, posed_offset)
+                return
 
-    def create_kf_euler_rotations(self, controller, action, posed_offset):
+        self.output.rotation_mode = 'QUATERNION'
+        self.create_quaternion_rotations(controller, action, posed_offset)
+
+    def create_euler_rotations(self, controller, action, posed_offset):
         for i, data in enumerate(controller.data.rotations.euler_data):
             if len(data.keys) == 0:
                 continue
@@ -992,10 +980,11 @@ class Animation(SceneNode):
             # build blender fcurves
             fc = action.fcurves.new(data_path, index=i, action_group=self.output.name)
             fc.keyframe_points.add(len(data.keys))
-            fc.keyframe_points.foreach_set("co", data.keys.ravel())
+            fc.keyframe_points.foreach_set("co", data.keys[:, :2].ravel())
+            self.create_interpolation_data(data, fc)
             fc.update()
 
-    def create_kf_quaternion_rotations(self, controller, action, posed_offset):
+    def create_quaternion_rotations(self, controller, action, posed_offset):
         keys = controller.data.rotations.keys
         if len(keys) == 0:
             return
@@ -1024,7 +1013,7 @@ class Animation(SceneNode):
             fc.keyframe_points.foreach_set("co", keys[:, (0, i+1)].ravel())
             fc.update()
 
-    def create_kf_scales(self, controller, action, posed_offset):
+    def create_scales(self, controller, action, posed_offset):
         keys = controller.data.scales.keys
         if len(keys) == 0:
             return
@@ -1040,9 +1029,8 @@ class Animation(SceneNode):
             fc = action.fcurves.new(data_path, index=i, action_group=self.output.name)
             fc.keyframe_points.add(len(keys))
             fc.keyframe_points.foreach_set("co", keys[:, :2].ravel())
+            self.create_interpolation_data(controller.data.scales, fc)
             fc.update()
-
-    # -- NiVisController --
 
     def create_vis_controller(self, bl_object):
         controller = self.source.controllers.find_type(nif.NiVisController)
@@ -1072,9 +1060,6 @@ class Animation(SceneNode):
         fc.keyframe_points.add(len(keys))
         fc.keyframe_points.foreach_set("co", keys.ravel())
         fc.update()
-
-
-    # -- NiUVController --
 
     def create_uv_controller(self, bl_object):
         controller = self.source.controllers.find_type(nif.NiUVController)
@@ -1109,6 +1094,7 @@ class Animation(SceneNode):
                 fc = action.fcurves.new(data_path, index=i, action_group=uv_name)
                 fc.keyframe_points.add(len(keys))
                 fc.keyframe_points.foreach_set("co", keys[:, :2].ravel())
+                self.create_interpolation_data(data, fc, axis=i)
                 fc.update()
 
         # create tiling fcurves
@@ -1121,11 +1107,10 @@ class Animation(SceneNode):
                 fc = action.fcurves.new(data_path, index=i, action_group=uv_name)
                 fc.keyframe_points.add(len(keys))
                 fc.keyframe_points.foreach_set("co", keys[:, :2].ravel())
+                self.create_interpolation_data(data, fc, axis=i)
                 fc.update()
 
         self.update_frame_range(controller)
-
-    # -- NiMaterialColorController --
 
     def create_color_controller(self, bl_prop, ni_prop):
         controller = ni_prop.controllers.find_type(nif.NiMaterialColorController)
@@ -1136,7 +1121,6 @@ class Animation(SceneNode):
         if data is None:
             return
 
-        # keyframe points array
         keys = controller.data.keys
         if len(keys) == 0:
             return
@@ -1164,8 +1148,6 @@ class Animation(SceneNode):
 
         self.update_frame_range(controller)
 
-    # -- NiAlphaController --
-
     def create_alpha_controller(self, bl_prop, ni_prop):
         controller = ni_prop.controllers.find_type(nif.NiAlphaController)
         if controller is None:
@@ -1175,7 +1157,6 @@ class Animation(SceneNode):
         if data is None:
             return
 
-        # keyframe points array
         keys = controller.data.keys
         if len(keys) == 0:
             return
@@ -1193,6 +1174,7 @@ class Animation(SceneNode):
         fc = action.fcurves.new(data_path, index=0, action_group=bl_prop.material.name)
         fc.keyframe_points.add(len(keys))
         fc.keyframe_points.foreach_set("co", keys[:, :2].ravel())
+        self.create_interpolation_data(data, fc)
         fc.update()
 
         self.update_frame_range(controller)
@@ -1219,9 +1201,19 @@ class Animation(SceneNode):
         return action
 
     @staticmethod
-    def set_handle_types(keyframe_points, handle_type):
-        for kp in keyframe_points:
-            kp.handle_left_type = kp.handle_right_type = handle_type
+    def create_interpolation_data(ni_data, fcurves, axis=...):
+        if ni_data.interpolation.name  == 'NO_INTERP':
+            for kp in fcurves.keyframe_points:
+                kp.interpolation = 'CONSTANT'
+        elif ni_data.interpolation.name  == 'LIN_KEY':
+            for kp in fcurves.keyframe_points:
+                kp.interpolation = 'LINEAR'
+        else:
+            handles = ni_data.get_tangent_handles()
+            fcurves.keyframe_points.foreach_set("handle_left", handles[0, axis].ravel())
+            fcurves.keyframe_points.foreach_set("handle_right", handles[1, axis].ravel())
+            for kp in fcurves.keyframe_points:
+                kp.handle_left_type = kp.handle_right_type = 'FREE'
 
     @staticmethod
     def update_frame_range(controller):

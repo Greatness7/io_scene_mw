@@ -22,9 +22,17 @@ class NiVisData(NiObject):
     def times(self):
         return self.keys["f0"]
 
+    @times.setter
+    def times(self, array):
+        self.keys["f0"] = array
+
     @property
     def values(self):
         return self.keys["f1"]
+
+    @values.setter
+    def values(self, array):
+        self.keys["f1"] = array
 
     def get_start_stop_times(self):
         if len(self.keys) == 0:

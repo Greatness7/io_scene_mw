@@ -24,6 +24,22 @@ class NiTextKeyExtraData(NiExtraData):
             stream.write_float(time)
             stream.write_str(value)
 
+    @property
+    def times(self):
+        return self.keys["f0"]
+
+    @times.setter
+    def times(self, array):
+        self.keys["f0"] = array
+
+    @property
+    def values(self):
+        return self.keys["f1"]
+
+    @values.setter
+    def values(self, array):
+        self.keys["f1"] = array
+
     @staticmethod
     def _get_stop_text(start_text):
         group_name = start_text[:-6]  # trim " start" prefix

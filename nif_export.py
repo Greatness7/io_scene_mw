@@ -617,10 +617,6 @@ class Mesh(SceneNode):
     # -- get blender data --
 
     def get_mesh_data(self):
-        """ TODO
-            Use existing TRIANGULATE modifier if present.
-            Fix the depsgraph implementation performance.
-        """
         # Can't evaluate if hidden.
         self.source.hide_viewport = False
 
@@ -1017,33 +1013,35 @@ class Animation(SceneNode):
         if not self.exporter.export_animations:
             return
 
-        # create text keys even if no animations as assigned
+        # create text keys even if no animations are assigned
+        # this is necessary as text keys are specified on the
+        # file root and will influence all descending objects
         self.create_text_keys()
 
-        anims = self.collect_animations(self.source.id_data)
-        if len(anims) == 0:
+        fcurves_dict = self.get_fcurves_dict(self.source.id_data)
+        if len(fcurves_dict) == 0:
             return
 
         # visibility data
-        self.create_vis_controller(anims)
+        self.create_vis_controller(fcurves_dict)
 
         # translation data
-        self.create_translations(anims)
+        self.create_translations(fcurves_dict)
 
         # rotation data
-        self.create_rotations(anims)
+        self.create_rotations(fcurves_dict)
 
         # scale data
-        self.create_scales(anims)
+        self.create_scales(fcurves_dict)
 
     def create_text_keys(self):
         try:
             markers = self.source.animation_data.action.pose_markers
         except AttributeError:
-            return
+            return False
 
         if len(markers) == 0:
-            return
+            return False
 
         text_data = self.output.extra_data = nif.NiTextKeyExtraData()
         text_data.keys.resize(len(markers))
@@ -1055,24 +1053,22 @@ class Animation(SceneNode):
 
         text_data.keys.sort()
 
-    def create_vis_controller(self, anims):
-        path = self.get_anim_path("hide_viewport")
-        fcurves = anims[path]
+        return True
+
+    def create_vis_controller(self, fcurves_dict):
+        fcurves = self.filter_fcurves(fcurves_dict, "hide_viewport")
         if len(fcurves) == 0:
             return False
 
-        keys = self.collect_keyframe_points(fcurves, 1)
+        key_type = nif.NiFloatData.KeyType.LIN_KEY
+        keys = self.collect_keyframe_points(fcurves, key_type, num_axes=1)
         if len(keys) == 0:
             return False
 
-        controller = nif.NiVisController(
-            frequency = 1.0,
-            target = self.output,
-            data = nif.NiVisData(),
-        )
+        controller = nif.NiVisController(target=self.output, data=nif.NiVisData())
         controller.data.keys.resize(len(keys))
-        controller.data.keys["f0"] = keys[:, 0]
-        controller.data.keys["f1"] = 1 - keys[:, 1]
+        controller.data.keys.times = keys[:, 0]
+        controller.data.keys.values = 1 - keys[:, 1]
 
         # update controller times
         controller.update_start_stop_times()
@@ -1083,27 +1079,31 @@ class Animation(SceneNode):
 
     # -- transform controllers --
 
-    def create_translations(self, anims):
-        path = self.get_anim_path("location")
-        fcurves = anims[path]
+    def create_translations(self, fcurves_dict):
+        fcurves = self.filter_fcurves(fcurves_dict, "location")
         if len(fcurves) == 0:
             return False
 
-        # get keyframe controller
-        controller = self.create_keyframe_controller()
+        key_type = self.get_interpolation_type(fcurves)
+        if key_type is None:
+            return False
 
         # collect keyframe points
-        keys = self.collect_keyframe_points(fcurves, 3)
+        keys = self.collect_keyframe_points(fcurves, key_type, num_axes=3)
         if len(keys) == 0:
             return False
 
         # split times from values
-        values = keys[:, 1:5]
+        values = keys[:, 1:4]
 
-        # convert to output space
+        # pose / axis corrections
         if isinstance(self.source, bpy.types.PoseBone):
             offset = self.get_posed_offset()
             values[:] = values @ offset[:3, :3].T + offset[:3, 3]
+
+        # get keyframe controller
+        controller = self.create_keyframe_controller()
+        controller.data.translations.interpolation = key_type
 
         # set the controller keys
         controller.data.translations.keys = keys
@@ -1114,91 +1114,62 @@ class Animation(SceneNode):
 
         return True
 
-    def create_rotations(self, anims):
-        has_euler = self.create_euler_rotations(anims)
-        has_quats = self.create_quaternion_rotations(anims)
+    def create_rotations(self, fcurves_dict):
+        has_euler = self.create_euler_rotations(fcurves_dict)
+        has_quats = self.create_quaternion_rotations(fcurves_dict)
         if has_euler and has_quats:
             raise ValueError(f"'({self.name})' mixing euler and quaternion rotations in the same action is not supported")
         return has_euler or has_quats
 
-    def create_scales(self, anims):
-        path = self.get_anim_path("scale")
-        fcurves = anims[path]
+    def create_euler_rotations(self, fcurves_dict):
+        fcurves = self.filter_fcurves(fcurves_dict, "rotation_euler")
         if len(fcurves) == 0:
             return False
 
-        # collect keyframe points
-        keys = self.collect_keyframe_points(fcurves, 3)
-        if len(keys) == 0:
-            return
-
-        # get keyframe controller
-        controller = self.create_keyframe_controller()
-
-        # require uniform scaling
-        if not np.allclose(keys[:, 1:].min(1), keys[:, 1:].max(1), rtol=0, atol=1e-04):
-            print(f"({self.name}) non-uniform scale animations are not supported")
+        key_type = self.get_interpolation_type(fcurves)
+        if key_type is None:
             return False
 
-        # set the controller keys
-        controller.data.scales.keys = keys[:, :2]
-
-        # update start/stop times
-        controller.start_time = min(keys[0, 0], controller.start_time)
-        controller.stop_time = max(keys[-1, 0], controller.stop_time)
-
-        return True
-
-    def create_euler_rotations(self, anims):
-        path = self.get_anim_path("rotation_euler")
-        fcurves = anims[path]
-        if len(fcurves) == 0:
-            return False
-
-        # collect keyframe points
-        keys = self.collect_keyframe_points(fcurves, 3)
-        if len(keys) == 0:
-            return
-
-        # split times from values
-        values = keys[:, 1:]
-
-        # get keyframe controller
-        controller = self.create_keyframe_controller()
-
-        # pose / axis corrections
         if isinstance(self.source, bpy.types.PoseBone):
-            from mathutils import Euler, Matrix
-            mode = self.source.rotation_mode
-            axis_fix = Matrix(self.axis_correction)
-            to_posed = Matrix(self.get_posed_offset())
-            for i, v in enumerate(values):
-                v = Euler(v, mode).to_matrix().to_4x4()
-                v = (to_posed @ v @ axis_fix).to_euler()
-                values[i] = v
+            raise ValueError(f'({self.name}) bones euler animations are not currently supported.')
 
-        # set the controller keys
+        # get keyframe controller
+        controller = self.create_keyframe_controller()
+
+        # prepare euler rotations
         rotations = controller.data.rotations
         rotations.interpolation = nif.NiRotData.KeyType.EULER_KEY
-        for i in range(3):
-            rotations.euler_data += nif.NiFloatData(),
-            rotations.euler_data[i].interpolation = nif.NiFloatData.KeyType.LIN_KEY
-            rotations.euler_data[i].keys = keys[:, (0, i+1)]
+        rotations.euler_data = tuple(nif.NiFloatData(interpolation=key_type) for _ in range(3))
 
-        # update start/stop times
-        controller.start_time = min(keys[0, 0], controller.start_time)
-        controller.stop_time = max(keys[-1, 0], controller.stop_time)
+        for i, euler_data in enumerate(rotations.euler_data):
+            axis_fcurves = [fc for fc in fcurves if fc.array_index == i]
+            if len(axis_fcurves) == 0:
+                continue
+
+            # collect keyframe points
+            keys = self.collect_keyframe_points(axis_fcurves, key_type, num_axes=1)
+            if len(keys) == 0:
+                continue
+
+            # set the controller keys
+            euler_data.keys = keys
+
+            # update start/stop times
+            controller.start_time = min(keys[0, 0], controller.start_time)
+            controller.stop_time = max(keys[-1, 0], controller.stop_time)
 
         return True
 
-    def create_quaternion_rotations(self, anims):
-        path = self.get_anim_path("rotation_quaternion")
-        fcurves = anims[path]
+    def create_quaternion_rotations(self, fcurves_dict):
+        fcurves = self.filter_fcurves(fcurves_dict, "rotation_quaternion")
         if len(fcurves) == 0:
             return False
 
+        # TODO: TCB interpolation
+        key_type = nif.NiRotData.KeyType.LIN_KEY
+
         # collect keyframe points
-        keys = self.collect_keyframe_points(fcurves, 4)
+        keys = self.collect_keyframe_points(fcurves, key_type, num_axes=4)
         if len(keys) == 0:
             return False
 
@@ -1227,74 +1198,121 @@ class Animation(SceneNode):
 
         return True
 
+    def create_scales(self, fcurves_dict):
+        fcurves = self.filter_fcurves(fcurves_dict, "scale")
+        if len(fcurves) == 0:
+            return False
+
+        key_type = self.get_interpolation_type(fcurves)
+        if key_type is None:
+            return False
+
+        # collect keyframe points
+        keys = self.collect_keyframe_points(fcurves, key_type, num_axes=3)
+        if len(keys) == 0:
+            return False
+
+        # require uniform scaling
+        scales_min = keys[:, 1:4].min(axis=1)
+        scales_max = keys[:, 1:4].max(axis=1)
+        if not np.allclose(scales_min, scales_max, rtol=0, atol=1e-4):
+            print(f"({self.name}) non-uniform scale animations are not supported")
+            return False
+
+        # use the first axis only
+        if key_type.name == 'LIN_KEY':
+            keys = keys[:, :2]  # time, x.value
+        else:
+            keys = keys[:, (0, 1, 4, 7)]  # time, x.value, x.in_tan, x.out_tan
+
+        # get keyframe controller
+        controller = self.create_keyframe_controller()
+
+        # set the controller keys
+        controller.data.scales.interpolation = key_type
+        controller.data.scales.keys = keys
+
+        # update start/stop times
+        controller.start_time = min(keys[0, 0], controller.start_time)
+        controller.stop_time = max(keys[-1, 0], controller.stop_time)
+
+        return True
+
     # -- shader controllers --
 
     def create_uv_controller(self, bl_prop, bl_slot):
         if not self.exporter.export_animations:
-            return
+            return False
 
-        anims = self.collect_animations(bl_prop.texture_group.node_tree)
+        anims = self.get_fcurves_dict(bl_prop.texture_group.node_tree)
         if len(anims) == 0:
-            return
+            return False
 
+        uv_data = nif.NiUVData()
         bl_node = bl_slot.mapping_node
 
-        # offset keys
+        #
+        # set offset values
+        #
         data_path = bl_node.inputs["Location"].path_from_id('default_value')
-        fcurves = anims[data_path]
-        offset_keys = self.collect_keyframe_points(fcurves, 3)
+        offset_fcurves = anims[data_path]
+        for i, name in enumerate(("offset_u", "offset_v")):
+            fcurves = [fc for fc in offset_fcurves if fc.array_index == i]
 
-        # tiling keys
+            key_type = self.get_interpolation_type(fcurves)
+            if key_type is None:
+                continue
+
+            slot = getattr(uv_data, name)
+            slot.interpolation = key_type
+            slot.keys = self.collect_keyframe_points(fcurves, key_type, num_axes=1)
+            slot.keys[:, 1:] = i - slot.keys[:, 1:]
+
+        #
+        # set tiling values
+        #
         data_path = bl_node.inputs["Scale"].path_from_id('default_value')
-        fcurves = anims[data_path]
-        tiling_keys = self.collect_keyframe_points(fcurves, 3)
+        tiling_fcurves = anims[data_path]
+        for i, name in enumerate(("tiling_u", "tiling_v")):
+            fcurves = [fc for fc in tiling_fcurves if fc.array_index == i]
 
-        # is animated
-        if len(offset_keys) == len(tiling_keys) == 0:
-            return
+            key_type = self.get_interpolation_type(fcurves)
+            if key_type is None:
+                continue
 
-        controller = nif.NiUVController(
-            frequency = 1.0,
-            target = self.output,
-            data = nif.NiUVData(),
-        )
+            slot = getattr(uv_data, name)
+            slot.interpolation = key_type
+            slot.keys = self.collect_keyframe_points(fcurves, key_type, num_axes=1)
 
-        # uv offset
-        if len(offset_keys):
-            offset_keys[:, 1] = 0 - offset_keys[:, 1]
-            offset_keys[:, 2] = 1 - offset_keys[:, 2]
-            controller.data.offset_u.keys = offset_keys[:, (0, 1)]
-            controller.data.offset_v.keys = offset_keys[:, (0, 2)]
+        # create controller
+        controller = nif.NiUVController(frequency=1.0, target=self.output, data=uv_data)
+        controller.update_start_stop_times()
 
-        # uv tiling
-        if len(tiling_keys):
-            controller.data.tiling_u.keys = tiling_keys[:, (0, 1)]
-            controller.data.tiling_v.keys = tiling_keys[:, (0, 2)]
-
-        # target uv set
+        # find uv set index
         for i, uv in enumerate(self.source.data.uv_layers):
             if uv.name == bl_slot.layer:
                 controller.texture_set = i
                 break
 
-        # update times
-        controller.update_start_stop_times()
-
-        # attach the controller
+        # attach controller
         self.output.controllers.appendleft(controller)
+
+        print(f"ADDED CONTROLLER to {self} {bl_prop.material}")
+
+        return True
 
     def create_material_controllers(self, ni_prop, bl_prop):
         if not self.exporter.export_animations:
             return
 
-        anims = self.collect_animations(bl_prop.material.node_tree)
+        anims = self.get_fcurves_dict(bl_prop.material.node_tree)
         if len(anims) == 0:
             return
 
         self.create_color_controller(anims, ni_prop, bl_prop)
         self.create_alpha_controller(anims, ni_prop, bl_prop)
 
-    def create_color_controller(self, anims, ni_prop, bl_prop):
+    def create_color_controller(self, fcurves_dict, ni_prop, bl_prop):
         channels = [
             (bl_prop.diffuse_input, 'DIFFUSE'),
             (bl_prop.emissive_input, 'EMISSIVE'),
@@ -1302,8 +1320,13 @@ class Animation(SceneNode):
 
         for source, color_field in channels:
             data_path = source.path_from_id("default_value")
-            fcurves = anims[data_path]
-            keys = self.collect_keyframe_points(fcurves, 4)
+            fcurves = fcurves_dict[data_path]
+
+            key_type = self.get_interpolation_type(fcurves)
+            if key_type is None:
+                continue
+
+            keys = self.collect_keyframe_points(fcurves[:3], key_type, num_axes=3)
             if len(keys) == 0:
                 continue
 
@@ -1311,7 +1334,10 @@ class Animation(SceneNode):
             controller = nif.NiMaterialColorController(
                 target=ni_prop,
                 color_field=color_field,
-                data=nif.NiPosData(keys=keys[:, :4]),
+                data=nif.NiPosData(
+                    interpolation=key_type,
+                    keys=keys
+                ),
             )
 
             # update controller times
@@ -1320,17 +1346,27 @@ class Animation(SceneNode):
             # attach the controller
             ni_prop.controllers.appendleft(controller)
 
-    def create_alpha_controller(self, anims, ni_prop, bl_prop):
+        return True
+
+    def create_alpha_controller(self, fcurves_dict, ni_prop, bl_prop):
         data_path = bl_prop.opacity_input.path_from_id("default_value")
-        fcurves = anims[data_path]
-        keys = self.collect_keyframe_points(fcurves, 1)
+        fcurves = fcurves_dict[data_path]
+
+        key_type = self.get_interpolation_type(fcurves)
+        if key_type is None:
+            return False
+
+        keys = self.collect_keyframe_points(fcurves, key_type, num_axes=1)
         if len(keys) == 0:
-            return
+            return False
 
         # create output controller
         controller = nif.NiAlphaController(
             target=ni_prop,
-            data=nif.NiFloatData(keys=keys),
+            data=nif.NiFloatData(
+                interpolation=key_type,
+                keys=keys
+            ),
         )
 
         # update controller times
@@ -1339,25 +1375,9 @@ class Animation(SceneNode):
         # attach the controller
         ni_prop.controllers.appendleft(controller)
 
+        return True
+
     # -- get blender data --
-
-    @staticmethod
-    def collect_animations(bl_object):
-        try:
-            fcurves = bl_object.animation_data.action.fcurves
-        except AttributeError:
-            return {}
-
-        anims = collections.defaultdict(list)
-        for fc in fcurves:
-            anims[fc.data_path].append(fc)
-
-        return anims
-
-    def get_anim_path(self, key):
-        if isinstance(self.source, bpy.types.PoseBone):
-            return f'pose.bones["{self.name}"].{key}'
-        return self.source.path_from_id(key)
 
     def get_posed_offset(self):
         offset = self.source.id_data.convert_space(
@@ -1367,6 +1387,27 @@ class Animation(SceneNode):
             to_space="WORLD",
         )
         return la.solve(self.parent.matrix_world, offset)
+
+    @staticmethod
+    def get_fcurves_dict(bl_object):
+        fcurves_dict = collections.defaultdict(list)
+
+        try:
+            fcurves = bl_object.animation_data.action.fcurves
+        except AttributeError:
+            pass
+        else:
+            for fc in fcurves:
+                fcurves_dict[fc.data_path].append(fc)
+
+        return fcurves_dict
+
+    def filter_fcurves(self, fcurves_dict, key):
+        if isinstance(self.source, bpy.types.PoseBone):
+            path = f'pose.bones["{self.name}"].{key}'
+        else:
+            path = self.source.path_from_id(key)
+        return fcurves_dict[path]
 
     # -- get nif controllers --
 
@@ -1378,7 +1419,7 @@ class Animation(SceneNode):
             owner = self.output
             self.output.controllers.appendleft(
                 nif.NiKeyframeController(
-                    flags=12,
+                    flags=8,
                     target=owner,
                     data=nif.NiKeyframeData(),
                 )
@@ -1388,37 +1429,60 @@ class Animation(SceneNode):
     # --
 
     @staticmethod
-    def collect_keyframe_points(fcurves, size, dtype=np.float32):
-        template = [np.nan] * (size + 1)
+    def collect_keyframe_points(fcurves, key_type, num_axes, dtype=np.float32):
+        # TODO: deal with axes having undefined fcurves
+        #   this occurs if the users manually deleted an fcurve from the dope sheet
+        fcurves = list(sorted(fcurves, key=lambda fc: fc.array_index))
+        assert len(fcurves) == num_axes
 
-        # parse keyframe points
-        d = collections.defaultdict(template.copy)
-        for fc in fcurves:
-            i = fc.array_index + 1
-            for p in fc.keyframe_points:
-                if p.type in ('KEYFRAME', 'BREAKDOWN'):
-                    frame, value = p.co
-                    d[frame][i] = value
+        # fill in any missing keyframes
+        #   necessary when an axis has a keyframe that isn't present for other axes
+        #   e.g. if axes X and Y have animations, but the axis Z did not, fill in Z
+        if num_axes > 1:
+            frames_per_axis = [{p.co[0] for p in fc.keyframe_points} for fc in fcurves]
+            required_frames = set().union(*frames_per_axis)
+            for fc, frames in zip(fcurves, frames_per_axis):
+                for frame in (required_frames - frames):
+                    fc.keyframe_points.insert(frame, fc.evaluate(frame), options={'FAST'})
 
-        # prep array parameters
-        count = len(d) * len(template)
-        values = itertools.chain.from_iterable(d.values())
-        if count == 0:
-            return ()
+        # collect/convert keyframe keys
+        num_frames = len(fcurves[0].keyframe_points)
+        num_values = 1 + (1 if key_type.name == 'LIN_KEY' else 3) * num_axes
+        # e.g. times column + a values column with in/out tans for each axis
 
-        # create the keys array
-        keys = np.fromiter(values, dtype, count).reshape(len(d), -1)
-        keys[:, 0] = np.fromiter(d.keys(), dtype, len(d))  # frames
+        keys = np.empty((num_frames, num_values), dtype)
+        temp = np.empty((num_frames, 2), dtype)
 
-        # sort by frame numbers
+        for i, fc in enumerate(fcurves, start=1):
+            # collect times/values
+            fc.keyframe_points.foreach_get("co", temp.ravel())
+            keys[:, (0, i)] = temp
+
+            if key_type.name == 'BEZ_KEY':
+                # collect incoming tangents
+                fc.keyframe_points.foreach_get("handle_left", temp.ravel())
+                keys[:, i + num_axes * 1] = +3.0 * (keys[:, i] - temp[:, 1])
+                # collect outgoing tangents
+                fc.keyframe_points.foreach_get("handle_right", temp.ravel())
+                keys[:, i + num_axes * 2] = -3.0 * (keys[:, i] - temp[:, 1])
+
+        # convert from frames to times
+        keys[:, 0] /= bpy.context.scene.render.fps
+        # sort the keys by their times
         keys = keys[keys[:, 0].argsort()]
 
-        # convert frame to time
-        keys[:, 0] /= bpy.context.scene.render.fps
-
-        # evaluate nan elements
-        i = np.arange(keys.size).reshape(keys.shape)
-        np.putmask(i, np.isnan(keys), 0)
-        keys = keys.take(np.maximum.accumulate(i))
-
         return keys
+
+    @staticmethod
+    def get_interpolation_type(fcurves):
+        # Blender lets each keyframe point define its own interpolation mode.
+        # Morrowind supports only a single interpolation mode per-controller.
+        # For now we will just use the interpolation mode from the first key.
+        try:
+            interpolation = fcurves[0].keyframe_points[0].interpolation
+        except IndexError:
+            return None
+        if interpolation == 'LINEAR':
+            return nif.NiFloatData.KeyType.LIN_KEY
+        else:
+            return nif.NiFloatData.KeyType.BEZ_KEY
