@@ -26,8 +26,8 @@ class NiTexturingPropertyMap(NiObject):  # TODO Not NiObject
     clamp_mode: uint32 = ClampMode.WRAP_S_WRAP_T
     filter_mode: uint32 = FilterMode.FILTER_TRILERP
     uv_set: uint32 = 0
-    ps2_l: uint32 = 0
-    ps2_k: uint32 = -75
+    ps2_l: int16 = 0
+    ps2_k: int16 = -75
     unknown_flag1: uint8 = 0
     unknown_flag2: uint8 = 0
 

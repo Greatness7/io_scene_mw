@@ -32,9 +32,9 @@ class AlphaFormat(IntEnum):
 class NiSourceTexture(NiTexture):
     filename: str = ""
     pixel_data: Optional[NiPixelData] = None
-    pixel_layout: int32 = PixelLayout.PALETTIZED_4
-    use_mipmaps: int32 = UseMipMaps.YES
-    alpha_format: int32 = AlphaFormat.ALPHA_DEFAULT
+    pixel_layout: uint32 = PixelLayout.PALETTIZED_4
+    use_mipmaps: uint32 = UseMipMaps.YES
+    alpha_format: uint32 = AlphaFormat.ALPHA_DEFAULT
     is_static: uint8 = 1
 
     # provide access to related enums
@@ -53,9 +53,9 @@ class NiSourceTexture(NiTexture):
             has_pixel_data = stream.read_ubyte()
             if has_pixel_data:
                 self.pixel_data = stream.read_link()
-        self.pixel_layout = PixelLayout(stream.read_int())
-        self.use_mipmaps = UseMipMaps(stream.read_int())
-        self.alpha_format = AlphaFormat(stream.read_int())
+        self.pixel_layout = PixelLayout(stream.read_uint())
+        self.use_mipmaps = UseMipMaps(stream.read_uint())
+        self.alpha_format = AlphaFormat(stream.read_uint())
         self.is_static = stream.read_ubyte()
 
     def save(self, stream):
@@ -67,9 +67,9 @@ class NiSourceTexture(NiTexture):
             stream.write_ubyte(bool(self.pixel_data))
             if self.pixel_data:
                 self.pixel_data.save(stream)
-        stream.write_int(self.pixel_layout)
-        stream.write_int(self.use_mipmaps)
-        stream.write_int(self.alpha_format)
+        stream.write_uint(self.pixel_layout)
+        stream.write_uint(self.use_mipmaps)
+        stream.write_uint(self.alpha_format)
         stream.write_ubyte(self.is_static)
 
     def sanitize_filename(self):

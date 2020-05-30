@@ -23,7 +23,7 @@ class NiPixelFormat(NiObject):
     pixel_format: uint32 = PixelFormat.RGB
     color_masks: ndarray = zeros(4, dtype="<I")
     bits_per_pixel: uint32 = 0
-    old_fast_compare: ndarray = zeros(8, dtype="<H")
+    old_fast_compare: ndarray = zeros(8, dtype="<B")
 
     def load(self, stream):
         self.pixel_format = PixelFormat(stream.read_uint())
