@@ -666,10 +666,14 @@ class Mesh(SceneNode):
             return skin_data
 
         # populate weights array
+        index_remap = {j: i for i, j in enumerate(bones)}
         for i, vertex in enumerate(bl_data.vertices):
             for vg in vertex.groups:
-                if vg.group in bones:
-                    weights[vg.group, i] = vg.weight
+                try:
+                    j = index_remap[vg.group]
+                    weights[j, i] = vg.weight
+                except KeyError:
+                    pass
 
         # limit bones per vertex
         if len(bones) > 4:
