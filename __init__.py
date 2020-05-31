@@ -370,6 +370,10 @@ class ImportScene(bpy.types.Operator, ImportHelper):
         default=True,
     )
 
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
+
     def execute(self, context):
         from . import nif_import
         kwargs = self.as_keywords(ignore=("filename_ext", "filter_glob", "check_existing"))
@@ -433,6 +437,10 @@ class ExportScene(bpy.types.Operator, ExportHelper):
         ),
         default=True,
     )
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
 
     def execute(self, context):
         from . import nif_export
