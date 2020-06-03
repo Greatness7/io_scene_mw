@@ -16,6 +16,7 @@ class NiPalette(NiObject):
 
     def save(self, stream):
         stream.write_ubyte(self.has_alpha)
+        stream.write_uint(len(self.palettes))
         stream.write_ubytes(self.palettes)
 
 

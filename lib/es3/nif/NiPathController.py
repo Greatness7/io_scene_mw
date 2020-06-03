@@ -28,10 +28,10 @@ class NiPathController(NiTimeController):
 
     def load(self, stream):
         super().load(stream)
-        self.bank_direction = stream.read_int()
+        self.bank_direction = BankDirection(stream.read_int())
         self.max_bank_angle = stream.read_float()
         self.smoothing = stream.read_float()
-        self.follow_axis = stream.read_short()
+        self.follow_axis = FollowAxis(stream.read_short())
         self.path_data = stream.read_link()
         self.percentage_data = stream.read_link()
 

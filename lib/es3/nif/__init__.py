@@ -1,5 +1,6 @@
 __all__ = [
     "AvoidNode",
+    "BrickNiExtraData",
     "BSMirroredNode",
     "NiAccumulator",
     "NiAlphaAccumulator",
@@ -23,6 +24,7 @@ __all__ = [
     "NiColorData",
     "NiDirectionalLight",
     "NiDitherProperty",
+    "NiDX8Renderer",
     "NiDynamicEffect",
     "NiEmitterModifier",
     "NiExtraData",
@@ -71,6 +73,9 @@ __all__ = [
     "NiPointLight",
     "NiPosData",
     "NiProperty",
+    "NiRenderedCubeMap",
+    "NiRenderedTexture",
+    "NiRenderer",
     "NiRollController",
     "NiRotatingParticles",
     "NiRotatingParticlesData",
@@ -119,6 +124,7 @@ __all__ = [
     "TES3ObjectExtraData",
 ]
 from .AvoidNode import AvoidNode
+from .BrickNiExtraData import BrickNiExtraData
 from .BSMirroredNode import BSMirroredNode
 from .NiAccumulator import NiAccumulator
 from .NiAlphaAccumulator import NiAlphaAccumulator
@@ -142,6 +148,7 @@ from .NiCollisionSwitch import NiCollisionSwitch
 from .NiColorData import NiColorData
 from .NiDirectionalLight import NiDirectionalLight
 from .NiDitherProperty import NiDitherProperty
+from .NiDX8Renderer import NiDX8Renderer
 from .NiDynamicEffect import NiDynamicEffect
 from .NiEmitterModifier import NiEmitterModifier
 from .NiExtraData import NiExtraData
@@ -190,6 +197,9 @@ from .NiPlanarCollider import NiPlanarCollider
 from .NiPointLight import NiPointLight
 from .NiPosData import NiPosData
 from .NiProperty import NiProperty
+from .NiRenderedCubeMap import NiRenderedCubeMap
+from .NiRenderedTexture import NiRenderedTexture
+from .NiRenderer import NiRenderer
 from .NiRollController import NiRollController
 from .NiRotatingParticles import NiRotatingParticles
 from .NiRotatingParticlesData import NiRotatingParticlesData
