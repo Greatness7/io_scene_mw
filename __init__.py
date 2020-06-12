@@ -504,8 +504,9 @@ class MarkersPanel(bpy.types.Panel):
     def draw(self, context):
         space_data = context.space_data
 
-        action = getattr(context.active_object.animation_data, "action", None)
-        if action is None:
+        try:
+            action = context.active_object.animation_data.action
+        except AttributeError:
             self.layout.template_ID(space_data, "action", new="action.new", unlink="action.unlink")
             return
 
