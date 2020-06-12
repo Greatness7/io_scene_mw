@@ -881,6 +881,8 @@ class Material(SceneNode):
             self.create_texturing_property(ni_object, bl_prop)
             # Wireframe Property
             self.create_wireframe_property(ni_object, bl_prop)
+            # Stencil Property
+            self.create_stencil_property(ni_object, bl_prop)
 
         # Update Material Cache
         self.exporter.materials[material] = ni_object.properties
@@ -977,6 +979,12 @@ class Material(SceneNode):
     def create_wireframe_property(self, ni_object, bl_prop):
         if self.source.display_type == "WIRE":
             ni_prop = nif.NiWireframeProperty(wireframe=True)
+            ni_object.properties.append(ni_prop)
+
+    def create_stencil_property(self, ni_object, bl_prop):
+        if not bl_prop.material.use_backface_culling:
+            m = nif.NiStencilProperty.DrawMode.DRAW_BOTH
+            ni_prop = nif.NiStencilProperty(draw_mode=m)
             ni_object.properties.append(ni_prop)
 
     @staticmethod
