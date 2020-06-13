@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from es3.utils.flags import bool_property
 from es3.utils.math import decompose_uniform, zeros
 from .NiAVObject import NiAVObject
 
@@ -7,6 +8,12 @@ from .NiAVObject import NiAVObject
 class NiGeometry(NiAVObject):
     data: Optional[NiGeometryData] = None
     skin: Optional[NiSkinInstance] = None
+
+    # flags access
+    compress_vertices = bool_property(mask=0x0008)
+    compress_normals = bool_property(mask=0x0010)
+    compress_uv_sets = bool_property(mask=0x0020)
+    shadow = bool_property(mask=0x0040)
 
     _refs = (*NiAVObject._refs, "data", "skin")
 
