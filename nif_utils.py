@@ -1,6 +1,5 @@
 import types
 import numpy as np
-import copy as _copy
 
 
 def dispatcher(func):

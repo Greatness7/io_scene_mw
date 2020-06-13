@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from enum import IntFlag
+from enum import IntEnum
 
 from es3.utils.flags import bool_property, enum_property
 from .NiProperty import NiProperty
 
 
-class AlphaBlendFunction(IntFlag):
+class AlphaBlendFunction(IntEnum):
     ONE = 0
     ZERO = 1
     SRC_COLOR = 2
@@ -20,7 +20,7 @@ class AlphaBlendFunction(IntFlag):
     SRC_ALPHA_SAT = 10
 
 
-class AlphaTestFunction(IntFlag):
+class AlphaTestFunction(IntEnum):
     ALWAYS = 0
     LESS = 1
     EQUAL = 2
