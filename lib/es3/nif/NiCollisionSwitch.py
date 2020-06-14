@@ -7,4 +7,4 @@ from .NiNode import NiNode
 class NiCollisionSwitch(NiNode):
 
     # flags access
-    collidable = bool_property(mask=0x0020)
+    propagate = bool_property(mask=0x0020)
