@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from es3.utils.flags import bool_property
-from .NiNode import NiNode
+from .NiBSAnimationNode import NiBSAnimationNode
 
 
-class NiBSParticleNode(NiNode):
+class NiBSParticleNode(NiBSAnimationNode):
 
     # flags access
-    animated = bool_property(mask=0x0020)
     follow = bool_property(mask=0x0080)
