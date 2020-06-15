@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from es3.utils.flags import bool_property
 from .NiNode import NiNode
 
 
 class NiSwitchNode(NiNode):
     active_index: uint32 = 0
+
+    # flags access
+    update_only_active = bool_property(mask=0x0020)
 
     def load(self, stream):
         super().load(stream)
