@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 from collections import deque
+from enum import IntEnum
 
-from es3.utils.flags import bool_property
+from es3.utils.flags import bool_property, enum_property
 from es3.utils.math import compose, decompose_uniform, dotproduct, ID33, ZERO3
 from .NiBoundingVolume import NiBoundingVolume
 from .NiObjectNET import NiObjectNET
+
+
+class PropagateMode(IntEnum):
+    NONE = 0
+    USE_TRIANGLES = 1
+    USE_OBBS = 2
+    CONTINUE = 3
 
 
 class NiAVObject(NiObjectNET):
@@ -20,7 +28,11 @@ class NiAVObject(NiObjectNET):
     # TODO: remove
     children = []  # type: List[Optional[NiAVObject]]
 
+    # provide access to related enums
+    PropagateMode = PropagateMode
+
     # flags access
+    propagate_mode = enum_property(PropagateMode, mask=0x0006, pos=1)
     app_culled = bool_property(mask=0x0001)
 
     _refs = (*NiObjectNET._refs, "properties")

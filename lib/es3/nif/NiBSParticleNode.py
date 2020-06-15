@@ -7,4 +7,5 @@ from .NiNode import NiNode
 class NiBSParticleNode(NiNode):
 
     # flags access
+    animated = bool_property(mask=0x0020)
     follow = bool_property(mask=0x0080)
