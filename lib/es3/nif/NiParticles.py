@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from .NiTriBasedGeom import NiTriBasedGeom
+from .NiGeometry import NiGeometry
 
 
-class NiParticles(NiTriBasedGeom):
+class NiParticles(NiGeometry):
     pass

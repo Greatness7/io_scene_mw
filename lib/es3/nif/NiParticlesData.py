@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from es3.utils.math import zeros
-from .NiTriBasedGeomData import NiTriBasedGeomData
+from .NiGeometryData import NiGeometryData
 
 
-class NiParticlesData(NiTriBasedGeomData):
+class NiParticlesData(NiGeometryData):
     num_particles: uint16 = 0
     particle_radius: float32 = 0.0
     num_active: uint16 = 0
