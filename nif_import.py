@@ -1202,10 +1202,7 @@ class Animation(SceneNode):
 
     @staticmethod
     def create_interpolation_data(ni_data, fcurves, axis=...):
-        if ni_data.interpolation.name  == 'NO_INTERP':
-            for kp in fcurves.keyframe_points:
-                kp.interpolation = 'CONSTANT'
-        elif ni_data.interpolation.name  == 'LIN_KEY':
+        if ni_data.interpolation.name  == 'LIN_KEY':
             for kp in fcurves.keyframe_points:
                 kp.interpolation = 'LINEAR'
         else:

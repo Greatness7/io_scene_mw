@@ -56,8 +56,6 @@ class NiFloatData(NiObject):
 
     @property
     def key_size(self):
-        if self.interpolation == KeyType.NO_INTERP:
-            return 2  # (time, value)
         if self.interpolation == KeyType.LIN_KEY:
             return 2  # (time, value)
         if self.interpolation == KeyType.BEZ_KEY:
