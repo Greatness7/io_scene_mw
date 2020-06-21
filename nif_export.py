@@ -1251,38 +1251,29 @@ class Animation(SceneNode):
         uv_data = nif.NiUVData()
         bl_node = bl_slot.mapping_node
 
-        #
-        # set offset values
-        #
-        data_path = bl_node.inputs["Location"].path_from_id('default_value')
-        offset_fcurves = anims[data_path]
-        for i, name in enumerate(("offset_u", "offset_v")):
-            fcurves = [fc for fc in offset_fcurves if fc.array_index == i]
+        channels = {
+            (uv_data.offset_u, uv_data.offset_v):
+                bl_node.inputs["Location"].path_from_id("default_value"),
+            (uv_data.tiling_u, uv_data.tiling_v):
+                bl_node.inputs["Scale"].path_from_id("default_value"),
+        }
 
-            key_type = self.get_interpolation_type(fcurves)
-            if key_type is None:
-                continue
+        for outputs, data_path in channels.items():
+            for i, output in enumerate(outputs):
+                fcurves = [fc for fc in anims[data_path] if fc.array_index == i]
 
-            slot = getattr(uv_data, name)
-            slot.interpolation = key_type
-            slot.keys = self.collect_keyframe_points(fcurves, key_type, num_axes=1)
-            slot.keys[:, 1:] = i - slot.keys[:, 1:]
+                key_type = self.get_interpolation_type(fcurves)
+                if key_type is None:
+                    continue
 
-        #
-        # set tiling values
-        #
-        data_path = bl_node.inputs["Scale"].path_from_id('default_value')
-        tiling_fcurves = anims[data_path]
-        for i, name in enumerate(("tiling_u", "tiling_v")):
-            fcurves = [fc for fc in tiling_fcurves if fc.array_index == i]
+                output.interpolation = key_type
+                output.keys = self.collect_keyframe_points(fcurves, key_type, num_axes=1)
 
-            key_type = self.get_interpolation_type(fcurves)
-            if key_type is None:
-                continue
-
-            slot = getattr(uv_data, name)
-            slot.interpolation = key_type
-            slot.keys = self.collect_keyframe_points(fcurves, key_type, num_axes=1)
+        # use d3d uv layout
+        try:
+            uv_data.offset_v.keys[:, 1] = 1 - uv_data.offset_v.keys[:, 1]
+        except AttributeError:
+            pass
 
         # create controller
         controller = nif.NiUVController(frequency=1.0, target=self.output, data=uv_data)
@@ -1296,8 +1287,6 @@ class Animation(SceneNode):
 
         # attach controller
         self.output.controllers.appendleft(controller)
-
-        print(f"ADDED CONTROLLER to {self} {bl_prop.material}")
 
         return True
 
@@ -1313,12 +1302,12 @@ class Animation(SceneNode):
         self.create_alpha_controller(anims, ni_prop, bl_prop)
 
     def create_color_controller(self, fcurves_dict, ni_prop, bl_prop):
-        channels = [
-            (bl_prop.diffuse_input, 'DIFFUSE'),
-            (bl_prop.emissive_input, 'EMISSIVE'),
-        ]
+        channels = {
+            'DIFFUSE': bl_prop.diffuse_input,
+            'EMISSIVE': bl_prop.emissive_input,
+        }
 
-        for source, color_field in channels:
+        for color_field, source in channels.items():
             data_path = source.path_from_id("default_value")
             fcurves = fcurves_dict[data_path]
 

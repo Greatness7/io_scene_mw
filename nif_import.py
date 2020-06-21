@@ -715,7 +715,13 @@ class Material(SceneNode):
             return
 
         # Merge Duplicates
-        props_hash = len(self.output.data.vertex_colors), *properties.values()
+        props_hash = (
+            *properties.values(),
+            # "use_vertex_colors" is stored on the material
+            len(self.source.data.vertex_colors),
+            # uv animations are also stored on the material
+            self.source.controllers.find_type(nif.NiUVController),
+        )
         try:
             bl_prop = self.importer.materials[props_hash]
         except KeyError:
@@ -1070,8 +1076,14 @@ class Animation(SceneNode):
         if data is None:
             return
 
+        if not self.output.active_material:
+            return
+
         # get blender property
-        bl_prop = self.output.active_material.mw
+        try:
+            bl_prop = self.output.active_material.mw
+        except AttributeError:
+            return
 
         # get animation action
         action = self.get_action(bl_prop.texture_group.node_tree)
@@ -1081,33 +1093,30 @@ class Animation(SceneNode):
         # get the texture slot
         uv_name = self.output.data.uv_layers[controller.texture_set].name
         bl_slot = next(s for s in bl_prop.texture_slots if s.layer == uv_name)
+        bl_node = bl_slot.mapping_node
 
-        # create offset fcurves
-        data_path = bl_slot.mapping_node.inputs["Location"].path_from_id('default_value')
-        for i, keys in enumerate((data.offset_u.keys, data.offset_v.keys)):
-            if len(keys):
+        # use opengl uv layout
+        try:
+            data.offset_v.keys[:, 1] = 1 - data.offset_v.keys[:, 1]
+        except AttributeError:
+            pass
+
+        channels = {
+            (data.offset_u, data.offset_v):
+                bl_node.inputs["Location"].path_from_id("default_value"),
+            (data.tiling_u, data.tiling_v):
+                bl_node.inputs["Scale"].path_from_id("default_value"),
+        }
+
+        for sources, data_path in channels.items():
+            for i, uv_data in enumerate(sources):
                 # convert from times to frames
-                keys[:, 0] *= bpy.context.scene.render.fps
-                # convert to blender uv layout
-                keys[:, 1] = i - keys[:, 1]
+                uv_data.keys[:, 0] *= bpy.context.scene.render.fps
                 # build blender fcurves
                 fc = action.fcurves.new(data_path, index=i, action_group=uv_name)
-                fc.keyframe_points.add(len(keys))
-                fc.keyframe_points.foreach_set("co", keys[:, :2].ravel())
-                self.create_interpolation_data(data, fc, axis=i)
-                fc.update()
-
-        # create tiling fcurves
-        data_path = bl_slot.mapping_node.inputs["Scale"].path_from_id('default_value')
-        for i, keys in enumerate((data.tiling_u.keys, data.tiling_v.keys)):
-            if len(keys):
-                # convert from times to frames
-                keys[:, 0] *= bpy.context.scene.render.fps
-                # build blender fcurves
-                fc = action.fcurves.new(data_path, index=i, action_group=uv_name)
-                fc.keyframe_points.add(len(keys))
-                fc.keyframe_points.foreach_set("co", keys[:, :2].ravel())
-                self.create_interpolation_data(data, fc, axis=i)
+                fc.keyframe_points.add(len(uv_data.keys))
+                fc.keyframe_points.foreach_set("co", uv_data.keys[:, :2].ravel())
+                self.create_interpolation_data(uv_data, fc)
                 fc.update()
 
         self.update_frame_range(controller)
@@ -1144,6 +1153,7 @@ class Animation(SceneNode):
             fc = action.fcurves.new(data_path, index=i, action_group=bl_prop.material.name)
             fc.keyframe_points.add(len(keys))
             fc.keyframe_points.foreach_set("co", keys[:, (0, i+1)].ravel())
+            self.create_interpolation_data(data, fc)
             fc.update()
 
         self.update_frame_range(controller)
