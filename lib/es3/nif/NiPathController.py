@@ -21,10 +21,10 @@ class NiPathController(NiTimeController):
     max_bank_angle: float32 = 0.0
     smoothing: float32 = 0.0
     follow_axis: int16 = FollowAxis.AXIS_X
-    path_data: Optional[NiPosData] = None
+    data: Optional[NiPosData] = None
     percentage_data: Optional[NiFloatData] = None
 
-    _refs = (*NiTimeController._refs, "path_data", "percentage_data")
+    _refs = (*NiTimeController._refs, "data", "percentage_data")
 
     def load(self, stream):
         super().load(stream)
@@ -32,7 +32,7 @@ class NiPathController(NiTimeController):
         self.max_bank_angle = stream.read_float()
         self.smoothing = stream.read_float()
         self.follow_axis = FollowAxis(stream.read_short())
-        self.path_data = stream.read_link()
+        self.data = stream.read_link()
         self.percentage_data = stream.read_link()
 
     def save(self, stream):
@@ -41,7 +41,7 @@ class NiPathController(NiTimeController):
         stream.write_float(self.max_bank_angle)
         stream.write_float(self.smoothing)
         stream.write_short(self.follow_axis)
-        stream.write_link(self.path_data)
+        stream.write_link(self.data)
         stream.write_link(self.percentage_data)
 
 
