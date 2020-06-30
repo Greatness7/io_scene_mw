@@ -53,14 +53,12 @@ class NiTextKeyExtraData(NiExtraData):
     def get_action_groups(self):
         start_index = 0
         end_text = None
-        for i, text in enumerate(self.keys["f1"]):
+        for i, text in enumerate(self.values):
             for line in text.lower().splitlines():
-
                 if (end_text is None) and line.endswith(" start"):
                     start_index = i
                     end_text = self._get_stop_text(line)
                     continue
-
                 if line == end_text:
                     yield (start_index, i)
                     end_text = None

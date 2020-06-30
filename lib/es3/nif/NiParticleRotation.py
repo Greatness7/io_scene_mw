@@ -5,7 +5,7 @@ from .NiParticleModifier import NiParticleModifier
 
 
 class NiParticleRotation(NiParticleModifier):
-    random_initial_axis: uint8 = 1
+    random_initial_axis: uint8 = 0
     initial_axis: NiPoint3 = ZERO3
     rotation_speed: float32 = 0.0
 

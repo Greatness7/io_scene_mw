@@ -9,13 +9,11 @@ class SourceVertexMode(IntEnum):
     SOURCE_IGNORE = 0
     SOURCE_EMISSIVE = 1
     SOURCE_AMB_DIFF = 2
-    SOURCE_NUM_MODES = 3
 
 
 class LightingMode(IntEnum):
     LIGHTING_E = 0
     LIGHTING_E_A_D = 1
-    LIGHTING_NUM_MODE = 2
 
 
 class NiVertexColorProperty(NiProperty):

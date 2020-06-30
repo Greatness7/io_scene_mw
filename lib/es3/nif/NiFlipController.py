@@ -20,7 +20,7 @@ class AffectedMap(IntEnum):
 
 class NiFlipController(NiTimeController):
     affected_map: uint32 = AffectedMap.BASE_MAP
-    unknown: float32 = 0.0
+    flip_start_time: float32 = 0.0
     secs_per_frame: float32 = 0.0
     textures: List[NiSourceTexture] = []
 
@@ -29,14 +29,14 @@ class NiFlipController(NiTimeController):
     def load(self, stream):
         super().load(stream)
         self.affected_map = stream.read_uint()
-        self.unknown = stream.read_float()
+        self.flip_start_time = stream.read_float()
         self.secs_per_frame = stream.read_float()
         self.textures = stream.read_links()
 
     def save(self, stream):
         super().save(stream)
         stream.write_uint(self.affected_map)
-        stream.write_float(self.unknown)
+        stream.write_float(self.flip_start_time)
         stream.write_float(self.secs_per_frame)
         stream.write_links(self.textures)
 

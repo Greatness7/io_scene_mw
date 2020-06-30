@@ -50,7 +50,7 @@ class NiKeyframeManager(NiTimeController):
 
     def load(self, stream):
         super().load(stream)
-        num_sequences = stream.read_int()
+        num_sequences = stream.read_uint()
         self.sequences = [stream.read_type(NiSequence) for _ in range(num_sequences)]
 
     def save(self, stream):
