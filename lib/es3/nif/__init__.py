@@ -18,6 +18,7 @@ __all__ = [
     "NiBSAnimationNode",
     "NiBSPArrayController",
     "NiBSParticleNode",
+    "NiBSPNode",
     "NiCamera",
     "NiClusterAccumulator",
     "NiCollisionSwitch",
@@ -142,6 +143,7 @@ from .NiBSAnimationManager import NiBSAnimationManager
 from .NiBSAnimationNode import NiBSAnimationNode
 from .NiBSPArrayController import NiBSPArrayController
 from .NiBSParticleNode import NiBSParticleNode
+from .NiBSPNode import NiBSPNode
 from .NiCamera import NiCamera
 from .NiClusterAccumulator import NiClusterAccumulator
 from .NiCollisionSwitch import NiCollisionSwitch
