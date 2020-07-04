@@ -12,6 +12,7 @@ __all__ = [
     "NiAVObject",
     "NiBillboardNode",
     "NiBinaryStream",
+    "NiBltSource",
     "NiBoundingVolume",
     "NiBoxBV",
     "NiBSAnimationManager",
@@ -137,6 +138,7 @@ from .NiAutoNormalParticlesData import NiAutoNormalParticlesData
 from .NiAVObject import NiAVObject
 from .NiBillboardNode import NiBillboardNode
 from .NiBinaryStream import NiBinaryStream
+from .NiBltSource import NiBltSource
 from .NiBoundingVolume import NiBoundingVolume
 from .NiBoxBV import NiBoxBV
 from .NiBSAnimationManager import NiBSAnimationManager
