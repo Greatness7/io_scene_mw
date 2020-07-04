@@ -1067,8 +1067,8 @@ class Animation(SceneNode):
 
         controller = nif.NiVisController(target=self.output, data=nif.NiVisData())
         controller.data.keys.resize(len(keys))
-        controller.data.keys.times = keys[:, 0]
-        controller.data.keys.values = 1 - keys[:, 1]
+        controller.data.times = keys[:, 0]
+        controller.data.values = 1 - keys[:, 1]
 
         # update controller times
         controller.update_start_stop_times()
