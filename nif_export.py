@@ -1267,6 +1267,7 @@ class Animation(SceneNode):
 
         # use d3d uv layout
         try:
+            uv_data.u_offset_data.keys[:, 1] = 1 - uv_data.u_offset_data.keys[:, 1]
             uv_data.v_offset_data.keys[:, 1] = 1 - uv_data.v_offset_data.keys[:, 1]
         except AttributeError:
             pass

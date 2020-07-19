@@ -1097,6 +1097,7 @@ class Animation(SceneNode):
 
         # use opengl uv layout
         try:
+            data.u_offset_data.keys[..., 1] = 1 - data.u_offset_data.keys[..., 1]
             data.v_offset_data.keys[..., 1] = 1 - data.v_offset_data.keys[..., 1]
         except AttributeError:
             pass
