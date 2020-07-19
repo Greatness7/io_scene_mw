@@ -6,7 +6,7 @@ from .NiObject import NiObject
 
 class NiSkinPartitionData(NiObject):  # TODO Not NiObject
     bones: ndarray = zeros(0, dtype="<H")
-    vertices: ndarray = zeros(0, dtype="<H")
+    vertex_map: ndarray = zeros(0, dtype="<H")
     weights: ndarray = zeros(0)
     triangles: ndarray = zeros(0, dtype="<H")
     strip_lengths: ndarray = zeros(0, dtype="<H")
@@ -21,7 +21,7 @@ class NiSkinPartitionData(NiObject):  # TODO Not NiObject
         num_bones_per_vertex = stream.read_ushort()
 
         self.bones = stream.read_ushorts(num_bones)
-        self.vertices = stream.read_ushorts(num_vertices)
+        self.vertex_map = stream.read_ushorts(num_vertices)
         self.weights = stream.read_floats(num_bones_per_vertex, num_vertices)
 
         if num_triangles:
@@ -35,14 +35,14 @@ class NiSkinPartitionData(NiObject):  # TODO Not NiObject
             self.bone_palette = stream.read_ubytes(num_bones_per_vertex, num_vertices)
 
     def save(self, stream):
-        stream.write_ushort(len(self.vertices))
+        stream.write_ushort(len(self.vertex_map))
         stream.write_ushort(len(self.triangles))
         stream.write_ushort(len(self.bones))
         stream.write_ushort(len(self.strip_lengths))
         stream.write_ushort(len(self.weights))
 
         stream.write_ushorts(self.bones)
-        stream.write_ushorts(self.vertices)
+        stream.write_ushorts(self.vertex_map)
         stream.write_floats(self.weights)
 
         if len(self.triangles):

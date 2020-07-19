@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from es3.utils.math import zeros
-from .NiFloatData import NiFloatData
+from .NiFloatData import KeyType, NiFloatData
 
 
 class NiMorphDataMorphTarget(NiFloatData):  # TODO Not NiObject
@@ -9,7 +9,7 @@ class NiMorphDataMorphTarget(NiFloatData):  # TODO Not NiObject
 
     def load(self, stream, num_vertices=0):
         num_keys = stream.read_uint()
-        self.interpolation = stream.read_uint()
+        self.interpolation = KeyType(stream.read_int())
         if num_keys:
             self.keys = stream.read_floats(num_keys, self.key_size)
         if num_vertices:
@@ -18,7 +18,7 @@ class NiMorphDataMorphTarget(NiFloatData):  # TODO Not NiObject
     def save(self, stream):
         num_keys = len(self.keys)
         stream.write_uint(num_keys)
-        stream.write_uint(self.interpolation)
+        stream.write_int(self.interpolation)
         if num_keys:
             stream.write_floats(self.keys)
         if len(self.vertices):

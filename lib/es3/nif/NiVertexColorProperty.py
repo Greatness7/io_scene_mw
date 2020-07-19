@@ -17,8 +17,8 @@ class LightingMode(IntEnum):
 
 
 class NiVertexColorProperty(NiProperty):
-    source_vertex_mode: uint32 = SourceVertexMode.SOURCE_IGNORE
-    lighting_mode: uint32 = LightingMode.LIGHTING_E_A_D
+    source_vertex_mode: int32 = SourceVertexMode.SOURCE_IGNORE
+    lighting_mode: int32 = LightingMode.LIGHTING_E_A_D
 
     # provide access to related enums
     SourceVertexMode = SourceVertexMode
@@ -26,13 +26,13 @@ class NiVertexColorProperty(NiProperty):
 
     def load(self, stream):
         super().load(stream)
-        self.source_vertex_mode = SourceVertexMode(stream.read_uint())
-        self.lighting_mode = LightingMode(stream.read_uint())
+        self.source_vertex_mode = SourceVertexMode(stream.read_int())
+        self.lighting_mode = LightingMode(stream.read_int())
 
     def save(self, stream):
         super().save(stream)
-        stream.write_uint(self.source_vertex_mode)
-        stream.write_uint(self.lighting_mode)
+        stream.write_int(self.source_vertex_mode)
+        stream.write_int(self.lighting_mode)
 
 
 if __name__ == "__main__":

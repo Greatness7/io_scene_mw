@@ -6,7 +6,6 @@ from .NiObject import NiObject
 
 
 class BoundType(IntEnum):
-    BASE_BV = -1
     SPHERE_BV = 0
     BOX_BV = 1
     CAPSULE_BV = 2
@@ -16,7 +15,7 @@ class BoundType(IntEnum):
 
 
 class NiBoundingVolume(NiObject):  # TODO Not NiObject
-    bound_type = BoundType.BASE_BV  # type: int32
+    bound_type = BoundType.BOX_BV  # type: int32
 
     # provide access to related enums
     BoundType = BoundType

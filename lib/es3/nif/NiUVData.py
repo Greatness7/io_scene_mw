@@ -5,29 +5,29 @@ from .NiObject import NiObject
 
 
 class NiUVData(NiObject):
-    offset_u: NiFloatData = NiFloatData()
-    offset_v: NiFloatData = NiFloatData()
-    tiling_u: NiFloatData = NiFloatData()
-    tiling_v: NiFloatData = NiFloatData()
+    u_offset_data: NiFloatData = NiFloatData()
+    v_offset_data: NiFloatData = NiFloatData()
+    u_tiling_data: NiFloatData = NiFloatData()
+    v_tiling_data: NiFloatData = NiFloatData()
 
     def load(self, stream):
-        self.offset_u = stream.read_type(NiFloatData)
-        self.offset_v = stream.read_type(NiFloatData)
-        self.tiling_u = stream.read_type(NiFloatData)
-        self.tiling_v = stream.read_type(NiFloatData)
+        self.u_offset_data = stream.read_type(NiFloatData)
+        self.v_offset_data = stream.read_type(NiFloatData)
+        self.u_tiling_data = stream.read_type(NiFloatData)
+        self.v_tiling_data = stream.read_type(NiFloatData)
 
     def save(self, stream):
-        self.offset_u.save(stream)
-        self.offset_v.save(stream)
-        self.tiling_u.save(stream)
-        self.tiling_v.save(stream)
+        self.u_offset_data.save(stream)
+        self.v_offset_data.save(stream)
+        self.u_tiling_data.save(stream)
+        self.v_tiling_data.save(stream)
 
     def get_start_stop_times(self):
         keys = list(filter(len, (
-            self.offset_u.keys,
-            self.offset_v.keys,
-            self.tiling_u.keys,
-            self.tiling_v.keys,
+            self.u_offset_data.keys,
+            self.v_offset_data.keys,
+            self.u_tiling_data.keys,
+            self.v_tiling_data.keys,
         )))
         if len(keys) == 0:
             return (0, 0)

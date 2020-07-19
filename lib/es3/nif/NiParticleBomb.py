@@ -23,8 +23,8 @@ class NiParticleBomb(NiParticleModifier):
     duration: float32 = 0.0
     delta_v: float32 = 0.0  # units/seconds^2
     start_time: float32 = 0.0
-    decay_type: uint32 = DecayType.NONE
-    symmetry_type: uint32 = SymmetryType.SPHERICAL
+    decay_type: int32 = DecayType.NONE
+    symmetry_type: int32 = SymmetryType.SPHERICAL
     position: NiPoint3 = ZERO3
     direction: NiPoint3 = ZERO3
 
@@ -34,8 +34,8 @@ class NiParticleBomb(NiParticleModifier):
         self.duration = stream.read_float()
         self.delta_v = stream.read_float()
         self.start_time = stream.read_float()
-        self.decay_type = stream.read_uint()
-        self.symmetry_type = stream.read_uint()
+        self.decay_type = stream.read_int()
+        self.symmetry_type = stream.read_int()
         self.position = stream.read_floats(3)
         self.direction = stream.read_floats(3)
 
@@ -45,8 +45,8 @@ class NiParticleBomb(NiParticleModifier):
         stream.write_float(self.duration)
         stream.write_float(self.delta_v)
         stream.write_float(self.start_time)
-        stream.write_float(self.decay_type)
-        stream.write_float(self.symmetry_type)
+        stream.write_int(self.decay_type)
+        stream.write_int(self.symmetry_type)
         stream.write_floats(self.position)
         stream.write_floats(self.direction)
 

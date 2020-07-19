@@ -23,8 +23,8 @@ class FilterMode(IntEnum):
 
 class NiTexturingPropertyMap(NiObject):  # TODO Not NiObject
     source: Optional[NiSourceTexture] = None
-    clamp_mode: uint32 = ClampMode.WRAP_S_WRAP_T
-    filter_mode: uint32 = FilterMode.FILTER_TRILERP
+    clamp_mode: int32 = ClampMode.WRAP_S_WRAP_T
+    filter_mode: int32 = FilterMode.FILTER_TRILERP
     uv_set: uint32 = 0
     ps2_l: int16 = 0
     ps2_k: int16 = -75

@@ -6,7 +6,7 @@ from .NiBoundingVolume import NiBoundingVolume
 
 class NiBoxBV(NiBoundingVolume):
     center: NiPoint3 = ZERO3
-    rotation: NiMatrix3 = ID33
+    axes: NiMatrix3 = ID33
     extents: NiPoint3 = ZERO3
 
     bound_type = NiBoundingVolume.BoundType.BOX_BV
@@ -14,13 +14,13 @@ class NiBoxBV(NiBoundingVolume):
     def load(self, stream):
         super().load(stream)
         self.center = stream.read_floats(3)
-        self.rotation = stream.read_floats(3, 3)
+        self.axes = stream.read_floats(3, 3)
         self.extents = stream.read_floats(3)
 
     def save(self, stream):
         super().save(stream)
         stream.write_floats(self.center)
-        stream.write_floats(self.rotation)
+        stream.write_floats(self.axes)
         stream.write_floats(self.extents)
 
     def apply_scale(self, scale):
@@ -29,11 +29,11 @@ class NiBoxBV(NiBoundingVolume):
 
     @property
     def matrix(self):
-        return compose(self.center, self.rotation, self.extents)
+        return compose(self.center, self.axes, self.extents)
 
     @matrix.setter
     def matrix(self, value):
-        self.center, self.rotation, self.extents = decompose(value)
+        self.center, self.axes, self.extents = decompose(value)
 
 
 if __name__ == "__main__":

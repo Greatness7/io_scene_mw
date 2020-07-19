@@ -39,7 +39,6 @@ def save(context, filepath, **config):
 
     return {"FINISHED"}
 
-
 class Exporter:
     vertex_precision = 0.001
     extract_keyframe_data = False
@@ -48,11 +47,11 @@ class Exporter:
 
     def __init__(self, config):
         vars(self).update(config)
-        self.nodes = {}  # type: Dict[SceneNode, Type]
-        self.materials = {}  # type: Dict[FrozenSet[NiProperty], NiMaterialProps]
-        self.history = collections.defaultdict(set)  # type: Dict[NiAVObject, Set[SceneNode]]
-        self.armatures = collections.defaultdict(set)  # type: Dict[SceneNode, Set[NiNode]]
-        self.colliders = collections.defaultdict(set)  # type: Dict[NiNode, Set[NiNode]]
+        self.nodes = {}
+        self.materials = {}
+        self.history = collections.defaultdict(set)
+        self.armatures = collections.defaultdict(set)
+        self.colliders = collections.defaultdict(set)
         self.depsgraph = None
 
     def save(self, filepath):
@@ -439,9 +438,9 @@ class Empty(SceneNode):
         return self.output
 
     def create_bounding_volume(self):
-        c, r, e = decompose(self.matrix_world)
+        l, r, s = decompose(self.matrix_world)
         e *= self.source.empty_display_size
-        self.output.bounding_volume = nif.NiBoxBV(center=c, rotation=r, extents=e)
+        self.output.bounding_volume = nif.NiBoxBV(center=l, axes=r, extents=s)
         self.output.matrix = ID44
 
 
@@ -1078,8 +1077,6 @@ class Animation(SceneNode):
 
         return True
 
-    # -- transform controllers --
-
     def create_translations(self, fcurves_dict):
         fcurves = self.filter_fcurves(fcurves_dict, "location")
         if len(fcurves) == 0:
@@ -1239,8 +1236,6 @@ class Animation(SceneNode):
 
         return True
 
-    # -- shader controllers --
-
     def create_uv_controller(self, bl_prop, bl_slot):
         if not self.exporter.export_animations:
             return False
@@ -1253,9 +1248,9 @@ class Animation(SceneNode):
         bl_node = bl_slot.mapping_node
 
         channels = {
-            (uv_data.offset_u, uv_data.offset_v):
+            (uv_data.u_offset_data, uv_data.v_offset_data):
                 bl_node.inputs["Location"].path_from_id("default_value"),
-            (uv_data.tiling_u, uv_data.tiling_v):
+            (uv_data.u_tiling_data, uv_data.v_tiling_data):
                 bl_node.inputs["Scale"].path_from_id("default_value"),
         }
 
@@ -1272,7 +1267,7 @@ class Animation(SceneNode):
 
         # use d3d uv layout
         try:
-            uv_data.offset_v.keys[:, 1] = 1 - uv_data.offset_v.keys[:, 1]
+            uv_data.v_offset_data.keys[:, 1] = 1 - uv_data.v_offset_data.keys[:, 1]
         except AttributeError:
             pass
 
@@ -1367,8 +1362,6 @@ class Animation(SceneNode):
 
         return True
 
-    # -- get blender data --
-
     def get_posed_offset(self):
         offset = self.source.id_data.convert_space(
             pose_bone=self.source,
@@ -1399,8 +1392,6 @@ class Animation(SceneNode):
             path = self.source.path_from_id(key)
         return fcurves_dict[path]
 
-    # -- get nif controllers --
-
     def create_keyframe_controller(self):
         result = self.output.controllers.find_type_with_owner(nif.NiKeyframeController)
         if result is not None:
@@ -1415,8 +1406,6 @@ class Animation(SceneNode):
                 )
             )
         return owner.controller
-
-    # --
 
     @staticmethod
     def collect_keyframe_points(fcurves, key_type, num_axes, dtype=np.float32):

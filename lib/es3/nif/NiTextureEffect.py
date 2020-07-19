@@ -25,10 +25,10 @@ class CoordGenType(IntEnum):
 class NiTextureEffect(NiDynamicEffect):
     model_projection_matrix: NiMatrix3 = ID33
     model_projection_translation: NiPoint3 = ZERO3
-    texture_filtering: uint32 = FilterMode.FILTER_NEAREST
-    texture_clamping: uint32 = ClampMode.WRAP_S_WRAP_T
-    texture_type: uint32 = TextureType.PROJECTED_LIGHT
-    coordinate_generation_type: uint32 = CoordGenType.WORLD_PARALLEL
+    texture_filtering: int32 = FilterMode.FILTER_NEAREST
+    texture_clamping: int32 = ClampMode.WRAP_S_WRAP_T
+    texture_type: int32 = TextureType.PROJECTED_LIGHT
+    coordinate_generation_type: int32 = CoordGenType.WORLD_PARALLEL
     source_texture: Optional[NiSourceTexture] = None
     clipping_plane_enable: uint8 = 0
     clipping_plane: NiPlane = ZERO4
@@ -49,10 +49,10 @@ class NiTextureEffect(NiDynamicEffect):
         super().load(stream)
         self.model_projection_matrix = stream.read_floats(3, 3)
         self.model_projection_translation = stream.read_floats(3)
-        self.texture_filtering = FilterMode(stream.read_uint())
-        self.texture_clamping = ClampMode(stream.read_uint())
-        self.texture_type = TextureType(stream.read_uint())
-        self.coordinate_generation_type = CoordGenType(stream.read_uint())
+        self.texture_filtering = FilterMode(stream.read_int())
+        self.texture_clamping = ClampMode(stream.read_int())
+        self.texture_type = TextureType(stream.read_int())
+        self.coordinate_generation_type = CoordGenType(stream.read_int())
         self.source_texture = stream.read_link()
         self.clipping_plane_enable = stream.read_ubyte()
         self.clipping_plane = stream.read_floats(4)
@@ -65,10 +65,10 @@ class NiTextureEffect(NiDynamicEffect):
         super().save(stream)
         stream.write_floats(self.model_projection_matrix)
         stream.write_floats(self.model_projection_translation)
-        stream.write_uint(self.texture_filtering)
-        stream.write_uint(self.texture_clamping)
-        stream.write_uint(self.texture_type)
-        stream.write_uint(self.coordinate_generation_type)
+        stream.write_int(self.texture_filtering)
+        stream.write_int(self.texture_clamping)
+        stream.write_int(self.texture_type)
+        stream.write_int(self.coordinate_generation_type)
         stream.write_link(self.source_texture)
         stream.write_ubyte(self.clipping_plane_enable)
         stream.write_floats(self.clipping_plane)

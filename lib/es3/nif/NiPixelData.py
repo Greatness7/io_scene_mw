@@ -8,7 +8,7 @@ from .NiPixelFormat import NiPixelFormat
 class NiPixelData(NiObject):
     pixel_format: NiPixelFormat = NiPixelFormat()
     palette: Optional[NiPalette] = None
-    pixel_stride: uint32 = 0
+    pixel_stride: int32 = 0
     mipmaps: ndarray = zeros(0, dtype="<I")
     pixel_data: ndarray = zeros(0, dtype="<B")
 
@@ -18,7 +18,7 @@ class NiPixelData(NiObject):
         self.pixel_format = stream.read_type(NiPixelFormat)
         self.palette = stream.read_link()
         mipmap_levels = stream.read_uint()
-        self.pixel_stride = stream.read_uint()
+        self.pixel_stride = stream.read_int()
         if mipmap_levels:
             self.mipmaps = stream.read_uints(mipmap_levels, 3)
         num_pixels = stream.read_uint()
@@ -29,7 +29,7 @@ class NiPixelData(NiObject):
         self.pixel_format.save(stream)
         stream.write_link(self.palette)
         stream.write_uint(len(self.mipmaps))
-        stream.write_uint(self.pixel_stride)
+        stream.write_int(self.pixel_stride)
         stream.write_uints(self.mipmaps)
         stream.write_uint(len(self.pixel_data))
         stream.write_ubytes(self.pixel_data)

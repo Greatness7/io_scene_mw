@@ -48,11 +48,11 @@ class Importer:
 
     def __init__(self, config):
         vars(self).update(config)
-        self.nodes = {}  # type: Dict[SceneNode, Type]
-        self.materials = {}  # type: Dict[FrozenSet[NiProperty], NiMaterialProps]
-        self.history = collections.defaultdict(set)  # type: Dict[NiAVObject, Set[SceneNode]]
-        self.armatures = collections.defaultdict(set)  # type: Dict[NiNode, Set[NiNode]]
-        self.colliders = collections.defaultdict(set)  # type: Dict[NiNode, Set[NiNode]]
+        self.nodes = {}
+        self.materials = {}
+        self.history = collections.defaultdict(set)
+        self.armatures = collections.defaultdict(set)
+        self.colliders = collections.defaultdict(set)
 
     def load(self, filepath):
         data = nif.NiStream()
@@ -1097,14 +1097,14 @@ class Animation(SceneNode):
 
         # use opengl uv layout
         try:
-            data.offset_v.keys[:, 1] = 1 - data.offset_v.keys[:, 1]
+            data.v_offset_data.keys[..., 1] = 1 - data.v_offset_data.keys[..., 1]
         except AttributeError:
             pass
 
         channels = {
-            (data.offset_u, data.offset_v):
+            (data.u_offset_data, data.v_offset_data):
                 bl_node.inputs["Location"].path_from_id("default_value"),
-            (data.tiling_u, data.tiling_v):
+            (data.u_tiling_data, data.v_tiling_data):
                 bl_node.inputs["Scale"].path_from_id("default_value"),
         }
 
@@ -1188,8 +1188,6 @@ class Animation(SceneNode):
         fc.update()
 
         self.update_frame_range(controller)
-
-    # -- utility functions --
 
     def get_posed_offset(self, bl_object):
         try:
