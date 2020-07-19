@@ -1051,6 +1051,7 @@ class Animation(SceneNode):
             name = marker.name.replace("; ", "\r\n")
             text_data.keys[i] = time, name
 
+        text_data.collapse_groups()
         text_data.keys.sort()
 
         return True

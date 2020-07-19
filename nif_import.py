@@ -910,9 +910,9 @@ class Animation(SceneNode):
         text_data.times *= bpy.context.scene.render.fps
 
         for time, text in text_data.keys.tolist():
-            text = text.replace("\r\n", "; ")
-            m = action.pose_markers.new(text)
-            m.frame = math.ceil(time)  # TODO warn if not on an integer frame
+            for name in filter(None, text.splitlines()):
+                assert len(name) < 64, f"Marker exceeds character limit ({name})"
+                action.pose_markers.new(name).frame = math.ceil(time)
 
     def create_kf_controller(self, bl_object):
         controller = self.source.controllers.find_type(nif.NiKeyframeController)

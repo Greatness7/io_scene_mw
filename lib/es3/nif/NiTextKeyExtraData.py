@@ -53,7 +53,7 @@ class NiTextKeyExtraData(NiExtraData):
     def get_action_groups(self):
         start_index = 0
         end_text = None
-        for i, text in enumerate(self.values):
+        for i, text in enumerate(self.values.tolist()):
             for line in text.lower().splitlines():
                 if (end_text is None) and line.endswith(" start"):
                     start_index = i
@@ -67,7 +67,7 @@ class NiTextKeyExtraData(NiExtraData):
         temp = []
         seen = {}
 
-        for time, text in self.keys:
+        for time, text in self.keys.tolist():
             for line in filter(None, text.lower().splitlines()):
                 if (line in seen) and ("sound" not in line):
                     print(f"Skipped duplicate text key '{line}' at {time:.3f}. Previous at {seen[line]:.3f}.")
@@ -79,20 +79,20 @@ class NiTextKeyExtraData(NiExtraData):
         self.keys = np.array(temp, dtype=_dtype)
 
     def collapse_groups(self):
-        uniques, inverse = np.unique(self.keys["f0"], return_inverse=True)
+        uniques, inverse = np.unique(self.times, return_inverse=True)
         if len(uniques) == len(self.keys):
             return
 
-        new_keys = self.keys.copy()
-        new_keys.resize(len(uniques))
+        new_keys = np.empty(len(uniques), _dtype)
 
-        for i, time in enumerate(uniques):
+        for i, time in enumerate(uniques.tolist()):
             # list of all the strings for this timing
-            strings = self.keys[inverse == i]["f1"].tolist()  # TODO: use hash map here for performance!
+            # TODO: use hash map here for performance
+            strings = self.values[inverse == i].tolist()
             # split strings to clean up extraneous newlines
-            sanitized = [s for s in strings for s in s.splitlines() if s]
+            cleaned = [s for s in strings for s in s.splitlines() if s]
             # re-join the strings and update the keys array
-            new_keys[i] = time, "\r\n".join(sanitized)
+            new_keys[i] = time, "\r\n".join(cleaned)
 
         self.keys = new_keys
 
