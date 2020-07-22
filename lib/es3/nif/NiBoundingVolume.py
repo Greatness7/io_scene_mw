@@ -25,8 +25,6 @@ class NiBoundingVolume(NiObject):  # TODO Not NiObject
         if cls is not NiBoundingVolume:
             return  # ignore subclasses
         bound_type = BoundType(stream.read_int())
-        if bound_type == BoundType.BASE_BV:
-            return None
         if bound_type == BoundType.SPHERE_BV:
             return stream.read_type(NiSphereBV)
         if bound_type == BoundType.BOX_BV:

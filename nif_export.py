@@ -39,6 +39,7 @@ def save(context, filepath, **config):
 
     return {"FINISHED"}
 
+
 class Exporter:
     vertex_precision = 0.001
     extract_keyframe_data = False
