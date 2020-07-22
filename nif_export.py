@@ -440,7 +440,7 @@ class Empty(SceneNode):
 
     def create_bounding_volume(self):
         l, r, s = decompose(self.matrix_world)
-        e *= self.source.empty_display_size
+        s *= self.source.empty_display_size
         self.output.bounding_volume = nif.NiBoxBV(center=l, axes=r, extents=s)
         self.output.matrix = ID44
 
