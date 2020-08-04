@@ -375,6 +375,7 @@ class ImportScene(bpy.types.Operator, ImportHelper):
         return context.mode == 'OBJECT'
 
     def execute(self, context):
+        print(f"Blender Morrowind Plugin {bl_info['version']}")
         from . import nif_import
         kwargs = self.as_keywords(ignore=("filename_ext", "filter_glob", "check_existing"))
         return nif_import.load(context, **kwargs)
@@ -443,6 +444,7 @@ class ExportScene(bpy.types.Operator, ExportHelper):
         return context.mode == 'OBJECT'
 
     def execute(self, context):
+        print(f"Blender Morrowind Plugin {bl_info['version']}")
         from . import nif_export
         kwargs = self.as_keywords(ignore=("filename_ext", "filter_glob", "check_existing"))
         return nif_export.save(context, **kwargs)
