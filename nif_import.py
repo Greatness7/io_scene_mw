@@ -884,20 +884,20 @@ class Animation(SceneNode):
         self.__dict__ = node.__dict__
 
     def create(self):
-        if not self.source.controller:
-            return
-
         # get blender object
         bl_object = self.output.id_data
 
-        # NiTextKeyExtraData
-        self.create_text_keys(bl_object)
-        # NiKeyframeController
-        self.create_kf_controller(bl_object)
-        # NiUVController
-        self.create_uv_controller(bl_object)
-        # NiVisController
-        self.create_vis_controller(bl_object)
+        if self.source.extra_data:
+            # NiTextKeyExtraData
+            self.create_text_keys(bl_object)
+
+        if self.source.controller:
+            # NiKeyframeController
+            self.create_kf_controller(bl_object)
+            # NiUVController
+            self.create_uv_controller(bl_object)
+            # NiVisController
+            self.create_vis_controller(bl_object)
 
     def create_text_keys(self, bl_object):
         text_data = self.source.extra_datas.find_type(nif.NiTextKeyExtraData)
