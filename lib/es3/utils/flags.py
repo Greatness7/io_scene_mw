@@ -3,6 +3,8 @@ from __future__ import annotations
 
 # noinspection PyPep8Naming
 class bool_property:
+    __slots__ = "mask",
+
     def __init__(self, mask):
         self.mask = mask
 
@@ -18,6 +20,8 @@ class bool_property:
 
 # noinspection PyPep8Naming
 class enum_property:
+    __slots__ = "enum", "mask", "pos"
+
     def __init__(self, enum, mask, pos):
         self.enum = enum
         self.mask = mask

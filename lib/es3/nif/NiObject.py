@@ -5,9 +5,6 @@ from .NiMeta import NiMeta
 
 class NiObject(metaclass=NiMeta):
 
-    type = "NiObject"  # type: str
-    defaults = {}  # type: Dict[str, Callable[[], Any]]
-
     _refs = ()  # type: Tuple[str, ...]
     _ptrs = ()  # type: Tuple[str, ...]
 
