@@ -1,6 +1,5 @@
 import bpy
 
-import math
 import timeit
 import pathlib
 import itertools

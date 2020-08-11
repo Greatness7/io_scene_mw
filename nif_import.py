@@ -1,6 +1,5 @@
 import bpy
 
-import math
 import timeit
 import pathlib
 import itertools
@@ -902,12 +901,12 @@ class Animation(SceneNode):
         action = self.get_action(bl_object)
 
         # convert time to frame
-        text_data.times *= bpy.context.scene.render.fps
+        text_data.times = np.ceil(text_data.times * bpy.context.scene.render.fps)
 
-        for time, text in text_data.keys.tolist():
+        for frame, text in text_data.keys.tolist():
             for name in filter(None, text.splitlines()):
                 assert len(name) < 64, f"Marker exceeds character limit ({name})"
-                action.pose_markers.new(name).frame = math.ceil(time)
+                action.pose_markers.new(name).frame = frame
 
     def create_kf_controller(self, bl_object):
         controller = self.source.controllers.find_type(nif.NiKeyframeController)
@@ -1219,5 +1218,5 @@ class Animation(SceneNode):
     @staticmethod
     def update_frame_range(controller):
         scene = bpy.context.scene
-        frame_end = math.ceil(controller.stop_time * scene.render.fps)
+        frame_end = np.ceil(controller.stop_time * scene.render.fps)
         scene.frame_end = scene.frame_preview_end = max(scene.frame_end, frame_end)
