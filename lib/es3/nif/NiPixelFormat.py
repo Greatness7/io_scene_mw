@@ -25,6 +25,9 @@ class NiPixelFormat(NiObject):
     bits_per_pixel: uint32 = 0
     old_fast_compare: ndarray = zeros(8, dtype="<B")
 
+    # provide access to related enums
+    PixelFormat = PixelFormat
+
     def load(self, stream):
         self.pixel_format = PixelFormat(stream.read_int())
         self.color_masks = stream.read_uints(4)

@@ -28,6 +28,10 @@ class NiParticleBomb(NiParticleModifier):
     position: NiPoint3 = ZERO3
     direction: NiPoint3 = ZERO3
 
+    # provide access to related enums
+    DecayType = DecayType
+    SymmetryType = SymmetryType
+
     def load(self, stream):
         super().load(stream)
         self.decay = stream.read_float()

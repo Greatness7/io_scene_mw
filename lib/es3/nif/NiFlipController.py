@@ -24,6 +24,9 @@ class NiFlipController(NiTimeController):
     secs_per_frame: float32 = 0.0
     textures: List[NiSourceTexture] = []
 
+    # provide access to related enums
+    AffectedMap = AffectedMap
+
     _refs = (*NiTimeController._refs, "textures")
 
     def load(self, stream):

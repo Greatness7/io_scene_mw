@@ -24,6 +24,10 @@ class NiPathController(NiTimeController):
     path_data: Optional[NiPosData] = None
     percentage_data: Optional[NiFloatData] = None
 
+    # provide access to related enums
+    BankDirection = BankDirection
+    FollowAxis = FollowAxis
+
     _refs = (*NiTimeController._refs, "path_data", "percentage_data")
 
     def load(self, stream):
