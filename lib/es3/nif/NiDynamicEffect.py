@@ -5,7 +5,7 @@ from .NiAVObject import NiAVObject
 
 
 class NiDynamicEffect(NiAVObject):
-    affected_nodes: ndarray = zeros(0, dtype="<i")  # TODO links?
+    affected_nodes: ndarray = zeros(0, dtype="<i")
 
     def load(self, stream):
         super().load(stream)

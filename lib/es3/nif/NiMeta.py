@@ -6,8 +6,6 @@ from es3.utils.math import np
 class NiMeta(type):
     __slots__ = ()
 
-    defaults: type
-
     # noinspection PyMethodParameters
     def __new__(cls, name: str, bases: Tuple[type, ...], namespace: Dict[str, Any]):
 

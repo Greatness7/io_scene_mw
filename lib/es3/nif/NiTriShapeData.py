@@ -11,7 +11,7 @@ class NiTriShapeData(NiTriBasedGeomData):
     def load(self, stream):
         super().load(stream)
         num_triangles = stream.read_ushort()
-        num_triangle_points = stream.read_uint()  # TODO could also be has_triangle_list ?
+        num_triangle_points = stream.read_uint()
         if num_triangles and num_triangle_points:
             self.triangles = stream.read_ushorts(num_triangles, 3)
         num_shared_normals = stream.read_ushort()

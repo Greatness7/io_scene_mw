@@ -19,10 +19,11 @@ class NiBinaryStream(BinaryStream):
             self.history[i] = self.read_type(cls)
 
         # resolve roots
-        roots = [self.history[i] for i in self.read_links() if i != -1]
+        roots = [self.history.get(i) for i in self.read_links()]
 
         # resolve links
-        self.resolve_links()
+        for obj in self.history.values():
+            obj._resolve_links(self.history)
 
         # clear history
         del self.history
@@ -83,11 +84,6 @@ class NiBinaryStream(BinaryStream):
 
     def write_type(self, obj: NiObject):
         obj.save(self)
-
-    def resolve_links(self):
-        objects = self.history
-        for obj in objects.values():  # type: NiObject
-            obj._resolve_links(objects)
 
 
 if __name__ == "__main__":

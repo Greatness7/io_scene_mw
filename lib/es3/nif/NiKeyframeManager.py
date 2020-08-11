@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from es3.utils.math import np, zeros
+
 from .NiObject import NiObject
 from .NiTimeController import NiTimeController
+
+
+_dtype = np.dtype("O, <i")
 
 
 class NiSequence(NiObject):
@@ -9,8 +14,7 @@ class NiSequence(NiObject):
     keyframe_file: str = ""
     unknown_int: int32 = 0
     unknown_object: Optional[NiObject] = None
-    target_names: List[str] = []
-    target_controllers: List[Optional[NiKeyframeController]] = []
+    name_controller_pairs: ndarray = zeros(0, dtype=_dtype)
 
     def load(self, stream):
         self.sequence_name = stream.read_str()
@@ -22,12 +26,11 @@ class NiSequence(NiObject):
             self.unknown_int = stream.read_int()
             self.unknown_object = stream.read_link()
 
-        num_targets = stream.read_uint()
-        for _ in range(num_targets):
-            target_name = stream.read_str()
-            target_controller = stream.read_link()  # note: engine will create invalid links here
-            self.target_names.append(target_name)
-            self.target_controllers.append(target_controller)
+        num_name_controller_pairs = stream.read_uint()
+        if num_name_controller_pairs:
+            self.name_controller_pairs = zeros(num_name_controller_pairs, dtype=_dtype)
+            for i in range(num_name_controller_pairs):
+                self.name_controller_pairs[i] = stream.read_str(), stream.read_int()
 
     def save(self, stream):
         stream.write_str(self.sequence_name)
@@ -39,10 +42,10 @@ class NiSequence(NiObject):
             stream.write_int(self.unknown_int)
             stream.write_link(self.unknown_object)
 
-        stream.write_uint(len(self.target_names))
-        for target_name in self.target_names:
-            stream.write_str(target_name)
-            stream.write_int(-1)  # target_controller is ignored -- see load function comment
+        stream.write_uint(len(self.name_controller_pairs))
+        for name, controller in self.name_controller_pairs.tolist():
+            stream.write_str(name)
+            stream.write_int(controller)
 
 
 class NiKeyframeManager(NiTimeController):
@@ -61,5 +64,4 @@ class NiKeyframeManager(NiTimeController):
 
 
 if __name__ == "__main__":
-    from es3.nif import NiKeyframeController
     from es3.utils.typing import *

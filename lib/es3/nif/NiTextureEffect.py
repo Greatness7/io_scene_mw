@@ -34,8 +34,8 @@ class NiTextureEffect(NiDynamicEffect):
     clipping_plane: NiPlane = ZERO4
     ps2_l: int16 = 0
     ps2_k: int16 = -75
-    unknown_byte1: uint8 = 0  # TODO: unknown
-    unknown_byte2: uint8 = 0  # TODO: unknown
+    unknown_byte1: int8 = 0
+    unknown_byte2: int8 = 0
 
     # provide access to related enums
     TextureType = TextureType
@@ -58,8 +58,8 @@ class NiTextureEffect(NiDynamicEffect):
         self.clipping_plane = stream.read_floats(4)
         self.ps2_l = stream.read_short()
         self.ps2_k = stream.read_short()
-        self.unknown_byte1 = stream.read_ubyte()
-        self.unknown_byte2 = stream.read_ubyte()
+        self.unknown_byte1 = stream.read_byte()
+        self.unknown_byte2 = stream.read_byte()
 
     def save(self, stream):
         super().save(stream)
@@ -74,8 +74,8 @@ class NiTextureEffect(NiDynamicEffect):
         stream.write_floats(self.clipping_plane)
         stream.write_short(self.ps2_l)
         stream.write_short(self.ps2_k)
-        stream.write_ubyte(self.unknown_byte1)
-        stream.write_ubyte(self.unknown_byte2)
+        stream.write_byte(self.unknown_byte1)
+        stream.write_byte(self.unknown_byte2)
 
 
 if __name__ == "__main__":

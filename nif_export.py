@@ -1022,16 +1022,9 @@ class Animation(SceneNode):
         if len(fcurves_dict) == 0:
             return
 
-        # visibility data
         self.create_vis_controller(fcurves_dict)
-
-        # translation data
         self.create_translations(fcurves_dict)
-
-        # rotation data
         self.create_rotations(fcurves_dict)
-
-        # scale data
         self.create_scales(fcurves_dict)
 
     def create_text_keys(self):

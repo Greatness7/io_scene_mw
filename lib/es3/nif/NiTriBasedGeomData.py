@@ -4,5 +4,5 @@ from .NiGeometryData import NiGeometryData
 
 
 class NiTriBasedGeomData(NiGeometryData):
-    # active_triangles: uint16 = 0 # TODO
+    # num_triangles: uint16 = 0  # moved into subclasses
     pass

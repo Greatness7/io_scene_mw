@@ -884,19 +884,14 @@ class Animation(SceneNode):
         self.__dict__ = node.__dict__
 
     def create(self):
-        # get blender object
         bl_object = self.output.id_data
 
         if self.source.extra_data:
-            # NiTextKeyExtraData
             self.create_text_keys(bl_object)
 
         if self.source.controller:
-            # NiKeyframeController
             self.create_kf_controller(bl_object)
-            # NiUVController
             self.create_uv_controller(bl_object)
-            # NiVisController
             self.create_vis_controller(bl_object)
 
     def create_text_keys(self, bl_object):

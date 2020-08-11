@@ -5,16 +5,17 @@ from .NiObject import NiObject
 
 class NiExtraData(NiObject):
     next: Optional[NiExtraData] = None
+    bytes_remaining: uint32 = 0
 
     _refs = (*NiObject._refs, "next")
 
     def load(self, stream):
         self.next = stream.read_link()
-        stream.read_uint()  # bytes remaining  TODO only used if not subclassed
+        self.bytes_remaining = stream.read_uint()
 
     def save(self, stream):
         stream.write_link(self.next)
-        stream.write_uint(0)  # bytes remaining
+        stream.write_uint(self.bytes_remaining)
 
 
 if __name__ == "__main__":
