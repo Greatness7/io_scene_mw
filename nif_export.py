@@ -454,8 +454,9 @@ class Armature(SceneNode):
         # create root
         Empty(self).create()
         # create bones
-        for pose in self.source.pose.bones:
-            node = self.exporter.get(pose)  # __history__
+        for bone in self.source.data.bones:
+            pose_bone = self.source.pose.bones[bone.name]
+            node = self.exporter.get(pose_bone)  # __history__
             Empty(node).create()
             node.output.name = node.bone_name
             node.animation.create()
