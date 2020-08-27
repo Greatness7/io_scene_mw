@@ -390,8 +390,11 @@ class SceneNode:
         if not np.allclose(s[:1], s[1:], rtol=0, atol=0.001):
             print(f"[INFO] {self.name} has non-uniform scale")
 
-            if self.source.type == "MESH":
-                self.vertex_transform = s
+            try:
+                if self.source.type == "MESH":
+                    self.vertex_transform = s
+            except AttributeError:
+                pass  # pose bone
 
             self.matrix_local = compose(l, r, 1)
             for child in self.children:
