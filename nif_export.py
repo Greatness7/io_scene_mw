@@ -116,18 +116,19 @@ class Exporter:
         """
         (root, bones), = self.armatures.items()
 
-        root_node = self.get(root)  # __history__
+        root_node = self.get(root)
         root_matrix = root_node.matrix_world
 
         # convert from armature space to local space
-        for node in map(self.get, bones):  # __history__
+        for node in self.iter_bones(root_node):
             node.matrix_world = root_matrix @ node.matrix_local
 
         # update parent of those using bone parenting
         for node in list(root_node.children):
             if type(node.source) is bpy.types.Object:
                 if node.source.parent_type == "BONE":
-                    node.parent = self.get(bones[node.source.parent_bone])  # __history__
+                    pose_bone = root.pose.bones[node.source.parent_bone]
+                    node.parent = self.get(pose_bone)
                     node.matrix_world = np.array(node.source.matrix_world)
 
     def apply_axis_corrections(self):
@@ -137,10 +138,11 @@ class Exporter:
         """
         (root, bones), = self.armatures.items()
 
-        root_matrix = self.get(root).matrix_world  # __history__
+        root_node = self.get(root)
+        root_matrix = root_node.matrix_world
         root_inverse = la.inv(root_matrix)
 
-        for node in map(self.get, root.pose.bones):
+        for node in self.iter_bones(root_node):
             child_world_matrices = {c: c.matrix_world for c in node.children}
 
             node.matrix_bind = root_inverse @ node.matrix_world @ node.axis_correction
@@ -217,9 +219,8 @@ class Exporter:
     @process.register("ARMATURE")
     def process_armature(self, node):
         self.nodes[node] = Armature
-        bones = node.source.pose.bones
-        self.armatures[node.source] = bones
-        self.resolve_nodes(set(bones), parent=node)
+        self.armatures[node.source].update(node.source.pose.bones)
+        self.resolve_nodes(self.armatures[node.source], parent=node)
         return True
 
     @process.register("NONE")
@@ -267,6 +268,13 @@ class Exporter:
             return roots[0].output
         # return nif.NiBSAnimationNode(name="Scene Root", flags=32, children=[r.output for r in roots])
         return nif.NiNode(name="Scene Root", flags=12, children=[r.output for r in roots])
+
+    def iter_bones(self, root):
+        """yields bone nodes in hierarchical order"""
+        edit_bones = root.source.data.bones
+        pose_bones = root.source.pose.bones
+        for bone in edit_bones:
+            yield self.get(pose_bones[bone.name])
 
     @property
     def scale_correction(self):
@@ -454,9 +462,7 @@ class Armature(SceneNode):
         # create root
         Empty(self).create()
         # create bones
-        for bone in self.source.data.bones:
-            pose_bone = self.source.pose.bones[bone.name]
-            node = self.exporter.get(pose_bone)  # __history__
+        for node in self.exporter.iter_bones(self):
             Empty(node).create()
             node.output.name = node.bone_name
             node.animation.create()
@@ -687,8 +693,8 @@ class Mesh(SceneNode):
         weights = weights[:, ni_data.triangles].reshape(len(bones), -1)
 
         # get all armature nodes
-        skin_data.root = self.exporter.get(armature)  # __history__
-        skin_data.bones = [self.exporter.get(bone) for bone in bones.values()]  # __history__
+        skin_data.root = self.exporter.get(armature)
+        skin_data.bones = [self.exporter.get(bone) for bone in bones.values()]
         skin_data.weights = weights
 
         return skin_data
