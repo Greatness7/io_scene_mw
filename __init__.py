@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 31),
+    "version": (0, 8, 32),
     "blender": (2, 82, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
@@ -54,22 +54,20 @@ class UpdateCheck(bpy.types.Operator):
         return context.space_data.type == 'PREFERENCES'
 
     def execute(self, context):
-        p = Preferences.from_context(context)
-
         version, zipball_url = self.get_latest_version_info()
 
         if version > bl_info["version"]:
             # require manual install on non-patch releases
             # cannot replace native libraries while loaded
             if version[:2] > bl_info["version"][:2]:
-                p.update_status = "UPDATE_FORBIDDEN"
-                p.update_url = zipball_url
+                Preferences.update_status = "UPDATE_FORBIDDEN"
+                Preferences.update_url = zipball_url
             else:
-                p.update_status = "UPDATE_AVAILABLE"
-                p.update_url = zipball_url
+                Preferences.update_status = "UPDATE_AVAILABLE"
+                Preferences.update_url = zipball_url
         else:
-            p.update_status = "UPDATE_INSTALLED"
-            p.update_url = ""
+            Preferences.update_status = "UPDATE_INSTALLED"
+            Preferences.update_url = ""
 
         return {"FINISHED"}
 
@@ -107,13 +105,10 @@ class UpdateApply(bpy.types.Operator):
         return context.space_data.type == 'PREFERENCES'
 
     def execute(self, context):
-        p = Preferences.from_context(context)
-
         self.create_backup()
-        self.install_files(p.update_url)
-
-        p.update_status = "UPDATE_INSTALLED"
-
+        self.install_files(Preferences.update_url)
+        Preferences.update_status = "UPDATE_INSTALLED"
+        Preferences.update_url = ""
         return {"FINISHED"}
 
     def create_backup(self):
@@ -160,11 +155,27 @@ class UpdateNotes(bpy.types.Operator):
         return context.space_data.type == 'PREFERENCES'
 
     def execute(self, context):
-        p = Preferences.from_context(context)
-        if p.update_url == "":  # allow rechecks
-            p.update_status = "UPDATE_UNCHECKED"
+        Preferences.update_status = "UPDATE_UNCHECKED"
+        Preferences.update_url = ""
         bpy.ops.wm.url_open(url="https://github.com/Greatness7/io_scene_mw/releases/latest")
         return {"FINISHED"}
+
+
+class UpdateLimit(bpy.types.Operator):
+    bl_idname = "preferences.mw_update_limit"
+    bl_options = {"REGISTER"}
+
+    bl_label = "An update is available, but requires manual installation"
+    bl_description = "Click to open download page"
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.type == 'PREFERENCES'
+
+    def execute(self, context):
+        bpy.ops.wm.url_open(url="https://blender-morrowind.readthedocs.io/en/latest/getting-started/downloading.html")
+        return {"FINISHED"}
+
 
 
 # -------------
@@ -256,18 +267,7 @@ class TexturePathMove(bpy.types.Operator):
 class Preferences(bpy.types.AddonPreferences):
     bl_idname = __name__
 
-    update_status: bpy.props.EnumProperty(
-        items=[
-            ('UPDATE_UNCHECKED', "", ""),
-            ('UPDATE_AVAILABLE', "", ""),
-            ('UPDATE_FORBIDDEN', "", ""),
-            ('UPDATE_INSTALLED', "", ""),
-        ],
-        options={'SKIP_SAVE'},
-        default='UPDATE_UNCHECKED',
-    )
-
-    update_url: bpy.props.StringProperty(options={'SKIP_SAVE'})
+    update_status, update_url = "UPDATE_UNCHECKED", ""
 
     scale_correction: bpy.props.FloatProperty(
         name="Scale Correction",
@@ -284,16 +284,7 @@ class Preferences(bpy.types.AddonPreferences):
     def draw(self, context):
         layout = self.layout
 
-        if self.update_status == 'UPDATE_UNCHECKED':
-            layout.operator("preferences.mw_update_check", icon='URL')
-        elif self.update_status == 'UPDATE_AVAILABLE':
-            layout.operator("preferences.mw_update_apply", icon='URL')
-        elif self.update_status == 'UPDATE_INSTALLED':
-            text = "Restart Blender to finish install" if self.update_url else None
-            layout.operator("preferences.mw_update_notes", icon='URL', text=text)
-        elif self.update_status == 'UPDATE_FORBIDDEN':
-            text = "An update is available, but requires manual installation"
-            layout.operator("preferences.mw_update_notes", icon='URL', text=text)
+        layout.operator(self.get_update_operator(), icon='URL')
         layout.separator()
 
         layout.label(text="Import/Export:")
@@ -310,6 +301,17 @@ class Preferences(bpy.types.AddonPreferences):
         col.separator()
         col.operator("preferences.mw_texture_paths_move", icon='TRIA_UP', text="").direction = -1
         col.operator("preferences.mw_texture_paths_move", icon='TRIA_DOWN', text="").direction = 1
+
+    @classmethod
+    def get_update_operator(cls):
+        if cls.update_status == 'UPDATE_UNCHECKED':
+            return "preferences.mw_update_check"
+        if cls.update_status == 'UPDATE_AVAILABLE':
+            return "preferences.mw_update_apply"
+        if cls.update_status == 'UPDATE_INSTALLED':
+            return "preferences.mw_update_notes"
+        if cls.update_status == 'UPDATE_FORBIDDEN':
+            return "preferences.mw_update_limit"
 
     @classmethod
     def from_context(cls, context):
