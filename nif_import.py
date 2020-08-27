@@ -1183,7 +1183,7 @@ class Animation(SceneNode):
 
     def get_posed_offset(self, bl_object):
         try:
-            world_offset = self.parent.matrix_posed @ self.axis_correction_inverse
+            world_offset = self.parent.matrix_posed @ self.parent.axis_correction_inverse
         except AttributeError:
             world_offset = self.parent.matrix_world if self.parent else ID44
         try:
