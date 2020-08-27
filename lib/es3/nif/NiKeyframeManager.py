@@ -19,8 +19,8 @@ class NiSequence(NiObject):
     def load(self, stream):
         self.sequence_name = stream.read_str()
 
-        external_kf = stream.read_ubyte()
-        if external_kf:
+        has_external_kf = stream.read_ubyte()
+        if has_external_kf:
             self.keyframe_file = stream.read_str()
         else:
             self.unknown_int = stream.read_int()

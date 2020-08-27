@@ -126,7 +126,7 @@ class Importer:
 
         # only descendants of root
         bones.discard(root)
-        bones -= {p.source for p in self.get(root).parents}  # __history__
+        bones -= {p.source for p in self.get(root).parents}
 
         # bail if no bones present
         if len(bones) == 0:
@@ -134,7 +134,7 @@ class Importer:
             return
 
         # validate all bone chains
-        for node in list(map(self.get, bones)):  # __history__
+        for node in list(map(self.get, bones)):
             for parent in node.parents:
                 source = parent.source
                 if (source is root) or (source in bones):
@@ -145,7 +145,7 @@ class Importer:
         self.armatures[root] = dict.fromkeys(n.source for n in self.nodes if n.source in bones).keys()
 
         # specify node as Armature
-        self.nodes[self.get(root)] = Armature  # __history__
+        self.nodes[self.get(root)] = Armature
 
     def apply_axis_corrections(self):
         """ TODO
@@ -156,8 +156,8 @@ class Importer:
         if not self.armatures:
             return
 
-        root = self.get(*self.armatures)  # __history__
-        bones = list(self.iter_bones(root))  # __history__
+        root = self.get(*self.armatures)
+        bones = list(self.iter_bones(root))
 
         # TODO handle undefined bones
         # These don't get sent to bind position properly, see: armor.1st files
@@ -183,8 +183,8 @@ class Importer:
         if not self.armatures:
             return
 
-        root = self.get(*self.armatures)  # __history__
-        root_bone = next(self.iter_bones(root))  # __history__
+        root = self.get(*self.armatures)
+        root_bone = next(self.iter_bones(root))
 
         # calculate corrected transformation matrix
         l, r, s = decompose(root_bone.matrix_posed)
@@ -248,10 +248,10 @@ class Importer:
     # -------
 
     def get(self, source):
-        return next(iter(self.history[source]))  # __history__
+        return next(iter(self.history[source]))
 
     def iter_bones(self, root):
-        yield from map(self.get, self.armatures[root.source])  # __history__
+        yield from map(self.get, self.armatures[root.source])
 
     def get_root_output(self, roots):
         return roots[0].output.id_data if roots else None
@@ -349,13 +349,13 @@ class SceneNode:
 
     @property
     def axis_correction(self):
-        if "Bip01" in self.source.name:
+        if "Bip01" in self.name:
             return biped_axis_correction
         return other_axis_correction
 
     @property
     def axis_correction_inverse(self):
-        if "Bip01" in self.source.name:
+        if "Bip01" in self.name:
             return biped_axis_correction_inverse
         return other_axis_correction_inverse
 
@@ -439,7 +439,7 @@ class Armature(SceneNode):
         bones = {}
 
         # position bone heads
-        for node in self.importer.iter_bones(self):  # __history__
+        for node in self.importer.iter_bones(self):
             # create bone and assign its parent
             bone = bones[node] = bl_data.edit_bones.new(node.bone_name)
             bone.parent = bones.get(node.parent)
@@ -512,9 +512,6 @@ class Mesh(SceneNode):
 
         bl_data.validate(verbose=False, clean_customdata=False)
 
-        # if self.source.is_shadow:
-        #     bl_object.display_type = "WIRE"
-
         try:
             self.output.display_type = self.parent.output.display_type
         except AttributeError:
@@ -580,8 +577,8 @@ class Mesh(SceneNode):
         if not len(vertex_weights):
             return
 
-        root = self.importer.get(self.source.skin.root)  # __history__
-        bones = map(self.importer.get, self.source.skin.bones)  # __history__
+        root = self.importer.get(self.source.skin.root)
+        bones = map(self.importer.get, self.source.skin.bones)
 
         # Make Armature
         armature = ob.modifiers.new("", "ARMATURE")

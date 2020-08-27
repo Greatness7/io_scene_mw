@@ -363,13 +363,13 @@ class SceneNode:
 
     @property
     def axis_correction(self):
-        if "Bip01" in self.source.name:
+        if "Bip01" in self.name:
             return biped_axis_correction
         return other_axis_correction
 
     @property
     def axis_correction_inverse(self):
-        if "Bip01" in self.source.name:
+        if "Bip01" in self.name:
             return biped_axis_correction_inverse
         return other_axis_correction_inverse
 
