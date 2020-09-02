@@ -281,6 +281,10 @@ class Exporter:
         addon = bpy.context.preferences.addons["io_scene_mw"]
         return 1 / addon.preferences.scale_correction
 
+    @property
+    def cycle_type(self):
+        return "CLAMP" if self.extract_keyframe_data else "CYCLE"
+
 
 class SceneNode:
     """ TODO
@@ -608,7 +612,10 @@ class Mesh(SceneNode):
             return
 
         # create controller
-        controller = nif.NiGeomMorpherController(target=trishape, flags=12)
+        controller = nif.NiGeomMorpherController(
+            cycle_type=self.exporter.cycle_type,
+            target=trishape,
+        )
         controller.stop_time = max(kf[-1, 0] for kf in filter(len, morph_data.keys))
 
         # create morph data
@@ -1068,7 +1075,11 @@ class Animation(SceneNode):
         if len(keys) == 0:
             return False
 
-        controller = nif.NiVisController(target=self.output, data=nif.NiVisData())
+        controller = nif.NiVisController(
+            cycle_type=self.exporter.cycle_type,
+            target=self.output,
+            data=nif.NiVisData(),
+        )
         controller.data.keys.resize(len(keys))
         controller.data.times = keys[:, 0]
         controller.data.values = 1 - keys[:, 1]
@@ -1276,7 +1287,11 @@ class Animation(SceneNode):
             pass
 
         # create controller
-        controller = nif.NiUVController(frequency=1.0, target=self.output, data=uv_data)
+        controller = nif.NiUVController(
+            cycle_type=self.exporter.cycle_type,
+            target=self.output,
+            data=uv_data
+        )
         controller.update_start_stop_times()
 
         # find uv set index
@@ -1321,8 +1336,9 @@ class Animation(SceneNode):
 
             # create output controller
             controller = nif.NiMaterialColorController(
-                target=ni_prop,
+                cycle_type=self.exporter.cycle_type,
                 color_field=color_field,
+                target=ni_prop,
                 data=nif.NiPosData(
                     interpolation=key_type,
                     keys=keys
@@ -1351,6 +1367,7 @@ class Animation(SceneNode):
 
         # create output controller
         controller = nif.NiAlphaController(
+            cycle_type=self.exporter.cycle_type,
             target=ni_prop,
             data=nif.NiFloatData(
                 interpolation=key_type,
@@ -1404,8 +1421,7 @@ class Animation(SceneNode):
             owner = self.output
             self.output.controllers.appendleft(
                 nif.NiKeyframeController(
-                    active=True,
-                    cycle_type="CLAMP" if self.exporter.extract_keyframe_data else "CYCLE",
+                    cycle_type=self.exporter.cycle_type,
                     target=owner,
                     data=nif.NiKeyframeData(),
                 )
