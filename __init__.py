@@ -749,6 +749,7 @@ classes = (
     UpdateCheck,
     UpdateApply,
     UpdateNotes,
+    UpdateLimit,
     TexturePathList,
     TexturePath,
     TexturePathAdd,

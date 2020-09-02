@@ -130,7 +130,7 @@ class BinaryStream(BytesIO):
         unpack = struct.unpack
 
         def read_string():
-            value = read(*unpack(read(4)))
+            value = read(unpack(read(4))[0])
             return value.decode(errors="surrogateescape")
 
         def write_string(value):
@@ -139,13 +139,13 @@ class BinaryStream(BytesIO):
 
         return read_string, write_string, NotImplemented, NotImplemented
 
-    def read_array(self, shape, dtype=np.float32):  # TODO remove this
+    def read_array(self, shape, dtype=np.float32):
         array = np.empty(shape, dtype)
         # noinspection PyTypeChecker
         self.readinto(array)
         return array
 
-    def write_array(self, array, dtype=np.float32):  # TODO remove this
+    def write_array(self, array, dtype=np.float32):
         if array.dtype != dtype:
             array = array.astype(dtype)
         self.write(array.tobytes())

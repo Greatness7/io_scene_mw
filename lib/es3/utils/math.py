@@ -88,8 +88,8 @@ def quaternion_from_euler_angle(angle: Union[ndarray, float], euler_axis: int, o
 
 
 def quaternion_mul(a, b, out=None):
-    aw, ax, ay, zy = np.rollaxis(a, -1, 0)
-    bw, bx, by, bz = np.rollaxis(b, -1, 0)
+    aw, ax, ay, zy = np.rollaxis(a, -1)
+    bw, bx, by, bz = np.rollaxis(b, -1)
 
     result = (
         aw * bw - ax * bx - ay * by - zy * bz,
