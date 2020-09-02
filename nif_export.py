@@ -1404,11 +1404,14 @@ class Animation(SceneNode):
             owner = self.output
             self.output.controllers.appendleft(
                 nif.NiKeyframeController(
-                    flags=8,
+                    active=True,
+                    cycle_type="CLAMP" if self.exporter.extract_keyframe_data else "CYCLE",
                     target=owner,
                     data=nif.NiKeyframeData(),
                 )
             )
+            print(owner.controller.cycle_type)
+
         return owner.controller
 
     @staticmethod

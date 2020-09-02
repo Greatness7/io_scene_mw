@@ -1,6 +1,15 @@
 from __future__ import annotations
 
+from enum import IntEnum
+
+from es3.utils.flags import bool_property, enum_property
 from .NiObject import NiObject
+
+
+class CycleType(IntEnum):
+    CYCLE = 0
+    REVERSE = 1
+    CLAMP = 2
 
 
 class NiTimeController(NiObject):
@@ -11,6 +20,13 @@ class NiTimeController(NiObject):
     start_time: float32 = 0.0
     stop_time: float32 = 0.0
     target: Optional[NiObjectNET] = None
+
+    # provide access to related enums
+    CycleType = CycleType
+
+    # flags access
+    cycle_type = enum_property(CycleType, mask=0x0006, pos=1)
+    active = bool_property(mask=0x0008)
 
     _refs = (*NiObject._refs, "next")
     _ptrs = (*NiObject._ptrs, "target")
