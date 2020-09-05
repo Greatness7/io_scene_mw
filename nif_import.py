@@ -68,6 +68,10 @@ class Importer:
         # apply settings
         data.apply_scale(self.scale_correction)
 
+        # give root name
+        if data.root.name == "":
+            data.root.name = pathlib.Path(filepath).name.lower()
+
         # resolve heirarchy
         roots = self.resolve_nodes(data.roots)
 
