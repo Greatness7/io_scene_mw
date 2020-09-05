@@ -801,19 +801,18 @@ class Material(SceneNode):
         bl_prop.material.use_backface_culling = False
         bl_prop.material.show_transparent_back = True
 
-    def create_texturing_property_map(self, bl_prop, ni_prop, name):
+    def create_texturing_property_map(self, bl_prop, ni_prop, slot_name):
         try:
-            bl_slot = getattr(bl_prop, name)
-            ni_slot = getattr(ni_prop, name)
+            bl_slot = getattr(bl_prop, slot_name)
+            ni_slot = getattr(ni_prop, slot_name)
             # only supports slots with texture image attached
             image = self.create_image(ni_slot.source.filename)
         except AttributeError:
             return
 
-        # material name
-        if not self.importer.preserve_material_names:
-            if (name == "base_texture") and image.filepath:
-                bl_prop.material.name = pathlib.Path(image.filepath).stem
+        # update names
+        if slot_name == "base_texture":
+            self.update_names(image.filepath)
 
         # texture image
         bl_slot.image = image
@@ -832,8 +831,8 @@ class Material(SceneNode):
         except IndexError:
             pass
 
-    def create_image(self, filename):
-        abspath = self.resolve_texture_path(filename)
+    def create_image(self, filepath):
+        abspath = self.resolve_texture_path(filepath)
 
         if abspath.exists():
             image = bpy.data.images.load(str(abspath), check_existing=True)
@@ -843,6 +842,18 @@ class Material(SceneNode):
             image.source = "FILE"
 
         return image
+
+    def update_names(self, filepath):
+        if self.source.name and self.importer.preserve_material_names:
+            return  # neither needs update
+
+        name = pathlib.Path(filepath).stem
+
+        if self.source.name == "":
+            self.output.name = name
+
+        if self.importer.preserve_material_names == False:
+            self.output.active_material.name = name
 
     @staticmethod
     def resolve_texture_path(relpath):
