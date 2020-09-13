@@ -631,7 +631,7 @@ class Mesh(SceneNode):
     def get_mesh_data(self):
         vertices = self.source.data.vertices
         normals = self.source.data.normals
-        uv_sets = self.source.data.uv_sets
+        uv_sets = self.source.data.uv_sets.copy()
         vertex_colors = self.source.data.vertex_colors
         vertex_weights = self.source.vertex_weights()
         vertex_morphs = self.source.vertex_morphs()
