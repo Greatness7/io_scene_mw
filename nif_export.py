@@ -624,7 +624,7 @@ class Mesh(SceneNode):
 
         # assign morph data
         for i, target in enumerate(controller.data.targets):
-            target.interpolation = 1  # LINEAR_KEY
+            target.interpolation = morph_data.interpolations[i]
             target.keys = morph_data.keys[i]
             target.vertices = morph_data.targets[i]
 
@@ -710,8 +710,9 @@ class Mesh(SceneNode):
         return skin_data
 
     def get_morph_data(self, bl_data, ni_data):
-        morph_data = nif_utils.Namespace(targets=(), keys=())
+        morph_data = nif_utils.Namespace(targets=(), keys=(), interpolations=())
 
+        # respect export setting
         if not self.exporter.export_animations:
             return morph_data
 
@@ -719,57 +720,57 @@ class Mesh(SceneNode):
         if self.is_collider:
             return morph_data
 
+        # collect shape key data
         try:
             shape_keys = self.source.data.shape_keys
             action = shape_keys.animation_data.action
-        except AttributeError:
-            # source object does not have morph data
+            basis = shape_keys.key_blocks[0]
+        except (AttributeError, IndexError):
             return morph_data
 
-        if not (shape_keys.key_blocks and action.fcurves):
-            return morph_data
+        animation = self.animation
+        data_paths = {fc.data_path: fc for fc in action.fcurves}
 
-        basis = shape_keys.key_blocks[0]
-        fcurves = {fc.data_path: fc for fc in action.fcurves}
-
-        # isolate unmuted
-        fcurves_to_shape_keys = {None: basis}
+        # isolate unmuted layers
+        fcurves_dict = {None: basis}
         for sk in shape_keys.key_blocks:
-            fc = fcurves.get(sk.path_from_id('value'))
-            if fc and not sk.mute:
-                fcurves_to_shape_keys[fc] = sk
-                assert sk.relative_key == basis
+            fc = data_paths.get(sk.path_from_id('value'))
+            if fc and not (fc.mute or sk.mute):
+                fcurves_dict[fc] = sk
+                assert sk.relative_key == basis, "Shape keys must be relative to basis."
+
+        # bail if all were muted
+        if not len(fcurves_dict) > 1:
+            return morph_data
+
+        # allocate keyframe data
+        morph_data.keys = [None] * len(fcurves_dict)
+        morph_data.interpolations = [None] * len(fcurves_dict)
 
         # allocate morph targets
-        morph_targets = np.empty((len(fcurves_to_shape_keys), len(bl_data.vertices), 3))
+        morph_data.targets = np.empty((len(fcurves_dict), len(bl_data.vertices), 3))
 
-        # allocate morph sk list
-        morph_data.keys = [None] * len(fcurves_to_shape_keys)
-
-        # collect animation data
-        for i, (fc, sk) in enumerate(fcurves_to_shape_keys.items()):
+        for i, (fc, sk) in enumerate(fcurves_dict.items()):
             if i == 0:
-                # this is basis shape key
-                kf_array = np.empty(0)
+                # is basis layer
+                key_type = nif.NiFloatData.KeyType.LIN_KEY
+                keys = np.empty(0)
             else:
-                # allocate keyframe array
-                kf_array = np.empty((len(fc.keyframe_points), 2))
-                # populate keyframe array
-                fc.keyframe_points.foreach_get("co", kf_array.ravel())
-                # convert frames to times
-                kf_array[:, 0] /= bpy.context.scene.render.fps
+                key_type = animation.get_interpolation_type([fc])
+                keys = animation.collect_keyframe_points([fc], key_type, num_axes=1)
 
-            # collect keyframe array
-            morph_data.keys[i] = kf_array
+            # populate keyframe data
+            morph_data.keys[i] = keys
+            morph_data.interpolations[i] = key_type
 
             # populate morph targets
-            sk.data.foreach_get("co", morph_targets[i].ravel())
+            sk.data.foreach_get("co", morph_data.targets[i].ravel())
 
         # make relative to basis
-        morph_targets[1:] -= morph_targets[0]
+        morph_data.targets[1:] -= morph_data.targets[0]
 
         # view as per-face-loops
-        morph_data.targets = morph_targets[:, ni_data.triangles].reshape(-1, len(ni_data.vertices), 3)
+        morph_data.targets = morph_data.targets[:, ni_data.triangles].reshape(-1, len(ni_data.vertices), 3)
 
         return morph_data
 

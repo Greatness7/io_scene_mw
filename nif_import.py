@@ -600,11 +600,13 @@ class Mesh(SceneNode):
         if not len(vertex_morphs):
             return
 
+        animation = self.animation
+
         # add basis key
         ob.shape_key_add(name="Basis")
 
         # add anim data
-        action = self.animation.get_action(ob.data.shape_keys)
+        action = animation.get_action(ob.data.shape_keys)
 
         # add morph keys
         for i, target in enumerate(self.source.morph_targets):
@@ -618,15 +620,16 @@ class Mesh(SceneNode):
 
             # create morph fcurves
             data_path = shape_key.path_from_id("value")
-            fcurve = action.fcurves.new(data_path)
+            fc = action.fcurves.new(data_path)
 
             # add fcurve keyframes
-            fcurve.keyframe_points.add(len(target.keys))
-            fcurve.keyframe_points.foreach_set("co", target.keys[:, :2].ravel())
-            fcurve.update()
+            fc.keyframe_points.add(len(target.keys))
+            fc.keyframe_points.foreach_set("co", target.keys[:, :2].ravel())
+            animation.create_interpolation_data(target, fc)
+            fc.update()
 
         # update frame range
-        self.animation.update_frame_range(self.source.controller)
+        animation.update_frame_range(self.source.controller)
 
     def get_mesh_data(self):
         vertices = self.source.data.vertices
