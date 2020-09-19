@@ -1426,8 +1426,6 @@ class Animation(SceneNode):
                     data=nif.NiKeyframeData(),
                 )
             )
-            print(owner.controller.cycle_type)
-
         return owner.controller
 
     @staticmethod

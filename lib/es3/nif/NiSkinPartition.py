@@ -4,7 +4,7 @@ from es3.utils.math import zeros
 from .NiObject import NiObject
 
 
-class NiSkinPartitionData(NiObject):  # TODO Not NiObject
+class NiPartition(NiObject):  # TODO Not NiObject
     bones: ndarray = zeros(0, dtype="<H")
     vertex_map: ndarray = zeros(0, dtype="<H")
     weights: ndarray = zeros(0)
@@ -57,18 +57,18 @@ class NiSkinPartitionData(NiObject):  # TODO Not NiObject
 
 
 class NiSkinPartition(NiObject):
-    skin_partitions: List[NiSkinPartitionData] = []
+    partitions: List[NiPartition] = []
 
     def load(self, stream):
         num_partitions = stream.read_uint()
-        self.skin_partitions = [
-            stream.read_type(NiSkinPartitionData) for _ in range(num_partitions)
+        self.partitions = [
+            stream.read_type(NiPartition) for _ in range(num_partitions)
         ]
 
     def save(self, stream):
-        num_partitions = len(self.skin_partitions)
+        num_partitions = len(self.partitions)
         stream.write_uint(num_partitions)
-        for item in self.skin_partitions:
+        for item in self.partitions:
             item.save(stream)
 
 
