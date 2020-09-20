@@ -695,8 +695,10 @@ class Mesh(SceneNode):
             np.put_along_axis(weights, indices, 0, axis=0)
 
         # normalize bone weights
-        sums = weights.sum(axis=0, keepdims=True)
-        sums[sums == 0] = 1  # divide by zero fix
+        sums = weights.sum(axis=0)
+        mask = sums == 0
+        # assign unweighted vertices to the first bone
+        weights[0, mask] = sums[mask] = 1.0
         weights /= sums
 
         # view as per-face-loops
