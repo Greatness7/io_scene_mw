@@ -81,6 +81,9 @@ class Importer:
             self.apply_axis_corrections()
             self.correct_rest_positions()
 
+        # TODO: remove this
+        bpy.context.scene.frame_set(0)
+
         # create bl objects
         for node, cls in self.nodes.items():
             if node.output is None:
