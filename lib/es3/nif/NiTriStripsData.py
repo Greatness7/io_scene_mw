@@ -17,7 +17,7 @@ class NiTriStripsData(NiTriBasedGeomData):
 
     def save(self, stream):
         super().save(stream)
-        stream.write_ushort(len(self.triangles))
+        stream.write_ushort(0)
         stream.write_ushort(len(self.strips))
         strip_lengths = np.array([*map(len, self.strips)])
         stream.write_ushorts(strip_lengths)

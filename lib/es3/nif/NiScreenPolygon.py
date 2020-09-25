@@ -31,6 +31,7 @@ class NiScreenPolygon(NiObject):
         if has_uv_coords:
             stream.write_floats(self.uv_coords)
         has_vertex_colors = len(self.vertex_colors)
+        stream.write_bool(has_vertex_colors)
         if has_vertex_colors:
             stream.write_floats(self.vertex_colors)
         num_property_states = len(self.property_states)
