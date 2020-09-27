@@ -472,10 +472,10 @@ class Armature(SceneNode):
                 # set length to half of the parent bone length
                 bone.length = bone.parent.length / 2
 
-            if bone.length <= 0:
-                # TODO figure out a proper fix for zero length bones
-                bone.tail = bone.tail + type(bone.tail)([0, 0, -1])
+            if bone.length <= 1e-6:
                 print(f"Zero length bones are not supported! ({bone})")
+                # TODO figure out a proper fix for zero length bones
+                bone.tail.z += 1e-6
 
         # back to object mode now that all bones exist
         bpy.ops.object.mode_set(mode="OBJECT")
@@ -974,7 +974,7 @@ class Animation(SceneNode):
     def create_rotations(self, controller, action, posed_offset):
         if controller.data.rotations.euler_data:
             if isinstance(self.output, bpy.types.PoseBone):
-                print("[INFO] Euler animations on bones are not currently supported.")
+                print(f"[INFO] Euler animations on bones are not currently supported. ({self.name})")
                 controller.data.rotations.convert_to_quaternions()
             else:
                 self.output.rotation_mode = controller.data.rotations.euler_axis_order.name
