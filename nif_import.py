@@ -472,10 +472,10 @@ class Armature(SceneNode):
                 # set length to half of the parent bone length
                 bone.length = bone.parent.length / 2
 
-            if bone.length <= 1e-6:
+            if bone.length <= 1e-5:
                 print(f"Zero length bones are not supported! ({bone})")
                 # TODO figure out a proper fix for zero length bones
-                bone.tail.z += 1e-6
+                bone.tail.z += 1e-5
 
         # back to object mode now that all bones exist
         bpy.ops.object.mode_set(mode="OBJECT")
