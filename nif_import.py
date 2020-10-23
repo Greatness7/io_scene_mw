@@ -80,6 +80,7 @@ class Importer:
             self.resolve_armatures()
             self.apply_axis_corrections()
             self.correct_rest_positions()
+            self.correct_bone_parenting()
 
         # TODO: remove this
         bpy.context.scene.frame_set(0)
@@ -163,7 +164,7 @@ class Importer:
         if not self.armatures:
             return
 
-        root = self.get(*self.armatures)
+        root = self.get_armature_node()
         bones = list(self.iter_bones(root))
 
         # TODO handle undefined bones
@@ -190,7 +191,7 @@ class Importer:
         if not self.armatures:
             return
 
-        root = self.get(*self.armatures)
+        root = self.get_armature_node()
         root_bone = next(self.iter_bones(root))
 
         # calculate corrected transformation matrix
@@ -207,6 +208,22 @@ class Importer:
 
         # correct the rest matrix of the root bone
         root_bone.matrix_world = corrected_matrix
+
+    def correct_bone_parenting(self):
+        """Set the parent of skinned meshes to the armature responsible for deforming them.
+
+        This must be done as using both skinning and bone-parenting at the same time does not
+        behave correctly in Blender.
+
+        Usually this occurs when a file contains nested armatures.
+        See `Tri Hand01` in the vanilla `r/skeleton.nif` model for example.
+        """
+        armature = self.get_armature_node()
+        for mesh in map(self.get, armature.source.skinned_meshes()):
+            if mesh.parent != armature:
+                matrix_world = mesh.matrix_world
+                mesh.parent = armature
+                mesh.matrix_world = matrix_world
 
     # -------
     # PROCESS
@@ -262,6 +279,9 @@ class Importer:
 
     def get_root_output(self, roots):
         return roots[0].output.id_data if roots else None
+
+    def get_armature_node(self):
+        return self.get(*self.armatures)
 
     @staticmethod
     def import_keyframe_data(data, filepath):
