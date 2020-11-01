@@ -56,7 +56,7 @@ class NiStream:
     # noinspection PyArgumentList
     def find_object_by_name(self, name, object_type=None, fn=str.lower):
         name = fn(name)
-        for obj in self.objects_of_type(object_type or nif.NiAVObject):
+        for obj in self.objects_of_type(object_type or nif.NiObjectNET):
             if fn(obj.name) == name:
                 return obj
 
