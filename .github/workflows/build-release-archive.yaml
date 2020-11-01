@@ -1,0 +1,44 @@
+name: build-release-archive
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v2
+
+      - name: build archive
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archivePath = Join-Path -Path $pwd -ChildPath "io_scene_mw.zip"
+          $archive = [System.IO.Compression.ZipFile]::Open($archivePath, 'Create')
+          $files = Get-ChildItem -Recurse -Include ("*.blend", "*.py", "*.pyd", "*.so")
+          $files | ForEach-Object {
+              $entryPath = Join-Path -Path "io_scene_mw" -ChildPath $_.FullName.substring($pwd.ProviderPath.length + 1)
+              $null = [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $_.FullName, $entryPath)
+          }
+          $archive.Dispose()
+
+      - name: create release
+        id: create_release
+        uses: actions/create-release@v1.1.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          body: "[Changelog](https://github.com/Greatness7/io_scene_mw/tags)"
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+
+      - name: upload release asset
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./io_scene_mw.zip
+          asset_name: io_scene_mw.zip
+          asset_content_type: application/zip
