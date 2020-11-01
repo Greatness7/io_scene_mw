@@ -1,8 +1,6 @@
 <br />
 <p align="center">
-  <a href="https://github.com/github_username/repo_name">
-    <img src="https://raw.githubusercontent.com/Greatness7/blender-morrowind/master/_static/logo.png" alt="Logo" width="152" height="142">
-  </a>
+  <img src="https://raw.githubusercontent.com/Greatness7/blender-morrowind/master/_static/logo.png" width="152" height="142">
   <h2 align="center">Morrowind Blender Plugin</h2>
   <p align="center">
     <a href="https://github.com/Greatness7/io_scene_mw/releases">Download</a>
