@@ -105,8 +105,6 @@ class NodeTreeWrapper:
     def alpha_factor(self, value):
         self.alpha_factor_input.default_value = value
 
-    # --
-
     def reset_nodes(self):
         self.nodes.clear()
         self.links.clear()
@@ -129,7 +127,7 @@ class NodeTreeWrapper:
             group.node_tree = node_tree
         else:
             # load the node tree from library
-            with bpy.data.libraries.load(str(SHADER_PATH), link=True) as (src, dst):
+            with bpy.data.libraries.load(str(SHADER_PATH), link=False) as (src, dst):
                 dst.node_groups.append('MW Shader')
             group.node_tree, = dst.node_groups
 
@@ -202,8 +200,6 @@ class NodeTreeWrapper:
         links.new(dec2_image.outputs[1], sockets[11])
         links.new(dec3_image.outputs[1], sockets[12])
 
-    # --
-
     def create_node(self, name, node_type, x, y):
         node = self.nodes.new(node_type)
         node.name = node.label = name
@@ -216,8 +212,6 @@ class NodeTreeWrapper:
     def remove_link(self, socket):
         for link in socket.links:
             self.links.remove(link)
-
-    # --
 
     def validate(self):
         m = self.material
