@@ -30,8 +30,8 @@ def save(context, filepath, **config):
     print(f"Export File: {filepath}")
     time = timeit.default_timer()
 
-    exporter = Exporter(config)
-    exporter.save(filepath)
+    exporter = Exporter(filepath, config)
+    exporter.execute()
 
     time = timeit.default_timer() - time
     print(f"Export Done: {time:.4f} seconds")
@@ -45,16 +45,18 @@ class Exporter:
     export_animations = True
     preserve_material_names = True
 
-    def __init__(self, config):
+    def __init__(self, filepath, config):
         vars(self).update(config)
+        self.filepath = pathlib.Path(filepath)
         self.nodes = {}
         self.materials = {}
         self.history = collections.defaultdict(set)
         self.armatures = collections.defaultdict(set)
         self.colliders = collections.defaultdict(set)
+        self.filepath = pathlib.Path(filepath)
         self.depsgraph = None
 
-    def save(self, filepath):
+    def execute(self):
         bl_objects = self.get_source_objects()
 
         # resolve heirarchy
@@ -83,11 +85,11 @@ class Exporter:
         data.apply_scale(self.scale_correction)
         data.merge_properties(ignore={"name", "shine", "specular_color"})
         data.sort()
-        data.save(filepath)
+        data.save(self.filepath)
 
         # extract x/kf file
         if self.extract_keyframe_data:
-            self.export_keyframe_data(data, filepath)
+            self.export_keyframe_data(data)
 
     # -------
     # RESOLVE
@@ -185,10 +187,9 @@ class Exporter:
             for s, m in temp_modifiers:
                 s.modifiers.remove(m)
 
-    @staticmethod
-    def export_keyframe_data(data, filepath):
-        path = pathlib.Path(filepath)
-        xnif_path = path.with_name("x" + path.name)
+    def export_keyframe_data(self, data):
+        nif_path = self.filepath
+        xnif_path = nif_path.with_name("x" + nif_path.name)
         xkf_path = xnif_path.with_suffix(".kf")
         data.extract_keyframe_data().save(xkf_path)
         data.save(xnif_path)

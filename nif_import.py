@@ -30,8 +30,8 @@ def load(context, filepath, **config):
     print(f"Import File: {filepath}")
     time = timeit.default_timer()
 
-    importer = Importer(config)
-    importer.load(filepath)
+    importer = Importer(filepath, config)
+    importer.execute()
 
     time = timeit.default_timer() - time
     print(f"Import Done: {time:.4f} seconds")
@@ -45,17 +45,19 @@ class Importer:
     discard_root_transforms = True
     preserve_material_names = True
 
-    def __init__(self, config):
+    def __init__(self, filepath, config):
         vars(self).update(config)
+        self.filepath = pathlib.Path(filepath)
         self.nodes = {}
         self.materials = {}
         self.history = collections.defaultdict(set)
         self.armatures = collections.defaultdict(set)
         self.colliders = collections.defaultdict(set)
+        self.filepath = pathlib.Path(filepath)
 
-    def load(self, filepath):
+    def execute(self):
         data = nif.NiStream()
-        data.load(filepath)
+        data.load(self.filepath)
 
         # fix transforms
         if self.discard_root_transforms:
@@ -63,14 +65,14 @@ class Importer:
 
         # attach kf file
         if self.attach_keyframe_data:
-            self.import_keyframe_data(data, filepath)
+            self.import_keyframe_data(data)
 
         # apply settings
         data.apply_scale(self.scale_correction)
 
         # give root name
         if data.root.name == "":
-            data.root.name = pathlib.Path(filepath).name.lower()
+            data.root.name = self.filepath.name
 
         # resolve heirarchy
         roots = self.resolve_nodes(data.roots)
@@ -283,9 +285,8 @@ class Importer:
     def get_armature_node(self):
         return self.get(*self.armatures)
 
-    @staticmethod
-    def import_keyframe_data(data, filepath):
-        kf_path = pathlib.Path(filepath).with_suffix(".kf")
+    def import_keyframe_data(self, data):
+        kf_path = self.filepath.with_suffix(".kf")
         if not kf_path.exists():
             print(f'import_keyframe_data: "{kf_path}" does not exist')
         else:
