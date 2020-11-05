@@ -43,6 +43,7 @@ class Exporter:
     vertex_precision = 0.001
     extract_keyframe_data = False
     export_animations = True
+    preserve_root_tranforms = False
     preserve_material_names = True
 
     def __init__(self, filepath, config):
@@ -266,9 +267,12 @@ class Exporter:
 
     def get_root_output(self, roots):
         if len(roots) == 1:
-            return roots[0].output
-        # return nif.NiBSAnimationNode(name="Scene Root", flags=32, children=[r.output for r in roots])
-        return nif.NiNode(name="Scene Root", flags=12, children=[r.output for r in roots])
+            root = roots[0]
+            if self.preserve_root_tranforms:
+                return root.output
+            if np.allclose(root.matrix_local, ID44, rtol=0, atol=1e-4):
+                return root.output
+        return nif.NiNode(name=self.filepath.name, flags=12, children=[r.output for r in roots])
 
     def iter_bones(self, root):
         """yields bone nodes in hierarchical order"""

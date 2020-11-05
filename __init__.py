@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 44),
+    "version": (0, 8, 45),
     "blender": (2, 82, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
@@ -428,6 +428,16 @@ class ExportScene(bpy.types.Operator, ExportHelper):
         description=(
             "Extract animations and visuals to corrosponding 'x.kf' and 'x.nif' files."
             "\n(e.g. exporting 'base_anim.nif' will create 'xbase_anim.nif' and 'xbase_anim.kf' files)"
+        ),
+        default=False,
+    )
+
+    preserve_root_tranforms: bpy.props.BoolProperty(
+        name="Preserve Root Transforms",
+        description=(
+            "Preserve the root object's transformations by inserting an additional parent node above it."
+            " This setting is only applicable if there is a single root object with modified transforms."
+            " (Recommended: False)"
         ),
         default=False,
     )
