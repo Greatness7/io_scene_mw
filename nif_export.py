@@ -54,7 +54,6 @@ class Exporter:
         self.history = collections.defaultdict(set)
         self.armatures = collections.defaultdict(set)
         self.colliders = collections.defaultdict(set)
-        self.filepath = pathlib.Path(filepath)
         self.depsgraph = None
 
     def execute(self):

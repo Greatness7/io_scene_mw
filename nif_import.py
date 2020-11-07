@@ -53,7 +53,6 @@ class Importer:
         self.history = collections.defaultdict(set)
         self.armatures = collections.defaultdict(set)
         self.colliders = collections.defaultdict(set)
-        self.filepath = pathlib.Path(filepath)
 
     def execute(self):
         data = nif.NiStream()
@@ -80,18 +79,25 @@ class Importer:
         # resolve armatures
         if any(self.armatures):
             self.resolve_armatures()
-            self.apply_axis_corrections()
             self.correct_rest_positions()
+            self.apply_axis_corrections()
             self.correct_bone_parenting()
 
-        # TODO: remove this
+        # discard frame pos
+        frame_current = bpy.context.scene.frame_current
         bpy.context.scene.frame_set(0)
 
         # create bl objects
         for node, cls in self.nodes.items():
             if node.output is None:
                 cls(node).create()
-                node.animation.create()
+
+        # unmute animations
+        for node in map(self.get, self.armatures):
+            node.animation.set_mute(False)
+
+        # restore frame pos
+        bpy.context.scene.frame_current = frame_current
 
         # set active object
         bpy.context.view_layer.objects.active = self.get_root_output(roots)
@@ -122,7 +128,7 @@ class Importer:
         if len(self.armatures) == 1:
             (root, bones), = self.armatures.items()
         else:
-            root = next(n.source for n in self.nodes if self.armatures.get(n.source))
+            root = next(node.source for node in self.nodes if self.armatures.get(node.source))
             bones = self.armatures[root]
 
         # collect all orphan bones
@@ -135,13 +141,23 @@ class Importer:
             bones.update(other_bones)
 
         # only descendants of root
-        bones.discard(root)
-        bones -= {p.source for p in self.get(root).parents}
+        root_node = self.get(root)
+        bones -= {node.source for node in (root_node, *root_node.parents)}
 
         # bail if no bones present
         if len(bones) == 0:
             self.armatures.clear()
             return
+
+        # consider any descendants which are animated to be bones
+        # this is usually desired, and to not do so would mean we
+        # have to fix the animations of any node who's transforms
+        # are modified by a parent bone receiving axis correction
+        for root_bone in filter(bones.__contains__, root.children):
+            for child in root_bone.descendants():
+                if isinstance(child, nif.NiNode):
+                    if child.controllers.find_type(nif.NiKeyframeController):
+                        bones.add(child)
 
         # validate all bone chains
         for node in list(map(self.get, bones)):
@@ -152,44 +168,36 @@ class Importer:
                 bones.add(source)
 
         # order bones by heirarchy
-        self.armatures[root] = dict.fromkeys(n.source for n in self.nodes if n.source in bones).keys()
-
-        # specify node as Armature
-        self.nodes[self.get(root)] = Armature
-
-    def apply_axis_corrections(self):
-        """ TODO
-            Support multiple armatures.
-            Could this be moved into nif library?
-            Update Animations here, rather than later?
-        """
-        if not self.armatures:
-            return
-
-        root = self.get_armature_node()
-        bones = list(self.iter_bones(root))
-
-        # TODO handle undefined bones
-        # These don't get sent to bind position properly, see: armor.1st files
-        errors = self.armatures[root.source] - {b.source for b in bones}
-        if errors:
-            print(f"Warning: Undefined Bone Bind Poses!\n\t{errors}")
+        self.armatures[root] = dict.fromkeys(node.source for node in self.nodes if node.source in bones).keys()
 
         # preserve bone pose matrices
-        for node in bones:
-            node.matrix_posed = node.matrix_world @ node.axis_correction
+        for node in self.iter_bones(root_node):
+            node.matrix_posed = node.matrix_world
 
         # send all bones to rest pose
-        root.source.apply_bone_bind_poses()
-        root.source.apply_skins(keep_skins=True)
+        root.apply_bone_bind_poses()
+        root.apply_skins(keep_skins=True)
 
-        # apply bone axis corrections
-        for node in reversed(bones):
-            node.matrix_local = node.source.matrix @ node.axis_correction
-            for child in node.children:
-                child.matrix_local = node.axis_correction_inverse @ child.matrix_local
+        # apply updated rest matrices
+        for node in self.iter_bones(root_node):
+            node.matrix_local = node.source.matrix
+
+        # specify node as Armature
+        self.nodes[root_node] = Armature
 
     def correct_rest_positions(self):
+        """Correct the rest pose of the root bone.
+
+        The rest pose of vanilla assets often feature inconvenient transforms.
+        This is not an issue in-game since you would only ever see actors with
+        their animations applied. When working in Blender however, a sane rest
+        pose will make the lives of artists much easier.
+
+        This function replaces the root bone's rest matrix with an edited copy
+        of its posed matrix. This edited copy is identical to pose matrix with
+        regards to location and scale, but has had its rotation about all axes
+        aligned to the nearest 90 degree angle.
+        """
         if not self.armatures:
             return
 
@@ -201,15 +209,66 @@ class Importer:
         r = nif_utils.snap_rotation(r)
         corrected_matrix = compose(l, r, s)
 
+        # only do corrections if they are necessary
+        if np.allclose(root_bone.matrix_world, corrected_matrix, rtol=0, atol=1e-6):
+            return
+
         # correct the rest matrix of skinned meshes
-        bone_inverse = la.inv(root_bone.matrix_world)
-        for node in self.nodes:
-            skin = getattr(node.source, "skin", None)
-            if skin and (skin.root is root.source) and (root_bone not in node.parents):
-                node.matrix_world = corrected_matrix @ bone_inverse @ node.matrix_world
+        inverse = la.inv(root_bone.matrix_world)
+        for node in self.get_skinned_meshes():
+            if root_bone not in node.parents:
+                node.matrix_world = corrected_matrix @ (inverse @ node.matrix_world)
 
         # correct the rest matrix of the root bone
         root_bone.matrix_world = corrected_matrix
+
+    def apply_axis_corrections(self):
+        if not self.armatures:
+            return
+
+        root = self.get_armature_node()
+        bones = list(self.iter_bones(root))
+
+        # apply bone axis corrections
+        for node in reversed(bones):
+            node.matrix_posed = node.matrix_posed @ node.axis_correction
+            node.matrix_local = node.matrix_local @ node.axis_correction
+            for child in node.children:
+                child.matrix_local = node.axis_correction_inverse @ child.matrix_local
+
+        # apply anim axis corrections
+        root_inverse = la.inv(root.matrix_world)
+        for node in bones:
+            kf_controller = node.source.controllers.find_type(nif.NiKeyframeController)
+            if not (kf_controller and kf_controller.data):
+                continue
+
+            try:
+                parent_matrix = node.parent.matrix_posed
+                parent_matrix_uncorrected = parent_matrix @ node.parent.axis_correction_inverse
+            except AttributeError:  # parent is not bone
+                parent_matrix = node.parent.matrix_world if node.parent else ID44
+                parent_matrix_uncorrected = parent_matrix
+
+            matrix = parent_matrix @ node.matrix_local
+            matrix_relative_to_root = root_inverse @ matrix
+
+            posed_offset = la.solve(matrix_relative_to_root, root_inverse)
+            posed_offset = posed_offset @ parent_matrix_uncorrected
+
+            values = kf_controller.data.translations.values
+            if len(values):
+                # convert to pose space
+                values[:] = values @ posed_offset[:3, :3].T + posed_offset[:3, 3]
+
+            values = kf_controller.data.rotations.values
+            if len(values):
+                # apply axis correction
+                axis_fix = nif_utils.quaternion_from_matrix(node.axis_correction)
+                values[:] = nif_utils.quaternion_mul(values, axis_fix)
+                # convert to pose space
+                to_posed = nif_utils.quaternion_from_matrix(posed_offset)
+                values[:] = nif_utils.quaternion_mul(to_posed, values)
 
     def correct_bone_parenting(self):
         """Set the parent of skinned meshes to the armature responsible for deforming them.
@@ -220,12 +279,15 @@ class Importer:
         Usually this occurs when a file contains nested armatures.
         See `Tri Hand01` in the vanilla `r/skeleton.nif` model for example.
         """
+        if not self.armatures:
+            return
+
         armature = self.get_armature_node()
-        for mesh in map(self.get, armature.source.skinned_meshes()):
-            if mesh.parent != armature:
-                matrix_world = mesh.matrix_world
-                mesh.parent = armature
-                mesh.matrix_world = matrix_world
+        for node in self.get_skinned_meshes():
+            if node.parent != armature:
+                matrix_world = node.matrix_world
+                node.parent = armature
+                node.matrix_world = matrix_world
 
     # -------
     # PROCESS
@@ -245,9 +307,9 @@ class Importer:
 
         # detect bones via name conventions
         name = node.name.lower()
-        if name == "bip01":
+        if (name == "bip01") or (name == "root bone"):
             self.armatures[node.source].update()
-        elif ("bip01" in name) or ("bone" in name):
+        elif ("bip01" in name) or name.endswith(" bone"):
             self.armatures[None].add(node.source)
 
         return True
@@ -284,6 +346,11 @@ class Importer:
 
     def get_armature_node(self):
         return self.get(*self.armatures)
+
+    def get_skinned_meshes(self):
+        for node in self.nodes:
+            if getattr(node.source, "skin", None):
+                yield node
 
     def import_keyframe_data(self, data):
         kf_path = self.filepath.with_suffix(".kf")
@@ -427,6 +494,8 @@ class Empty(SceneNode):
         if self.source.is_bounding_box:
             self.convert_to_bounding_box()
 
+        self.animation.create()
+
         return self.output
 
     def create_object(self, bl_data=None):
@@ -494,7 +563,7 @@ class Armature(SceneNode):
                 bone.length = bone.parent.length / 2
 
             if bone.length <= 1e-5:
-                print(f"Zero length bones are not supported! ({bone})")
+                print(f"Warning: Zero length bones are not supported ({bone.name})")
                 # TODO figure out a proper fix for zero length bones
                 bone.tail.z += 1e-5
 
@@ -508,8 +577,9 @@ class Armature(SceneNode):
             pose_bone.matrix = (root_inverse @ node.matrix_posed).T
             # TODO try not to call scene update
             bpy.context.view_layer.depsgraph.update()
-            # create animations
+            # create animations, preserve poses
             node.animation.create()
+            node.animation.set_mute(True)
 
         return bl_object
 
@@ -954,19 +1024,17 @@ class Animation(SceneNode):
 
         # get animation action
         action = self.get_action(bl_object)
-        # get offset from pose
-        posed_offset = self.get_posed_offset(bl_object)
 
         # translation keys
-        self.create_translations(controller, action, posed_offset)
+        self.create_translations(controller, action)
         # rotation keys
-        self.create_rotations(controller, action, posed_offset)
+        self.create_rotations(controller, action)
         # scale keys
-        self.create_scales(controller, action, posed_offset)
+        self.create_scales(controller, action)
 
         self.update_frame_range(controller)
 
-    def create_translations(self, controller, action, posed_offset):
+    def create_translations(self, controller, action):
         data = controller.data.translations
         if len(data.keys) == 0:
             return
@@ -976,10 +1044,6 @@ class Animation(SceneNode):
 
         # convert time to frame
         times *= bpy.context.scene.render.fps
-
-        # convert to posed space
-        if hasattr(self, "matrix_posed"):
-            values[:] = values @ posed_offset[:3, :3].T + posed_offset[:3, 3]
 
         # get blender data path
         data_path = self.output.path_from_id("location")
@@ -992,20 +1056,20 @@ class Animation(SceneNode):
             self.create_interpolation_data(data, fc, axis=i)
             fc.update()
 
-    def create_rotations(self, controller, action, posed_offset):
+    def create_rotations(self, controller, action):
         if controller.data.rotations.euler_data:
             if isinstance(self.output, bpy.types.PoseBone):
                 print(f"[INFO] Euler animations on bones are not currently supported. ({self.name})")
                 controller.data.rotations.convert_to_quaternions()
             else:
                 self.output.rotation_mode = controller.data.rotations.euler_axis_order.name
-                self.create_euler_rotations(controller, action, posed_offset)
+                self.create_euler_rotations(controller, action)
                 return
 
         self.output.rotation_mode = 'QUATERNION'
-        self.create_quaternion_rotations(controller, action, posed_offset)
+        self.create_quaternion_rotations(controller, action)
 
-    def create_euler_rotations(self, controller, action, posed_offset):
+    def create_euler_rotations(self, controller, action):
         for i, data in enumerate(controller.data.rotations.euler_data):
             if len(data.keys) == 0:
                 continue
@@ -1023,24 +1087,16 @@ class Animation(SceneNode):
             self.create_interpolation_data(data, fc)
             fc.update()
 
-    def create_quaternion_rotations(self, controller, action, posed_offset):
-        keys = controller.data.rotations.keys
-        if len(keys) == 0:
+    def create_quaternion_rotations(self, controller, action):
+        data = controller.data.rotations
+        if len(data.keys) == 0:
             return
 
         # get keys times/values
-        times, values = keys[:, 0], keys[:, 1:5]
+        times, values = data.times, data.values
 
         # convert time to frame
         times *= bpy.context.scene.render.fps
-
-        if hasattr(self, "matrix_posed"):
-            # apply axis correction
-            axis_fix = nif_utils.quaternion_from_matrix(self.axis_correction)
-            nif_utils.quaternion_mul(values, axis_fix, out=values)
-            # convert to pose space
-            to_posed = nif_utils.quaternion_from_matrix(posed_offset)
-            nif_utils.quaternion_mul(to_posed, values, out=values)
 
         # get blender data path
         data_path = self.output.path_from_id("rotation_quaternion")
@@ -1048,11 +1104,11 @@ class Animation(SceneNode):
         # build blender fcurves
         for i in range(4):
             fc = action.fcurves.new(data_path, index=i, action_group=self.output.name)
-            fc.keyframe_points.add(len(keys))
-            fc.keyframe_points.foreach_set("co", keys[:, (0, i+1)].ravel())
+            fc.keyframe_points.add(len(data.keys))
+            fc.keyframe_points.foreach_set("co", data.keys[:, (0, i+1)].ravel())
             fc.update()
 
-    def create_scales(self, controller, action, posed_offset):
+    def create_scales(self, controller, action):
         keys = controller.data.scales.keys
         if len(keys) == 0:
             return
@@ -1092,7 +1148,11 @@ class Animation(SceneNode):
         action = self.get_action(bl_object)
 
         # get blender data path
-        data_path = self.output.path_from_id("hide_viewport")
+        try:
+            data_path = self.output.path_from_id("hide_viewport")
+        except AttributeError:
+            print(f"Warning: NiVisController on bones are not supported ({self.name})")
+            return
 
         # build blender fcurves
         fc = action.fcurves.new(data_path, index=0, action_group=self.output.name)
@@ -1223,17 +1283,6 @@ class Animation(SceneNode):
 
         self.update_frame_range(controller)
 
-    def get_posed_offset(self, bl_object):
-        try:
-            world_offset = self.parent.matrix_posed @ self.parent.axis_correction_inverse
-        except AttributeError:
-            world_offset = self.parent.matrix_world if self.parent else ID44
-        try:
-            posed_offset = bl_object.convert_space(pose_bone=self.output, matrix=ID44.T, from_space="WORLD", to_space="LOCAL")
-        except TypeError:
-            posed_offset = bl_object.convert_space(pose_bone=None, matrix=ID44.T, from_space="WORLD", to_space="LOCAL")
-        return np.matmul(posed_offset, world_offset)
-
     @staticmethod
     def get_action(bl_object):
         try:
@@ -1259,3 +1308,11 @@ class Animation(SceneNode):
         scene = bpy.context.scene
         frame_end = np.ceil(controller.stop_time * scene.render.fps)
         scene.frame_end = scene.frame_preview_end = max(scene.frame_end, frame_end)
+
+    def set_mute(self, state, fcurves=None):
+        if fcurves is None:
+            try:
+                fcurves = self.output.id_data.animation_data.action.fcurves
+            except AttributeError:
+                return
+        fcurves.foreach_set("mute", [state] * len(fcurves))
