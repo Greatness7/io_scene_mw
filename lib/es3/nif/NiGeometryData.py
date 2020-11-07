@@ -57,8 +57,6 @@ class NiGeometryData(NiObject):
         self.center *= scale
         self.radius *= scale
 
-    # (numpy-stubs 0.0.1 bug)
-    # noinspection PyArgumentList
     def update_center_radius(self):
         if len(self.vertices) == 0:
             self.center[:] = self.radius = 0

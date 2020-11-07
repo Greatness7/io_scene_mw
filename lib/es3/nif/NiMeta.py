@@ -6,7 +6,6 @@ from es3.utils.math import np
 class NiMeta(type):
     __slots__ = ()
 
-    # noinspection PyMethodParameters
     def __new__(cls, name: str, bases: Tuple[type, ...], namespace: Dict[str, Any]):
 
         # store the type name for serialization
@@ -69,7 +68,6 @@ def _defaults_getter(value: T) -> Callable[[], T]:
     return type(value)
 
 
-# noinspection PyUnresolvedReferences
 def _create_defaults(name: str, bases: Tuple[type, ...], defaults_dict: Dict[str, Any]):
     _bases = tuple(b.defaults for b in bases if isinstance(b, NiMeta))
     _dict = {k: _defaults_getter(v) for k, v in defaults_dict.items()}

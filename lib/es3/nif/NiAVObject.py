@@ -128,7 +128,6 @@ class NiAVObject(NiObjectNET):
         else:
             raise ValueError(f"find_path: no path from {self} to {ancestor} exists")
 
-        # pylint: disable=undefined-loop-variable
         while node is not ancestor:
             yield node
             node = parents[node]

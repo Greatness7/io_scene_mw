@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 
-# noinspection PyPep8Naming
 class bool_property:
     __slots__ = "mask",
 
@@ -18,7 +17,6 @@ class bool_property:
             obj.flags &= ~self.mask
 
 
-# noinspection PyPep8Naming
 class enum_property:
     __slots__ = "enum", "mask", "pos"
 

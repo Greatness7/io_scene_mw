@@ -38,8 +38,6 @@ class NiSkinDataBoneData(NiObject):  # TODO Not NiObject
         self.center *= scale
         self.radius *= scale
 
-    # (numpy-stubs 0.0.1 bug)
-    # noinspection PyArgumentList
     def update_center_radius(self, vertices):
         if len(vertices) == 0:
             self.center[:] = self.radius = 0

@@ -34,7 +34,7 @@ class _TextureMapSource:
 
     def __set_name__(self, owner, name):
         # e.g. "_base_texture_source" -> "base_texture"
-        self.name = name[1:-7]  # pylint: disable=attribute-defined-outside-init
+        self.name = name[1:-7]
 
     def __get__(self, instance, owner):
         texture_map = getattr(instance, self.name, None)

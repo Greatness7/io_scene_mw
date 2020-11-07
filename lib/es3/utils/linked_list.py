@@ -70,11 +70,9 @@ class LinkedList:
         for item in items:
             self.appendleft(item)
 
-    # noinspection PyUnboundLocalVariable
     def pop(self):
         if self.head is None:
             raise ValueError("pop: called on empty linked list.")
-        # pylint: disable=undefined-loop-variable
         for owner, item in self.iter_owners():
             pass
         if owner is self.owner:

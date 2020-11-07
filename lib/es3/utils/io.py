@@ -111,7 +111,6 @@ class BinaryStream(BytesIO):
 
         def read_values(*shape):
             array = empty(shape, dtype)
-            # noinspection PyTypeChecker
             readinto(array)
             return array
 
@@ -141,7 +140,6 @@ class BinaryStream(BytesIO):
 
     def read_array(self, shape, dtype=np.float32):
         array = np.empty(shape, dtype)
-        # noinspection PyTypeChecker
         self.readinto(array)
         return array
 

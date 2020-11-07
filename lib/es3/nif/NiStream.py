@@ -53,7 +53,6 @@ class NiStream:
     def objects_of_type(self, cls: Type[T]) -> Iterator[T]:
         return (obj for obj in self.objects() if isinstance(obj, cls))
 
-    # noinspection PyArgumentList
     def find_object_by_name(self, name, object_type=None, fn=str.lower):
         name = fn(name)
         for obj in self.objects_of_type(object_type or nif.NiObjectNET):
@@ -64,7 +63,6 @@ class NiStream:
         """..."""
         cache = {}
 
-        # noinspection PyShadowingNames
         def ensure_unique(obj: NiObject):
             try:
                 return cache[obj]
@@ -188,7 +186,6 @@ class NiStream:
         with NiBinaryStream() as stream:
             yield stream  # type: ignore
             with open(filepath, "wb") as f:
-                # noinspection PyTypeChecker
                 f.write(stream.getbuffer())
 
 

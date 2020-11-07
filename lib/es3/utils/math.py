@@ -29,8 +29,7 @@ ID33.setflags(write=False)
 ID44 = np.eye(4, dtype=np.float32)
 ID44.setflags(write=False)
 
-# noinspection PyUnresolvedReferences
-det = la._umath_linalg.det  # pylint: disable=c-extension-no-member, protected-access
+det = la._umath_linalg.det
 
 if __name__ == "__main__":
     from es3.utils.typing import *
