@@ -125,11 +125,13 @@ class Importer:
         """
         orphan_bones = self.armatures.pop(None, {})
 
-        if len(self.armatures) == 1:
-            (root, bones), = self.armatures.items()
-        else:
-            root = next(node.source for node in self.nodes if self.armatures.get(node.source))
-            bones = self.armatures[root]
+        # sort roots via heirarchy
+        roots = list(map(self.get, self.armatures))
+        roots.sort(key=lambda r: len([*r.parents]))
+
+        # select the top-most root
+        root = roots[0].source
+        bones = self.armatures[root]
 
         # collect all orphan bones
         bones.update(orphan_bones)
