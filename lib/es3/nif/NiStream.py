@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 from itertools import chain
 from math import isclose
 
@@ -19,13 +18,13 @@ class NiStream:
         self.roots: List[NiObject] = []
 
     def load(self, filepath: PathLike):
-        with self.nif_reader(filepath) as stream:
+        with NiBinaryStream.reader(filepath) as stream:
             assert stream.readline() == self.HEADER
             assert stream.read_uint() == self.VERSION
             self.roots += stream.read_objects(self.TYPES)
 
     def save(self, filepath: PathLike):
-        with self.nif_writer(filepath) as stream:
+        with NiBinaryStream.writer(filepath) as stream:
             stream.write(self.HEADER)
             stream.write_uint(self.VERSION)
             stream.write_objects(self.objects(), self.roots)
@@ -171,22 +170,6 @@ class NiStream:
                 obj.controllers.discard_type(nif.NiKeyframeController)
                 obj.controllers.appendleft(new_controller)
                 new_controller.target = obj
-
-    @staticmethod
-    @contextmanager
-    def nif_reader(filepath: PathLike) -> Generator[NiBinaryStream, None, None]:
-        with open(filepath, "rb") as f:
-            data = f.read()
-        with NiBinaryStream(data) as stream:
-            yield stream  # type: ignore
-
-    @staticmethod
-    @contextmanager
-    def nif_writer(filepath: PathLike) -> Generator[NiBinaryStream, None, None]:
-        with NiBinaryStream() as stream:
-            yield stream  # type: ignore
-            with open(filepath, "wb") as f:
-                f.write(stream.getbuffer())
 
 
 if __name__ == "__main__":

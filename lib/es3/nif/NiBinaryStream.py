@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from struct import pack, unpack
 
 from es3.utils.io import BinaryStream
@@ -84,6 +85,22 @@ class NiBinaryStream(BinaryStream):
 
     def write_type(self, obj: NiObject):
         obj.save(self)
+
+    @staticmethod
+    @contextmanager
+    def reader(filepath: PathLike) -> Generator[NiBinaryStream, None, None]:
+        with open(filepath, "rb") as f:
+            data = f.read()
+        with NiBinaryStream(data) as stream:
+            yield stream
+
+    @staticmethod
+    @contextmanager
+    def writer(filepath: PathLike) -> Generator[NiBinaryStream, None, None]:
+        with NiBinaryStream() as stream:
+            yield stream
+            with open(filepath, "wb") as f:
+                f.write(stream.getbuffer())
 
 
 if __name__ == "__main__":
