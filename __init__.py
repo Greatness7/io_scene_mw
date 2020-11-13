@@ -11,7 +11,6 @@ bl_info = {
 }
 
 import sys
-import importlib
 from pathlib import Path
 
 import bpy
@@ -27,9 +26,10 @@ if item not in sys.path:
     sys.path.append(item)
 
 # Support Blender's "Reload Scripts" feature. (hotkey: F8)
-for item in PATH.glob("nif_*.py"):
+for item in PATH.iterdir():
     item = locals().get(item.stem)
     if item is not None:
+        import importlib
         importlib.reload(item)
 
 del item
