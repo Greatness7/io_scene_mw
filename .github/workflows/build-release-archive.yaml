@@ -10,11 +10,14 @@ jobs:
       - name: checkout repo
         uses: actions/checkout@v2
 
+      - name: copy contents
+        shell: bash
+        run: sudo rsync -r --exclude="*.git*" . io_scene_mw
+
       - name: build archive
-        uses: thedoctor0/zip-release@master
+        uses: montudor/action-zip@v0.1.1
         with:
-          filename: 'io_scene_mw.zip'
-          exclusions: '*.git*'
+          args: zip -r io_scene_mw.zip io_scene_mw
 
       - name: create release
         id: create_release
