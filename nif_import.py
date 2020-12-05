@@ -47,12 +47,13 @@ class Importer:
 
     def __init__(self, filepath, config):
         vars(self).update(config)
-        self.filepath = pathlib.Path(filepath)
         self.nodes = {}
         self.materials = {}
         self.history = collections.defaultdict(set)
         self.armatures = collections.defaultdict(set)
         self.colliders = collections.defaultdict(set)
+        self.active_collection = bpy.context.view_layer.active_layer_collection.collection
+        self.filepath = pathlib.Path(filepath)
 
     def execute(self):
         data = nif.NiStream()
@@ -502,7 +503,7 @@ class Empty(SceneNode):
 
     def create_object(self, bl_data=None):
         bl_object = bpy.data.objects.new(self.name, bl_data)
-        bpy.context.scene.collection.objects.link(bl_object)
+        self.importer.active_collection.objects.link(bl_object)
         bl_object.select_set(True)
         return bl_object
 
