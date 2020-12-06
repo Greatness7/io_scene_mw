@@ -43,7 +43,8 @@ class Importer:
     vertex_precision = 0.001
     attach_keyframe_data = False
     discard_root_transforms = True
-    preserve_material_names = True
+    use_existing_materials = False
+    ignore_collision_nodes = False
 
     def __init__(self, filepath, config):
         vars(self).update(config)
@@ -330,6 +331,9 @@ class Importer:
 
     @process.register("RootCollisionNode")
     def process_collision(self, node):
+        if self.ignore_collision_nodes:
+            return False
+
         self.nodes[node] = Empty
         self.colliders[node.source].update(node.source.descendants())
         return True
@@ -814,6 +818,13 @@ class Material(SceneNode):
         if len(properties) == 0:
             return
 
+        # Re-Use Materials
+        name = self.get_base_texture_name(properties)
+        if name and self.importer.use_existing_materials:
+            if name and (name in bpy.data.materials):
+                self.output.data.materials.append(bpy.data.materials[name])
+                return
+
         # Merge Duplicates
         props_hash = (
             *properties.values(),
@@ -830,6 +841,9 @@ class Material(SceneNode):
             # material already exists, reuse it
             self.output.data.materials.append(bl_prop.material)
             return
+        finally:
+            if name and self.importer.use_existing_materials:
+                bl_prop.material.name = name
 
         # Alpha Property
         ni_alpha = properties.get(nif.NiAlphaProperty)
@@ -868,8 +882,8 @@ class Material(SceneNode):
             bl_prop.use_alpha_clip = True
 
     def create_material_property(self, bl_prop, ni_prop):
-        # Material Name
-        bl_prop.material.name = ni_prop.name
+        # # Material Name
+        # bl_prop.material.name = ni_prop.name
         # Material Flags
         bl_prop.material_flags = ni_prop.flags
         # Material Color
@@ -914,10 +928,6 @@ class Material(SceneNode):
         except AttributeError:
             return
 
-        # update names
-        if slot_name == "base_texture":
-            self.update_names(image.filepath)
-
         # texture image
         bl_slot.image = image
 
@@ -947,17 +957,21 @@ class Material(SceneNode):
 
         return image
 
-    def update_names(self, filepath):
-        if self.source.name and self.importer.preserve_material_names:
-            return  # neither needs update
+    def get_base_texture_name(self, properties):
+        if not self.importer.use_existing_materials:
+            return
 
-        name = pathlib.Path(filepath).stem
+        ni_texture = properties.get(nif.NiTexturingProperty)
+        if ni_texture is None:
+            return
 
-        if self.source.name == "":
-            self.output.name = name
+        try:
+            filename = ni_texture.base_texture.source.filename
+        except AttributeError:
+            return
 
-        if self.importer.preserve_material_names == False:
-            self.output.active_material.name = name
+        if filename:
+            return pathlib.Path(filename).stem.lower()
 
     @staticmethod
     def resolve_texture_path(relpath):

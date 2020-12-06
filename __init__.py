@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 50),
+    "version": (0, 8, 51),
     "blender": (2, 82, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
@@ -363,14 +363,17 @@ class ImportScene(bpy.types.Operator, ImportHelper):
         default=True,
     )
 
-    preserve_material_names: bpy.props.BoolProperty(
-        name="Preserve Material Names",
+    use_existing_materials: bpy.props.BoolProperty(
+        name="Use Existing Materials",
         description=(
-            "Preserve material names from the source file. If unchecked materials will be renamed based on the"
-            " assigned textures"
+            "Re-use existing materials from the blender scene if present (rather than creating new materials)."
+            " Pre-existing material names must match the base texture name (without extension) to be eligible."
+            " When enabled newly imported materials are automatically renamed to their base texture file name."
         ),
-        default=True,
+        default=False,
     )
+
+    ignore_collision_nodes: bpy.props.BoolProperty(default=False, options={'HIDDEN'})
 
     @classmethod
     def poll(cls, context):
