@@ -910,6 +910,10 @@ class Material(SceneNode):
             bl_prop.vertex_color.layer_name = self.output.data.vertex_colors[0].name
             bl_prop.create_link(bl_prop.vertex_color, bl_prop.shader, "Color", "Diffuse Color")
             bl_prop.create_link(bl_prop.vertex_color, bl_prop.shader, "Alpha", "Diffuse Alpha")
+        # UV Animations
+        for controller in self.source.controllers:
+            if isinstance(controller, nif.NiUVController):
+                self.animation.create_uv_controller(controller)
 
     def create_wireframe_property(self, bl_prop, ni_prop):
         if ni_prop.wireframe:
@@ -1016,7 +1020,6 @@ class Animation(SceneNode):
 
         if self.source.controller:
             self.create_kf_controller(bl_object)
-            self.create_uv_controller(bl_object)
             self.create_vis_controller(bl_object)
 
     def create_text_keys(self, bl_object):
@@ -1177,16 +1180,9 @@ class Animation(SceneNode):
         fc.keyframe_points.foreach_set("co", keys.ravel())
         fc.update()
 
-    def create_uv_controller(self, bl_object):
-        controller = self.source.controllers.find_type(nif.NiUVController)
-        if controller is None:
-            return
-
+    def create_uv_controller(self, controller):
         data = controller.data
         if data is None:
-            return
-
-        if not self.output.active_material:
             return
 
         # get blender property
@@ -1197,20 +1193,15 @@ class Animation(SceneNode):
 
         # get animation action
         action = self.get_action(bl_prop.texture_group.node_tree)
-        if len(action.fcurves):
-            return  # duplicate
 
         # get the texture slot
-        uv_name = self.output.data.uv_layers[controller.texture_set].name
-        bl_slot = next(s for s in bl_prop.texture_slots if s.layer == uv_name)
-        bl_node = bl_slot.mapping_node
-
-        # use opengl uv layout
         try:
-            data.u_offset_data.keys[..., 1] = 1 - data.u_offset_data.keys[..., 1]
-            data.v_offset_data.keys[..., 1] = 1 - data.v_offset_data.keys[..., 1]
-        except AttributeError:
-            pass
+            uv_name = self.output.data.uv_layers[controller.texture_set].name
+            bl_slot = next(s for s in bl_prop.texture_slots if s.layer == uv_name)
+            bl_node = bl_slot.mapping_node
+        except (IndexError, StopIteration):
+            print(f"Warning: skipping NiUVController due to invalid texture set")
+            return
 
         channels = {
             (data.u_offset_data, data.v_offset_data):
@@ -1218,6 +1209,13 @@ class Animation(SceneNode):
             (data.u_tiling_data, data.v_tiling_data):
                 bl_node.inputs["Scale"].path_from_id("default_value"),
         }
+
+        try:
+            # TODO: do these in shader instead
+            data.u_offset_data.keys[:, 1] *= -1
+            data.v_offset_data.keys[:, 1] *= -1
+        except AttributeError:
+            pass
 
         for sources, data_path in channels.items():
             for i, uv_data in enumerate(sources):

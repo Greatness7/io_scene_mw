@@ -1286,10 +1286,10 @@ class Animation(SceneNode):
                 output.interpolation = key_type
                 output.keys = self.collect_keyframe_points(fcurves, key_type, num_axes=1)
 
-        # use d3d uv layout
         try:
-            uv_data.u_offset_data.keys[:, 1] = 1 - uv_data.u_offset_data.keys[:, 1]
-            uv_data.v_offset_data.keys[:, 1] = 1 - uv_data.v_offset_data.keys[:, 1]
+            # TODO: do these in shader instead
+            uv_data.u_offset_data.keys[:, 1] *= -1
+            uv_data.v_offset_data.keys[:, 1] *= -1
         except AttributeError:
             pass
 
