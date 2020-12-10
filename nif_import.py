@@ -45,6 +45,7 @@ class Importer:
     discard_root_transforms = True
     use_existing_materials = False
     ignore_collision_nodes = False
+    ignore_animations = False
 
     def __init__(self, filepath, config):
         vars(self).update(config)
@@ -1013,6 +1014,9 @@ class Animation(SceneNode):
         self.__dict__ = node.__dict__
 
     def create(self):
+        if self.importer.ignore_animations:
+            return
+
         bl_object = self.output.id_data
 
         if self.source.extra_data:
@@ -1181,6 +1185,9 @@ class Animation(SceneNode):
         fc.update()
 
     def create_uv_controller(self, controller):
+        if self.importer.ignore_animations:
+            return
+
         data = controller.data
         if data is None:
             return
@@ -1231,6 +1238,9 @@ class Animation(SceneNode):
         self.update_frame_range(controller)
 
     def create_color_controller(self, bl_prop, ni_prop):
+        if self.importer.ignore_animations:
+            return
+
         controller = ni_prop.controllers.find_type(nif.NiMaterialColorController)
         if controller is None:
             return
@@ -1268,6 +1278,9 @@ class Animation(SceneNode):
         self.update_frame_range(controller)
 
     def create_alpha_controller(self, bl_prop, ni_prop):
+        if self.importer.ignore_animations:
+            return
+
         controller = ni_prop.controllers.find_type(nif.NiAlphaController)
         if controller is None:
             return
@@ -1325,6 +1338,9 @@ class Animation(SceneNode):
         scene.frame_end = scene.frame_preview_end = max(scene.frame_end, frame_end)
 
     def set_mute(self, state, fcurves=None):
+        if self.importer.ignore_animations:
+            return
+
         if fcurves is None:
             try:
                 fcurves = self.output.id_data.animation_data.action.fcurves

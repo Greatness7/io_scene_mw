@@ -373,6 +373,7 @@ class ImportScene(bpy.types.Operator, ImportHelper):
         default=False,
     )
 
+    ignore_animations: bpy.props.BoolProperty(default=False, options={'HIDDEN'})
     ignore_collision_nodes: bpy.props.BoolProperty(default=False, options={'HIDDEN'})
 
     @classmethod
