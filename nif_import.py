@@ -60,6 +60,7 @@ class Importer:
     def execute(self):
         data = nif.NiStream()
         data.load(self.filepath)
+        data.merge_properties()
 
         # fix transforms
         if self.discard_root_transforms:
@@ -819,12 +820,16 @@ class Material(SceneNode):
         if len(properties) == 0:
             return
 
+        ni_alpha = properties.get(nif.NiAlphaProperty)
+        ni_material = properties.get(nif.NiMaterialProperty)
+        ni_stencil = properties.get(nif.NiStencilProperty)
+        ni_texture = properties.get(nif.NiTexturingProperty)
+        ni_wireframe = properties.get(nif.NiWireframeProperty)
+
         # Re-Use Materials
-        name = self.get_base_texture_name(properties)
-        if name and self.importer.use_existing_materials:
-            if name and (name in bpy.data.materials):
-                self.output.data.materials.append(bpy.data.materials[name])
-                return
+        name = self.calc_name_from_textures(ni_texture)
+        if self.apply_existing_material(name, ni_alpha):
+            return
 
         # Merge Duplicates
         props_hash = (
@@ -843,31 +848,18 @@ class Material(SceneNode):
             self.output.data.materials.append(bl_prop.material)
             return
         finally:
-            if name and self.importer.use_existing_materials:
+            if self.importer.use_existing_materials:
                 bl_prop.material.name = name
 
-        # Alpha Property
-        ni_alpha = properties.get(nif.NiAlphaProperty)
+        # Setup Properties
         if ni_alpha:
             self.create_alpha_property(bl_prop, ni_alpha)
-
-        # Material Property
-        ni_material = properties.get(nif.NiMaterialProperty)
         if ni_material:
             self.create_material_property(bl_prop, ni_material)
-
-        # Stencil Property
-        ni_stencil = properties.get(nif.NiStencilProperty)
         if ni_stencil:
             self.create_stencil_property(bl_prop, ni_stencil)
-
-        # Texture Property
-        ni_texture = properties.get(nif.NiTexturingProperty)
         if ni_texture:
             self.create_texturing_property(bl_prop, ni_texture)
-
-        # Wireframe Property
-        ni_wireframe = properties.get(nif.NiWireframeProperty)
         if ni_wireframe:
             self.create_wireframe_property(bl_prop, ni_wireframe)
 
@@ -962,21 +954,48 @@ class Material(SceneNode):
 
         return image
 
-    def get_base_texture_name(self, properties):
+    def calc_name_from_textures(self, ni_prop):
+        if not self.importer.use_existing_materials:
+            return ""
+
+        if ni_prop is None:
+            return ""
+
+        names = {}
+        for tex_key, tex_map in zip(ni_prop.texture_keys, ni_prop.texture_maps):
+            try:
+                names[tex_key] = pathlib.Path(tex_map.source.filename).stem.lower()
+            except AttributeError:
+                pass
+
+        if names.keys() == {"base_texture"}:
+            return names["base_texture"]
+
+        return " | ".join(f"{k.rpartition('_')[0]}:{v}" for k, v in names.items())
+
+    def apply_existing_material(self, name, ni_alpha):
         if not self.importer.use_existing_materials:
             return
 
-        ni_texture = properties.get(nif.NiTexturingProperty)
-        if ni_texture is None:
-            return
+        use_vertex_colors = bool(len(self.source.data.vertex_colors))
+        use_alpha_blend = getattr(ni_alpha, "alpha_blending", False)
+        use_alpha_clip = getattr(ni_alpha, "alpha_testing", False)
 
-        try:
-            filename = ni_texture.base_texture.source.filename
-        except AttributeError:
-            return
-
-        if filename:
-            return pathlib.Path(filename).stem.lower()
+        base_name, index = name, 0
+        while True:
+            try:
+                bl_prop = bpy.data.materials[name].mw.validate()
+            except (LookupError, TypeError):
+                break
+            if (
+                bl_prop.use_vertex_colors == use_vertex_colors
+                and bl_prop.use_alpha_blend == use_alpha_blend
+                and bl_prop.use_alpha_clip == use_alpha_clip
+            ):
+                self.output.data.materials.append(bl_prop.material)
+                return True
+            index += 1
+            name = f"{base_name}.{index:03}"
 
     @staticmethod
     def resolve_texture_path(relpath):

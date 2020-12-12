@@ -72,13 +72,16 @@ class NiStream:
 
         for obj in self.objects_of_type(nif.NiAVObject):
             for i, prop in enumerate(obj.properties):
+                if prop is None:
+                    continue
+
                 # We must first handle any objects referenced within the properties. For
                 # now this only matters with NiTexturingProperty, which holds references
                 # to multiple NiSourceTexture(s). Replace any duplicated source textures
                 # with those already encountered earlier in the routine.
                 if isinstance(prop, nif.NiTexturingProperty):
                     for name, slot in zip(prop.texture_keys, prop.texture_maps):
-                        if slot is None:
+                        if not (slot and slot.source):
                             continue
                         if sanitize_filenames:
                             slot.source.sanitize_filename()
