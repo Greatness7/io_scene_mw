@@ -177,7 +177,6 @@ class UpdateLimit(bpy.types.Operator):
         return {"FINISHED"}
 
 
-
 # -------------
 # TEXTURE PATHS
 # -------------
@@ -373,8 +372,9 @@ class ImportScene(bpy.types.Operator, ImportHelper):
         default=False,
     )
 
-    ignore_animations: bpy.props.BoolProperty(default=False, options={'HIDDEN'})
     ignore_collision_nodes: bpy.props.BoolProperty(default=False, options={'HIDDEN'})
+    ignore_custom_normals: bpy.props.BoolProperty(default=False, options={'HIDDEN'})
+    ignore_animations: bpy.props.BoolProperty(default=False, options={'HIDDEN'})
 
     @classmethod
     def poll(cls, context):

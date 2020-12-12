@@ -45,6 +45,7 @@ class Importer:
     discard_root_transforms = True
     use_existing_materials = False
     ignore_collision_nodes = False
+    ignore_custom_normals = False
     ignore_animations = False
 
     def __init__(self, filepath, config):
@@ -628,13 +629,11 @@ class Mesh(SceneNode):
 
         return bl_object
 
-    @staticmethod
-    def create_vertices(ob, vertices):
+    def create_vertices(self, ob, vertices):
         ob.data.vertices.add(len(vertices))
         ob.data.vertices.foreach_set("co", vertices.ravel())
 
-    @staticmethod
-    def create_triangles(ob, triangles):
+    def create_triangles(self, ob, triangles):
         n = len(triangles)
         ob.data.loops.add(3 * n)
         ob.data.loops.foreach_set("vertex_index", triangles.ravel())
@@ -646,8 +645,7 @@ class Mesh(SceneNode):
 
         ob.data.update()
 
-    @staticmethod
-    def create_normals(ob, normals):
+    def create_normals(self, ob, normals):
         if len(normals) == 0:
             ob.data["ignore_normals"] = True
         else:
@@ -664,18 +662,17 @@ class Mesh(SceneNode):
             use_smooth = ~(n0__eq__n1 & n1__eq__n2).all(axis=1)
             ob.data.polygons.foreach_set("use_smooth", use_smooth)
             # apply custom normals
-            ob.data.use_auto_smooth = True
-            ob.data.normals_split_custom_set(normals)
+            if not self.importer.ignore_custom_normals:
+                ob.data.use_auto_smooth = True
+                ob.data.normals_split_custom_set(normals)
             # ob.data.edges.foreach_set("use_edge_sharp", [False] * len(ob.data.edges))
 
-    @staticmethod
-    def create_uv_sets(ob, uv_sets):
+    def create_uv_sets(self, ob, uv_sets):
         for i, uv in enumerate(uv_sets[:8]):  # max 8 uv sets (blender limitation)
             ob.data.uv_layers.new()
             ob.data.uv_layers[i].data.foreach_set("uv", uv.ravel())
 
-    @staticmethod
-    def create_vertex_colors(ob, vertex_colors):
+    def create_vertex_colors(self, ob, vertex_colors):
         if len(vertex_colors):
             vc = ob.data.vertex_colors.new()
             vc.data.foreach_set("color", vertex_colors.ravel())
