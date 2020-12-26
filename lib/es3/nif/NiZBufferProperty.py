@@ -26,3 +26,4 @@ class NiZBufferProperty(NiProperty):
     z_buffer_test = bool_property(mask=0x0001)
     z_buffer_write = bool_property(mask=0x0002)
     test_function = enum_property(TestFunction, mask=0x003C, pos=2)
+    test_function_specified = bool_property(mask=0x0040)
