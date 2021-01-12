@@ -85,6 +85,13 @@ class Exporter:
         data.apply_scale(self.scale_correction)
         data.merge_properties(ignore={"name", "shine", "specular_color"})
         data.sort()
+
+        # check for markers
+        for shape in data.objects_of_type(nif.NiTriShape):
+            if shape.name.lower().startswith("tri editormarker"):
+                data.root.extra_datas.append(nif.NiStringExtraData(string_data="MRK"))
+                break
+
         data.save(self.filepath)
 
         # extract x/kf file
