@@ -85,13 +85,7 @@ class Exporter:
         data.apply_scale(self.scale_correction)
         data.merge_properties(ignore={"name", "shine", "specular_color"})
         data.sort()
-
-        # check for markers
-        for shape in data.objects_of_type(nif.NiTriShape):
-            if shape.name.lower().startswith("tri editormarker"):
-                data.root.extra_datas.append(nif.NiStringExtraData(string_data="MRK"))
-                break
-
+        self.setup_markers(data)
         data.save(self.filepath)
 
         # extract x/kf file
@@ -286,6 +280,19 @@ class Exporter:
         pose_bones = root.source.pose.bones
         for bone in edit_bones:
             yield self.get(pose_bones[bone.name])
+
+    def setup_markers(self, data):
+        markers = [
+            ob for ob in data.objects_of_type(nif.NiTriShape)
+            if ob.name.lower().startswith("tri editormarker")
+        ]
+        if markers:
+            data.root.extra_datas.append(nif.NiStringExtraData(string_data="MRK"))
+            # set ambient colors to play nicely with TESCS toggle lighting feature
+            for marker in markers:
+                material = marker.get_property(nif.NiMaterialProperty)
+                if material:
+                    material.ambient_color = material.diffuse_color
 
     @property
     def scale_correction(self):
