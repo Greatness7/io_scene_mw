@@ -430,7 +430,7 @@ class ExportScene(bpy.types.Operator, ExportHelper):
     extract_keyframe_data: bpy.props.BoolProperty(
         name="Extract Keyframe Data",
         description=(
-            "Extract animations and visuals to corrosponding 'x.kf' and 'x.nif' files."
+            "Extract animations and visuals to corresponding 'x.kf' and 'x.nif' files."
             "\n(e.g. exporting 'base_anim.nif' will create 'xbase_anim.nif' and 'xbase_anim.kf' files)"
         ),
         default=False,
