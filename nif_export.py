@@ -208,6 +208,10 @@ class Exporter:
     def process_empty(self, node):
         self.nodes[node] = Empty
 
+        if node.source.instance_type == 'COLLECTION':
+            collection = node.source.instance_collection
+            self.resolve_nodes(set(collection.objects), parent=node)
+
         if (not self.colliders) and node.name.lower().startswith("collision"):
             self.colliders[node.source].update(nif.NiAVObject.descendants(node.source))
 
