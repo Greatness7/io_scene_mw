@@ -26,6 +26,12 @@ class NiBinaryStream(BinaryStream):
         for obj in self.history.values():
             obj._resolve_links(self.history)
 
+            # fix roots
+            if getattr(obj, "children", None):
+                for i, root in enumerate(roots):
+                    if root in obj.children:
+                        roots[i] = obj
+
         # clear history
         del self.history
 
