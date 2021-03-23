@@ -66,7 +66,7 @@ class NiSourceTexture(NiTexture):
         else:
             stream.write_ubyte(bool(self.pixel_data))
             if self.pixel_data:
-                self.pixel_data.save(stream)
+                stream.write_link(self.pixel_data)
         stream.write_int(self.pixel_layout)
         stream.write_int(self.use_mipmaps)
         stream.write_int(self.alpha_format)
