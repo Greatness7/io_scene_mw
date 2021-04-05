@@ -872,8 +872,9 @@ class Material(SceneNode):
             bl_prop.use_alpha_clip = True
 
     def create_material_property(self, bl_prop, ni_prop):
-        # # Material Name
-        # bl_prop.material.name = ni_prop.name
+        # Material Name
+        if not self.importer.use_existing_materials:
+            bl_prop.material.name = ni_prop.name
         # Material Flags
         bl_prop.material_flags = ni_prop.flags
         # Material Color
