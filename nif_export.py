@@ -1133,11 +1133,6 @@ class Animation(SceneNode):
         # split times from values
         values = keys[:, 1:4]
 
-        # pose / axis corrections
-        if isinstance(self.source, bpy.types.PoseBone):
-            offset = self.get_posed_offset()
-            values[:] = values @ offset[:3, :3].T + offset[:3, 3]
-
         # get keyframe controller
         controller = self.create_keyframe_controller()
         controller.data.translations.interpolation = key_type
@@ -1148,6 +1143,16 @@ class Animation(SceneNode):
         # update start/stop times
         controller.start_time = min(keys[0, 0], controller.start_time)
         controller.stop_time = max(keys[-1, 0], controller.stop_time)
+
+        # pose / axis corrections
+        if isinstance(self.source, bpy.types.PoseBone):
+            offset = self.get_posed_offset()
+            t = controller.data.translations
+
+            t.values[:] = t.values @ offset[:3, :3].T + offset[:3, 3]
+            if key_type.name == "BEZ_KEY":
+                t.in_tans[:] = t.in_tans @ offset[:3, :3].T + offset[:3, 3]
+                t.out_tans[:] = t.out_tans @ offset[:3, :3].T + offset[:3, 3]
 
         return True
 
@@ -1486,13 +1491,14 @@ class Animation(SceneNode):
             if key_type.name == 'BEZ_KEY':
                 # collect incoming tangents
                 fc.keyframe_points.foreach_get("handle_left", temp.ravel())
-                keys[:, i + num_axes * 1] = +3.0 * (keys[:, i] - temp[:, 1])
+                keys[:, i + num_axes * 1] = (keys[:, i] - temp[:, 1]) * 3.0
                 # collect outgoing tangents
                 fc.keyframe_points.foreach_get("handle_right", temp.ravel())
-                keys[:, i + num_axes * 2] = -3.0 * (keys[:, i] - temp[:, 1])
+                keys[:, i + num_axes * 2] = (temp[:, 1] - keys[:, i]) * 3.0
 
         # convert from frames to times
         keys[:, 0] /= bpy.context.scene.render.fps
+
         # sort the keys by their times
         keys = keys[keys[:, 0].argsort()]
 
