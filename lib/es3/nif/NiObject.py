@@ -57,10 +57,10 @@ class NiObject(metaclass=NiMeta):
             if item is None:
                 continue
             if type(item) is int:
-                setattr(self, name, objects[item] if item != -1 else None)
+                setattr(self, name, objects.get(item) if item != -1 else None)
             else:  # list of ints
                 for index, value in enumerate(item):
-                    item[index] = objects[value] if value != -1 else None
+                    item[index] = objects.get(value) if value != -1 else None
 
     @classmethod
     def attributes(cls):
