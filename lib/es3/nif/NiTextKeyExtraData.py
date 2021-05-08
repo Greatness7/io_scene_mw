@@ -44,9 +44,9 @@ class NiTextKeyExtraData(NiExtraData):
     def _get_stop_text(start_text):
         group_name = start_text[:-6]  # trim " start" prefix
         if group_name.endswith(("chop", "slash", "thrust")):
-            return f"{group_name} hit"
+            return f"{group_name} small follow stop"
         elif group_name.endswith("shoot"):
-            return f"{group_name} release"
+            return f"{group_name} follow stop"
         else:
             return f"{group_name} stop"
 
