@@ -32,8 +32,9 @@ class NiAVObject(NiObjectNET):
     PropagateMode = PropagateMode
 
     # flags access
-    propagate_mode = enum_property(PropagateMode, mask=0x0006, pos=1)
     app_culled = bool_property(mask=0x0001)
+    propagate_mode = enum_property(PropagateMode, mask=0x0006, pos=1)
+    visual = bool_property(mask=0x0008)
 
     _refs = (*NiObjectNET._refs, "properties")
 
