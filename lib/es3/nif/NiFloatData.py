@@ -79,11 +79,14 @@ class NiFloatData(NiObject):
     def get_bez_tangent_handles(self):
         times, values = self.times, self.values
 
-        # calculate time deltas
-        dt = times / 3.0
-        if len(dt) >= 2:
-            dt[:-1] = dt[1:] - dt[:-1]  # faster than np.diff(dt, append=0)
-            dt[-1] = dt[-2]
+        # relative horizontal coordinates
+        dt = np.pad(np.diff(times), (1, 1), mode='edge') / 3.0
+        in_dx = dt[:-1]
+        out_dx = dt[1:]
+
+        # relative vertical coordinates
+        in_dy = self.in_tans.T / 3.0
+        out_dy = self.out_tans.T / 3.0
 
         # control point handles
         shape = (2, *values.shape[::-1], 2)
@@ -91,11 +94,11 @@ class NiFloatData(NiObject):
 
         if handles.size:
             # incoming handles
-            handles[0, ..., 0] = (times - dt)
-            handles[0, ..., 1] = (values - self.in_tans / 3.0).T
+            handles[0, ..., 0] = times - in_dx
+            handles[0, ..., 1] = values.T - in_dy
             # outgoing handles
-            handles[1, ..., 0] = (times + dt)
-            handles[1, ..., 1] = (values + self.out_tans / 3.0).T
+            handles[1, ..., 0] = times + out_dx
+            handles[1, ..., 1] = values.T + out_dy
 
         return handles
 
@@ -103,23 +106,21 @@ class NiFloatData(NiObject):
         times, values = self.times, self.values
 
         # calculate deltas
-        k = self.keys[:, :-3] / 3.0
-        p = k - np.roll(k, +1, axis=0)
-        n = np.roll(k, -1, axis=0) - k
-        if len(k) >= 2:  # fix up ends
-            p[0], n[-1] = p[1], n[-2]
+        dt = np.pad(np.diff(times), (1, 1), mode='edge') / 3.0
+        in_dx = dt[:-1]
+        out_dx = dt[1:]
 
         # calculate tangents
         mt, mc, mb = 1.0 - self.tcb.T
         pt, pc, pb = 1.0 + self.tcb.T
 
         in_tans = 0.5 * (
-            (mt * mc * pb)[:, None] * p +
-            (mt * pc * mb)[:, None] * n
+            (mt * mc * pb)[:, None] * in_dx +
+            (mt * pc * mb)[:, None] * out_dx
         )
         out_tans = 0.5 * (
-            (mt * pc * pb)[:, None] * p +
-            (mt * mc * mb)[:, None] * n
+            (mt * pc * pb)[:, None] * in_dx +
+            (mt * mc * mb)[:, None] * out_dx
         )
 
         # control point handles
@@ -128,11 +129,11 @@ class NiFloatData(NiObject):
 
         if handles.size:
             # incoming handles
-            handles[0, ..., 0] = (times - in_tans[:, 0])
-            handles[0, ..., 1] = (values - in_tans[:, 1:]).T
+            handles[0, ..., 0] = times - in_tans[:, 0]
+            handles[0, ..., 1] = values.T - in_tans[:, 1:]
             # outgoing handles
-            handles[1, ..., 0] = (times + out_tans[:, 0])
-            handles[1, ..., 1] = (values + out_tans[:, 1:]).T
+            handles[1, ..., 0] = times + out_tans[:, 0]
+            handles[1, ..., 1] = values.T + out_tans[:, 1:]
 
         return handles
 

@@ -263,19 +263,22 @@ class Importer:
             posed_offset = la.solve(matrix_relative_to_root, root_inverse)
             posed_offset = posed_offset @ parent_matrix_uncorrected
 
-            values = kf_controller.data.translations.values
-            if len(values):
+            t = kf_controller.data.translations
+            if len(t.values):
                 # convert to pose space
-                values[:] = values @ posed_offset[:3, :3].T + posed_offset[:3, 3]
+                t.values[:] = t.values @ posed_offset[:3, :3].T + posed_offset[:3, 3]
+                if t.interpolation.name == "BEZ_KEY":
+                    t.in_tans[:] = t.in_tans @ posed_offset[:3, :3].T + posed_offset[:3, 3]
+                    t.out_tans[:] = t.out_tans @ posed_offset[:3, :3].T + posed_offset[:3, 3]
 
-            values = kf_controller.data.rotations.values
-            if len(values):
+            r = kf_controller.data.rotations
+            if len(r.values):
                 # apply axis correction
                 axis_fix = nif_utils.quaternion_from_matrix(node.axis_correction)
-                values[:] = nif_utils.quaternion_mul(values, axis_fix)
+                r.values[:] = nif_utils.quaternion_mul(r.values, axis_fix)
                 # convert to pose space
                 to_posed = nif_utils.quaternion_from_matrix(posed_offset)
-                values[:] = nif_utils.quaternion_mul(to_posed, values)
+                r.values[:] = nif_utils.quaternion_mul(to_posed, r.values)
 
     def correct_bone_parenting(self):
         """Set the parent of skinned meshes to the armature responsible for deforming them.
@@ -1080,11 +1083,8 @@ class Animation(SceneNode):
         if len(data.keys) == 0:
             return
 
-        # get keys times/values
-        times, values = data.times, data.values
-
         # convert time to frame
-        times *= bpy.context.scene.render.fps
+        data.keys[:, 0] *= bpy.context.scene.render.fps
 
         # get blender data path
         data_path = self.output.path_from_id("location")
@@ -1133,11 +1133,8 @@ class Animation(SceneNode):
         if len(data.keys) == 0:
             return
 
-        # get keys times/values
-        times, values = data.times, data.values
-
         # convert time to frame
-        times *= bpy.context.scene.render.fps
+        data.keys[:, 0] *= bpy.context.scene.render.fps
 
         # get blender data path
         data_path = self.output.path_from_id("rotation_quaternion")
@@ -1150,12 +1147,12 @@ class Animation(SceneNode):
             fc.update()
 
     def create_scales(self, controller, action):
-        keys = controller.data.scales.keys
-        if len(keys) == 0:
+        data = controller.data.scales
+        if len(data.keys) == 0:
             return
 
         # convert time to frame
-        keys[:, 0] *= bpy.context.scene.render.fps
+        data.keys[:, 0] *= bpy.context.scene.render.fps
 
         # get blender data path
         data_path = self.output.path_from_id("scale")
@@ -1163,8 +1160,8 @@ class Animation(SceneNode):
         # build blender fcurves
         for i in range(3):
             fc = action.fcurves.new(data_path, index=i, action_group=self.output.name)
-            fc.keyframe_points.add(len(keys))
-            fc.keyframe_points.foreach_set("co", keys[:, :2].ravel())
+            fc.keyframe_points.add(len(data.keys))
+            fc.keyframe_points.foreach_set("co", data.keys[:, :2].ravel())
             self.create_interpolation_data(controller.data.scales, fc)
             fc.update()
 

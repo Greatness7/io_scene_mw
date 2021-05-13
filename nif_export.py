@@ -1130,9 +1130,6 @@ class Animation(SceneNode):
         if len(keys) == 0:
             return False
 
-        # split times from values
-        values = keys[:, 1:4]
-
         # get keyframe controller
         controller = self.create_keyframe_controller()
         controller.data.translations.interpolation = key_type
@@ -1148,7 +1145,6 @@ class Animation(SceneNode):
         if isinstance(self.source, bpy.types.PoseBone):
             offset = self.get_posed_offset()
             t = controller.data.translations
-
             t.values[:] = t.values @ offset[:3, :3].T + offset[:3, 3]
             if key_type.name == "BEZ_KEY":
                 t.in_tans[:] = t.in_tans @ offset[:3, :3].T + offset[:3, 3]
