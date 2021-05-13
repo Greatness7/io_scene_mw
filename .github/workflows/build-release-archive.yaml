@@ -17,7 +17,7 @@ jobs:
         run: sudo rsync -r --exclude="*.git*" . io_scene_mw
 
       - name: build archive
-        run: tar -acf io_scene_mw.zip io_scene_mw
+        run: zip -r io_scene_mw.zip io_scene_mw
 
       - name: create release
         uses: notlmn/release-with-changelog@v2
