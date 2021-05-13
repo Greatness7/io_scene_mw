@@ -9,32 +9,27 @@ jobs:
     steps:
       - name: checkout repo
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 50
 
       - name: copy contents
         shell: bash
         run: sudo rsync -r --exclude="*.git*" . io_scene_mw
 
       - name: build archive
-        uses: montudor/action-zip@v0.1.1
-        with:
-          args: zip -r io_scene_mw.zip io_scene_mw
+        run: tar -acf io_scene_mw.zip io_scene_mw
 
       - name: create release
-        id: create_release
-        uses: actions/create-release@v1.1.4
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: notlmn/release-with-changelog@v2
         with:
-          body: "[Changelog](https://github.com/Greatness7/io_scene_mw/tags)"
-          tag_name: ${{ github.ref }}
-          release_name: ${{ github.ref }}
+          header: "### Changelog"
+          include-hash: true
+          include-range: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: upload release asset
-        uses: actions/upload-release-asset@v1.0.2
+      - name: upload release
+        uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./io_scene_mw.zip
-          asset_name: io_scene_mw.zip
-          asset_content_type: application/zip
+          files: io_scene_mw.zip
