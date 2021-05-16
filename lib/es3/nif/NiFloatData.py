@@ -79,20 +79,20 @@ class NiFloatData(NiObject):
     def get_bez_tangent_handles(self):
         times, values = self.times, self.values
 
-        # relative horizontal coordinates
-        dt = np.pad(np.diff(times), (1, 1), mode='edge') / 3.0
-        in_dx = dt[:-1]
-        out_dx = dt[1:]
-
-        # relative vertical coordinates
-        in_dy = self.in_tans.T / 3.0
-        out_dy = self.out_tans.T / 3.0
-
         # control point handles
         shape = (2, *values.shape[::-1], 2)
-        handles = np.empty(shape, dt.dtype)
+        handles = np.empty(shape, values.dtype)
 
         if handles.size:
+            # relative horizontal coordinates
+            dx = np.diff(times, prepend=times[0], append=times[-1]) / 3.0
+            in_dx = dx[:-1]
+            out_dx = dx[1:]
+
+            # relative vertical coordinates
+            in_dy = self.in_tans.T / 3.0
+            out_dy = self.out_tans.T / 3.0
+
             # incoming handles
             handles[0, ..., 0] = times - in_dx
             handles[0, ..., 1] = values.T - in_dy
@@ -105,35 +105,27 @@ class NiFloatData(NiObject):
     def get_tcb_tangent_handles(self):
         times, values = self.times, self.values
 
-        # calculate deltas
-        dt = np.pad(np.diff(times), (1, 1), mode='edge') / 3.0
-        in_dx = dt[:-1]
-        out_dx = dt[1:]
-
-        # calculate tangents
-        mt, mc, mb = 1.0 - self.tcb.T
-        pt, pc, pb = 1.0 + self.tcb.T
-
-        in_tans = 0.5 * (
-            (mt * mc * pb)[:, None] * in_dx +
-            (mt * pc * mb)[:, None] * out_dx
-        )
-        out_tans = 0.5 * (
-            (mt * pc * pb)[:, None] * in_dx +
-            (mt * mc * mb)[:, None] * out_dx
-        )
-
         # control point handles
         shape = (2, *values.shape[::-1], 2)
         handles = np.empty(shape, values.dtype)
 
         if handles.size:
+            # calculate deltas
+            dx = (np.roll(times, 1, axis=0) - np.roll(times, -1, axis=0)) / 6.0
+            dy = (np.roll(values, 1, axis=0) - np.roll(values, -1, axis=0)) / 6.0
+            # fix up start/end
+            dy[0] = dy[-1] = 0
+
+            # TODO: tcb params
+            # removed for now as they aren't supported by blender
+            # instead this currently returns a Catmull–Rom Spline
+
             # incoming handles
-            handles[0, ..., 0] = times - in_tans[:, 0]
-            handles[0, ..., 1] = values.T - in_tans[:, 1:]
+            handles[0, ..., 0] = times - dx
+            handles[0, ..., 1] =  values.T - dy.T
             # outgoing handles
-            handles[1, ..., 0] = times + out_tans[:, 0]
-            handles[1, ..., 1] = values.T + out_tans[:, 1:]
+            handles[1, ..., 0] = times + dx
+            handles[1, ..., 1] = values.T + dy.T
 
         return handles
 
