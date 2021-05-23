@@ -68,12 +68,13 @@ class NiTextKeyExtraData(NiExtraData):
         seen = {}
 
         for time, text in self.keys.tolist():
-            for line in filter(None, text.lower().splitlines()):
-                if (line in seen) and ("sound" not in line):
-                    print(f"Skipped duplicate text key '{line}' at {time:.3f}. Previous at {seen[line]:.3f}.")
+            for line in filter(None, text.splitlines()):
+                lowercased = line.lower()
+                if (lowercased in seen) and ("sound" not in lowercased):
+                    print(f"Skipped duplicate text key '{lowercased}' at {time:.3f}. Previous at {seen[lowercased]:.3f}.")
                     continue
 
-                seen[line] = time
+                seen[lowercased] = time
                 temp.append((time, line))
 
         self.keys = np.array(temp, dtype=_dtype)
