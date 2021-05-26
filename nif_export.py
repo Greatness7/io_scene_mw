@@ -778,7 +778,7 @@ class Mesh(SceneNode):
                 keys = np.empty(0)
             else:
                 key_type = animation.get_interpolation_type([fc])
-                keys = animation.collect_keyframe_points([fc], key_type, num_axes=1)
+                keys = animation.collect_keyframe_points([fc], key_type)
 
             # populate keyframe data
             morph_data.keys[i] = keys
@@ -1088,12 +1088,12 @@ class Animation(SceneNode):
         return True
 
     def create_vis_controller(self, fcurves_dict):
-        fcurves = self.filter_fcurves(fcurves_dict, "hide_viewport")
+        fcurves = self.collect_fcurves(fcurves_dict, "hide_viewport", num_axes=1)
         if len(fcurves) == 0:
             return False
 
         key_type = nif.NiFloatData.KeyType.LIN_KEY
-        keys = self.collect_keyframe_points(fcurves, key_type, num_axes=1)
+        keys = self.collect_keyframe_points(fcurves, key_type)
         if len(keys) == 0:
             return False
 
@@ -1114,7 +1114,7 @@ class Animation(SceneNode):
         return True
 
     def create_translations(self, fcurves_dict):
-        fcurves = self.filter_fcurves(fcurves_dict, "location")
+        fcurves = self.collect_fcurves(fcurves_dict, "location", num_axes=3)
         if len(fcurves) == 0:
             return False
 
@@ -1123,7 +1123,7 @@ class Animation(SceneNode):
             return False
 
         # collect keyframe points
-        keys = self.collect_keyframe_points(fcurves, key_type, num_axes=3)
+        keys = self.collect_keyframe_points(fcurves, key_type)
         if len(keys) == 0:
             return False
 
@@ -1158,7 +1158,7 @@ class Animation(SceneNode):
         return has_euler or has_quats
 
     def create_euler_rotations(self, fcurves_dict):
-        fcurves = self.filter_fcurves(fcurves_dict, "rotation_euler")
+        fcurves = self.collect_fcurves(fcurves_dict, "rotation_euler", num_axes=3)
         if len(fcurves) == 0:
             return False
 
@@ -1183,7 +1183,7 @@ class Animation(SceneNode):
                 continue
 
             # collect keyframe points
-            keys = self.collect_keyframe_points(axis_fcurves, key_type, num_axes=1)
+            keys = self.collect_keyframe_points(axis_fcurves, key_type)
             if len(keys) == 0:
                 continue
 
@@ -1197,7 +1197,7 @@ class Animation(SceneNode):
         return True
 
     def create_quaternion_rotations(self, fcurves_dict):
-        fcurves = self.filter_fcurves(fcurves_dict, "rotation_quaternion")
+        fcurves = self.collect_fcurves(fcurves_dict, "rotation_quaternion", num_axes=4)
         if len(fcurves) == 0:
             return False
 
@@ -1205,7 +1205,7 @@ class Animation(SceneNode):
         key_type = nif.NiRotData.KeyType.LIN_KEY
 
         # collect keyframe points
-        keys = self.collect_keyframe_points(fcurves, key_type, num_axes=4)
+        keys = self.collect_keyframe_points(fcurves, key_type)
         if len(keys) == 0:
             return False
 
@@ -1235,7 +1235,7 @@ class Animation(SceneNode):
         return True
 
     def create_scales(self, fcurves_dict):
-        fcurves = self.filter_fcurves(fcurves_dict, "scale")
+        fcurves = self.collect_fcurves(fcurves_dict, "scale", num_axes=3)
         if len(fcurves) == 0:
             return False
 
@@ -1244,7 +1244,7 @@ class Animation(SceneNode):
             return False
 
         # collect keyframe points
-        keys = self.collect_keyframe_points(fcurves, key_type, num_axes=3)
+        keys = self.collect_keyframe_points(fcurves, key_type)
         if len(keys) == 0:
             return False
 
@@ -1301,7 +1301,7 @@ class Animation(SceneNode):
                     continue
 
                 output.interpolation = key_type
-                output.keys = self.collect_keyframe_points(fcurves, key_type, num_axes=1)
+                output.keys = self.collect_keyframe_points(fcurves, key_type)
 
         try:
             # TODO: do these in shader instead
@@ -1354,7 +1354,7 @@ class Animation(SceneNode):
             if key_type is None:
                 continue
 
-            keys = self.collect_keyframe_points(fcurves[:3], key_type, num_axes=3)
+            keys = self.collect_keyframe_points(fcurves[:3], key_type)
             if len(keys) == 0:
                 continue
 
@@ -1385,7 +1385,7 @@ class Animation(SceneNode):
         if key_type is None:
             return False
 
-        keys = self.collect_keyframe_points(fcurves, key_type, num_axes=1)
+        keys = self.collect_keyframe_points(fcurves, key_type)
         if len(keys) == 0:
             return False
 
@@ -1430,12 +1430,44 @@ class Animation(SceneNode):
 
         return fcurves_dict
 
-    def filter_fcurves(self, fcurves_dict, key):
+    def collect_fcurves(self, fcurves_dict, key, num_axes):
+        assert num_axes != 0
+
+        # correct data path for pose bones
         if isinstance(self.source, bpy.types.PoseBone):
-            path = f'pose.bones["{self.name}"].{key}'
+            data_path = f'pose.bones["{self.name}"].{key}'
         else:
-            path = self.source.path_from_id(key)
-        return fcurves_dict[path]
+            data_path = self.source.path_from_id(key)
+
+        # skip invalid data paths
+        if data_path not in fcurves_dict:
+            return ()
+
+        # collect defined fcurves
+        fcurves = fcurves_dict[data_path]
+
+        # fill in missing fcurves
+        if len(fcurves) != num_axes:
+            group_name = fcurves[0].group.name
+            action = self.source.id_data.animation_data.action
+            for i in set(range(num_axes)).difference(fc.array_index for fc in fcurves):
+                fc = action.fcurves.new(data_path, index=i, action_group=group_name)
+
+        # fill in missing keyframes
+        frames_per_axis = [{kp.co[0] for kp in fc.keyframe_points} for fc in fcurves]
+        required_frames = set().union(*frames_per_axis)
+        for fc, frames in zip(fcurves, frames_per_axis):
+            for frame in (required_frames - frames):
+                fc.keyframe_points.insert(frame, fc.evaluate(frame), options={'FAST'})
+
+        # ensure fcurves are sorted
+        fcurves.sort(key=lambda fc: fc.array_index)
+
+        # ensure fcurves are updated
+        for fc in fcurves:
+            fc.update()
+
+        return fcurves
 
     def create_keyframe_controller(self):
         result = self.output.controllers.find_type_with_owner(nif.NiKeyframeController)
@@ -1453,23 +1485,9 @@ class Animation(SceneNode):
         return owner.controller
 
     @staticmethod
-    def collect_keyframe_points(fcurves, key_type, num_axes, dtype=np.float32):
-        # TODO: deal with axes having undefined fcurves
-        #   this occurs if the users manually deleted an fcurve from the dope sheet
-        fcurves = list(sorted(fcurves, key=lambda fc: fc.array_index))
-        assert len(fcurves) == num_axes
-
-        # fill in any missing keyframes
-        #   necessary when an axis has a keyframe that isn't present for other axes
-        #   e.g. if axes X and Y have animations, but the axis Z did not, fill in Z
-        if num_axes > 1:
-            frames_per_axis = [{p.co[0] for p in fc.keyframe_points} for fc in fcurves]
-            required_frames = set().union(*frames_per_axis)
-            for fc, frames in zip(fcurves, frames_per_axis):
-                for frame in (required_frames - frames):
-                    fc.keyframe_points.insert(frame, fc.evaluate(frame), options={'FAST'})
-
+    def collect_keyframe_points(fcurves, key_type, dtype=np.float32):
         # collect/convert keyframe keys
+        num_axes = len(fcurves)
         num_frames = len(fcurves[0].keyframe_points)
         num_values = 1 + num_axes * (1 if key_type.name == 'LIN_KEY' else 3)
         # e.g. times column + a values column with in/out tans for each axis
