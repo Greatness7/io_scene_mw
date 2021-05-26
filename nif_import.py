@@ -71,12 +71,12 @@ class Importer:
         if self.attach_keyframe_data:
             self.import_keyframe_data(data)
 
-        # apply settings
-        data.apply_scale(self.scale_correction)
-
-        # give root name
+        # copy file name
         if data.root.name == "":
             data.root.name = self.filepath.name
+
+        # scale correction
+        data.apply_scale(self.scale_correction)
 
         # resolve heirarchy
         roots = self.resolve_nodes(data.roots)
@@ -257,8 +257,8 @@ class Importer:
                 parent_matrix = node.parent.matrix_world if node.parent else ID44
                 parent_matrix_uncorrected = parent_matrix
 
-            matrix = parent_matrix @ node.matrix_local
-            matrix_relative_to_root = root_inverse @ matrix
+            matrix_world = parent_matrix @ node.matrix_local
+            matrix_relative_to_root = root_inverse @ matrix_world
 
             posed_offset = la.solve(matrix_relative_to_root, root_inverse)
             posed_offset = posed_offset @ parent_matrix_uncorrected
@@ -268,8 +268,8 @@ class Importer:
                 # convert to pose space
                 t.values[:] = t.values @ posed_offset[:3, :3].T + posed_offset[:3, 3]
                 if t.interpolation.name == "BEZ_KEY":
-                    t.in_tans[:] = t.in_tans @ posed_offset[:3, :3].T + posed_offset[:3, 3]
-                    t.out_tans[:] = t.out_tans @ posed_offset[:3, :3].T + posed_offset[:3, 3]
+                    t.in_tans[:] = t.in_tans @ posed_offset[:3, :3].T
+                    t.out_tans[:] = t.out_tans @ posed_offset[:3, :3].T
 
             r = kf_controller.data.rotations
             if len(r.values):

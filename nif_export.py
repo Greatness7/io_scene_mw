@@ -117,8 +117,7 @@ class Exporter:
         """ TODO
             support multiple armatures
         """
-        (root, bones), = self.armatures.items()
-
+        root, = self.armatures
         root_node = self.get(root)
         root_matrix = root_node.matrix_world
 
@@ -139,21 +138,19 @@ class Exporter:
             support multiple armatures
             only apply on 'Bip01' nodes
         """
-        (root, bones), = self.armatures.items()
-
-        root_node = self.get(root)
+        root_node = self.get(*self.armatures)
         root_matrix = root_node.matrix_world
         root_inverse = la.inv(root_matrix)
 
         for node in self.iter_bones(root_node):
-            child_world_matrices = {c: c.matrix_world for c in node.children}
+            prev_matrix_local = node.matrix_local.copy()
 
             node.matrix_bind = root_inverse @ node.matrix_world @ node.axis_correction
             node.matrix_world = root_matrix @ node.source.matrix @ node.axis_correction
 
-            # ensure child transforms were not modified
-            for child, matrix in child_world_matrices.items():
-                child.matrix_world = matrix
+            inverse_transform = la.solve(node.matrix_local, prev_matrix_local)
+            for child in node.children:
+                child.matrix_local = inverse_transform @ child.matrix_local
 
     def resolve_depsgraph(self):
         temp_modifiers = []
@@ -1141,14 +1138,15 @@ class Animation(SceneNode):
         controller.start_time = min(keys[0, 0], controller.start_time)
         controller.stop_time = max(keys[-1, 0], controller.stop_time)
 
-        # pose / axis corrections
+        # convert from pose space
         if isinstance(self.source, bpy.types.PoseBone):
-            offset = self.get_posed_offset()
+            posed_offset = self.get_posed_offset()
+
             t = controller.data.translations
-            t.values[:] = t.values @ offset[:3, :3].T + offset[:3, 3]
+            t.values[:] = t.values @ posed_offset[:3, :3].T + posed_offset[:3, 3]
             if key_type.name == "BEZ_KEY":
-                t.in_tans[:] = t.in_tans @ offset[:3, :3].T + offset[:3, 3]
-                t.out_tans[:] = t.out_tans @ offset[:3, :3].T + offset[:3, 3]
+                t.in_tans[:] = t.in_tans @ posed_offset[:3, :3].T
+                t.out_tans[:] = t.out_tans @ posed_offset[:3, :3].T
 
         return True
 
@@ -1473,7 +1471,7 @@ class Animation(SceneNode):
 
         # collect/convert keyframe keys
         num_frames = len(fcurves[0].keyframe_points)
-        num_values = 1 + (1 if key_type.name == 'LIN_KEY' else 3) * num_axes
+        num_values = 1 + num_axes * (1 if key_type.name == 'LIN_KEY' else 3)
         # e.g. times column + a values column with in/out tans for each axis
 
         keys = np.empty((num_frames, num_values), dtype)
