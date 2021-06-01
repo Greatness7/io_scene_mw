@@ -1339,11 +1339,12 @@ class Animation(SceneNode):
             for kp in fcurves.keyframe_points:
                 kp.interpolation = 'LINEAR'
         else:
+            for kp in fcurves.keyframe_points:
+                kp.interpolation = 'BEZIER'
+                kp.handle_left_type = kp.handle_right_type = 'FREE'
             handles = ni_data.get_tangent_handles()  # TODO: call this once per controller rather than per axis
             fcurves.keyframe_points.foreach_set("handle_left", handles[0, axis].ravel())
             fcurves.keyframe_points.foreach_set("handle_right", handles[1, axis].ravel())
-            for kp in fcurves.keyframe_points:
-                kp.handle_left_type = kp.handle_right_type = 'FREE'
 
     @staticmethod
     def update_frame_range(controller):
