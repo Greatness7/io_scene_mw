@@ -41,8 +41,8 @@ class NiTextKeyExtraData(NiExtraData):
         self.keys["f1"] = array
 
     @staticmethod
-    def _get_stop_text(start_text):
-        group_name = start_text[:-6]  # trim " start" prefix
+    def _get_stop_text(start_text_lower):
+        group_name = start_text_lower[:-6]  # trim " start"
         if group_name.endswith(("chop", "slash", "thrust")):
             return f"{group_name} small follow stop"
         elif group_name.endswith("shoot"):
@@ -50,18 +50,21 @@ class NiTextKeyExtraData(NiExtraData):
         else:
             return f"{group_name} stop"
 
-    def get_action_groups(self):
+    def get_animation_groups(self):
+        sentinel = None
+        group_name = ""
         start_index = 0
-        end_text = None
         for i, text in enumerate(self.values.tolist()):
-            for line in text.lower().splitlines():
-                if (end_text is None) and line.endswith(" start"):
+            for line in text.splitlines():
+                line_lower = line.lower()
+                if not sentinel and line_lower.endswith(" start"):
+                    sentinel = self._get_stop_text(line_lower)
+                    group_name = line[:-6]  # trim " start"
                     start_index = i
-                    end_text = self._get_stop_text(line)
                     continue
-                if line == end_text:
-                    yield (start_index, i)
-                    end_text = None
+                if line_lower == sentinel:
+                    yield (group_name, (start_index, i))
+                    sentinel = None
 
     def expand_groups(self):
         temp = []
