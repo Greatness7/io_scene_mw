@@ -91,7 +91,7 @@ class BinaryStream(BytesIO):
          self.read_strs,
          self.write_strs) = self.make_read_write_for_string(UInt)
 
-    def make_read_write_for_struct(self, struct):
+    def make_read_write_for_struct(self, struct: Struct):
         # declare these in the local scope for faster name resolution
         read = self.read
         write = self.write
@@ -100,8 +100,10 @@ class BinaryStream(BytesIO):
         size = struct.size
         # these functions are used for efficient read/write of arrays
         empty = np.empty
-        dtype = np.dtype(struct.format)
         readinto = self.readinto
+        ubyte = np.dtype(UByte.format)
+        dtype = np.dtype(struct.format)
+        ascontiguousarray = np.ascontiguousarray
 
         def read_value():
             return unpack(read(size))[0]
@@ -116,12 +118,12 @@ class BinaryStream(BytesIO):
 
         def write_values(array):
             if array.dtype != dtype:
-                array = array.astype(dtype)
-            write(array.tobytes())
+                array = array.astype(dtype, copy=False)
+            write(ascontiguousarray(array).view(ubyte))
 
         return read_value, write_value, read_values, write_values
 
-    def make_read_write_for_string(self, struct):
+    def make_read_write_for_string(self, struct: Struct):
         # declare these in the local scope for faster name resolutions
         read = self.read
         write = self.write
@@ -137,13 +139,3 @@ class BinaryStream(BytesIO):
             write(pack(len(value)) + value)
 
         return read_string, write_string, NotImplemented, NotImplemented
-
-    def read_array(self, shape, dtype=np.float32):
-        array = np.empty(shape, dtype)
-        self.readinto(array)
-        return array
-
-    def write_array(self, array, dtype=np.float32):
-        if array.dtype != dtype:
-            array = array.astype(dtype)
-        self.write(array.tobytes())

@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from struct import pack, unpack
 
 from es3.utils.io import BinaryStream
+from es3.utils.math import np
 
 
 class NiBinaryStream(BinaryStream):
@@ -91,6 +92,16 @@ class NiBinaryStream(BinaryStream):
 
     def write_type(self, obj: NiObject):
         obj.save(self)
+
+    def read_array(self, shape, dtype):
+        array = np.empty(shape, dtype)
+        self.readinto(array)
+        return array
+
+    def write_array(self, array, dtype):
+        if array.dtype != dtype:
+            array = array.astype(dtype, copy=False)
+        self.write(np.ascontiguousarray(array).view(np.ubyte))
 
     @staticmethod
     @contextmanager
