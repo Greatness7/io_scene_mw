@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 66),
+    "version": (0, 8, 67),
     "blender": (2, 82, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
@@ -509,6 +509,30 @@ class MarkersList(bpy.types.UIList):
         self.pose_markers.active.select = True
 
 
+class MarkersListSort(bpy.types.Operator):
+    bl_idname = "marker.mw_markers_sort"
+    bl_options = {"REGISTER", "UNDO"}
+
+    bl_label = "Sort Markers"
+    bl_description = "Sort markers by their timings"
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.ui_mode == 'ACTION'
+
+    def execute(self, context):
+        try:
+            markers = context.active_object.animation_data.action.pose_markers
+        except:
+            pass
+        else:
+            temp = [(m.frame, m.name) for m in markers]
+            temp.sort()
+            for m, t in zip(markers, temp):
+                m.frame, m.name = t
+        return {"FINISHED"}
+
+
 class MarkersPanel(bpy.types.Panel):
     bl_idname = "DOPESHEET_PT_MW_MarkersPanel"
     bl_space_type = 'DOPESHEET_EDITOR'
@@ -539,6 +563,8 @@ class MarkersPanel(bpy.types.Panel):
         col = row.column(align=True)
         col.operator("marker.add", icon='ADD', text="")
         col.operator("marker.delete", icon='REMOVE', text="")
+        col.separator()
+        col.operator("marker.mw_markers_sort", icon='SORTTIME', text="")
         col.enabled = space_data.show_pose_markers
 
 
@@ -774,6 +800,7 @@ classes = (
     ExportScene,
     ObjectPanel,
     MarkersList,
+    MarkersListSort,
     MarkersPanel,
     MaterialCreateShader,
     MaterialPanel,
