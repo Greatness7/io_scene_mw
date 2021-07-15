@@ -1140,13 +1140,15 @@ class Animation(SceneNode):
 
         # convert from pose space
         if isinstance(self.source, bpy.types.PoseBone):
-            posed_offset = self.get_posed_offset()
+            offset = self.get_posed_offset()
+        else:
+            offset = la.inv(self.parent.matrix_world)
 
-            t = controller.data.translations
-            t.values[:] = t.values @ posed_offset[:3, :3].T + posed_offset[:3, 3]
-            if key_type.name == "BEZ_KEY":
-                t.in_tans[:] = t.in_tans @ posed_offset[:3, :3].T
-                t.out_tans[:] = t.out_tans @ posed_offset[:3, :3].T
+        t = controller.data.translations
+        t.values[:] = t.values @ offset[:3, :3].T + offset[:3, 3]
+        if key_type.name == "BEZ_KEY":
+            t.in_tans[:] = t.in_tans @ offset[:3, :3].T
+            t.out_tans[:] = t.out_tans @ offset[:3, :3].T
 
         return True
 
