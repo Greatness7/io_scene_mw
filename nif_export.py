@@ -1139,16 +1139,19 @@ class Animation(SceneNode):
         controller.stop_time = max(keys[-1, 0], controller.stop_time)
 
         # convert from pose space
-        if isinstance(self.source, bpy.types.PoseBone):
-            offset = self.get_posed_offset()
-        else:
-            offset = la.inv(self.parent.matrix_world)
+        if self.parent:
 
-        t = controller.data.translations
-        t.values[:] = t.values @ offset[:3, :3].T + offset[:3, 3]
-        if key_type.name == "BEZ_KEY":
-            t.in_tans[:] = t.in_tans @ offset[:3, :3].T
-            t.out_tans[:] = t.out_tans @ offset[:3, :3].T
+            if isinstance(self.source, bpy.types.PoseBone):
+                offset = self.get_posed_offset()
+            else:
+                offset = la.inv(self.parent.matrix_world)
+
+            t = controller.data.translations
+            t.values[:] = t.values @ offset[:3, :3].T + offset[:3, 3]
+
+            if key_type.name == "BEZ_KEY":
+                t.in_tans[:] = t.in_tans @ offset[:3, :3].T
+                t.out_tans[:] = t.out_tans @ offset[:3, :3].T
 
         return True
 
