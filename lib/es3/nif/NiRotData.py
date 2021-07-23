@@ -28,8 +28,8 @@ class NiRotData(NiFloatData):
     def load(self, stream):
         num_keys = stream.read_uint()
         if num_keys:
-            self.interpolation = KeyType(stream.read_int())
-            if self.interpolation == KeyType.EULER_KEY:
+            self.key_type = KeyType(stream.read_int())
+            if self.key_type == KeyType.EULER_KEY:
                 self.euler_axis_order = AxisOrder(stream.read_int())
                 self.euler_data = (stream.read_type(NiFloatData),
                                    stream.read_type(NiFloatData),
@@ -41,8 +41,8 @@ class NiRotData(NiFloatData):
         num_keys = self._num_keys()
         stream.write_uint(num_keys)
         if num_keys:
-            stream.write_int(self.interpolation)
-            if self.interpolation == KeyType.EULER_KEY:
+            stream.write_int(self.key_type)
+            if self.key_type == KeyType.EULER_KEY:
                 stream.write_int(self.euler_axis_order)
                 self.euler_data[0].save(stream)
                 self.euler_data[1].save(stream)
@@ -67,18 +67,18 @@ class NiRotData(NiFloatData):
         return self.keys[:, -3:]
 
     @property
-    def key_size(self):
-        if self.interpolation == KeyType.LIN_KEY:
+    def key_size(self) -> int:
+        if self.key_type == KeyType.LIN_KEY:
             return 5  # (time, w, x, y, z)
-        if self.interpolation == KeyType.BEZ_KEY:
+        if self.key_type == KeyType.BEZ_KEY:
             return 5  # (time, w, x, y, z)
-        if self.interpolation == KeyType.TCB_KEY:
+        if self.key_type == KeyType.TCB_KEY:
             return 8  # (time, w, x, y, z, tension, continuity, bias)
-        raise Exception(f"{self.type} does not support '{self.interpolation}'")
+        raise Exception(f"{self.type} does not support '{self.key_type}'")
 
     def _num_keys(self):
-        if self.interpolation == KeyType.EULER_KEY:
-            return any(len(data.keys) for data in self.euler_data)
+        if self.key_type == KeyType.EULER_KEY:
+            return any(len(e.keys) for e in self.euler_data)
         return len(self.keys)
 
     def convert_to_quaternions(self):
@@ -90,7 +90,7 @@ class NiRotData(NiFloatData):
 
         # extract keys and clear euler settings
         e_keys = [e.keys for e in self.euler_data]
-        del self.interpolation, self.euler_data, self.euler_axis_order
+        del self.key_type, self.euler_data, self.euler_axis_order
 
         x, y, z = map(len, e_keys)
         if x == y == z == 0:

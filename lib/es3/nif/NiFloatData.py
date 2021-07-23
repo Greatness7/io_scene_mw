@@ -15,7 +15,7 @@ class KeyType(IntEnum):
 
 
 class NiFloatData(NiObject):
-    interpolation: int32 = KeyType.LIN_KEY
+    key_type: int32 = KeyType.LIN_KEY
     keys: ndarray = zeros(0, 2)
 
     # provide access to related enums
@@ -24,14 +24,14 @@ class NiFloatData(NiObject):
     def load(self, stream):
         num_keys = stream.read_uint()
         if num_keys:
-            self.interpolation = KeyType(stream.read_int())
+            self.key_type = KeyType(stream.read_int())
             self.keys = stream.read_floats(num_keys, self.key_size)
 
     def save(self, stream):
         num_keys = len(self.keys)
         stream.write_uint(num_keys)
         if num_keys:
-            stream.write_int(self.interpolation)
+            stream.write_int(self.key_type)
             stream.write_floats(self.keys)
 
     @property
@@ -55,14 +55,14 @@ class NiFloatData(NiObject):
         return self.keys[:, -3:]
 
     @property
-    def key_size(self):
-        if self.interpolation == KeyType.LIN_KEY:
+    def key_size(self) -> int:
+        if self.key_type == KeyType.LIN_KEY:
             return 2  # (time, value)
-        if self.interpolation == KeyType.BEZ_KEY:
+        if self.key_type == KeyType.BEZ_KEY:
             return 4  # (time, value, inTan, outTan)
-        if self.interpolation == KeyType.TCB_KEY:
+        if self.key_type == KeyType.TCB_KEY:
             return 5  # (time, value, tension, continuity, bias)
-        raise Exception(f"{self.type} does not support '{self.interpolation}'")
+        raise Exception(f"{self.type} does not support '{self.key_type}'")
 
     def get_start_stop_times(self) -> tuple[int, int]:
         if len(self.keys) == 0:
@@ -71,9 +71,9 @@ class NiFloatData(NiObject):
             return (self.keys[0, 0], self.keys[-1, 0])
 
     def get_tangent_handles(self):
-        if self.interpolation == KeyType.BEZ_KEY:
+        if self.key_type == KeyType.BEZ_KEY:
             return self.get_bez_tangent_handles()
-        if self.interpolation == KeyType.TCB_KEY:
+        if self.key_type == KeyType.TCB_KEY:
             return self.get_tcb_tangent_handles()
 
     def get_bez_tangent_handles(self):
@@ -83,11 +83,13 @@ class NiFloatData(NiObject):
         shape = (2, *values.shape[::-1], 2)
         handles = np.empty(shape, values.dtype)
 
-        if handles.size:
+        if len(handles):
+            dt = np.diff(times / 3.0, prepend=0, append=0)
+            dt[0], dt[-1] = dt[1], dt[-2]  # correct edges
+
             # relative horizontal coordinates
-            dx = np.diff(times, prepend=times[0], append=times[-1]) / 3.0
-            in_dx = dx[:-1]
-            out_dx = dx[1:]
+            in_dx = dt[:-1]
+            out_dx = dt[1:]
 
             # relative vertical coordinates
             in_dy = self.in_tans.T / 3.0
@@ -98,7 +100,7 @@ class NiFloatData(NiObject):
             handles[0, ..., 1] = values.T - in_dy
             # outgoing handles
             handles[1, ..., 0] = times + out_dx
-            handles[1, ..., 1] = values.T + out_dy
+            handles[1, ..., 1] = values.T - out_dy
 
         return handles
 
@@ -109,7 +111,7 @@ class NiFloatData(NiObject):
         shape = (2, *values.shape[::-1], 2)
         handles = np.empty(shape, values.dtype)
 
-        if handles.size:
+        if len(handles):
             # calculate deltas
             dx = (np.roll(times, 1, axis=0) - np.roll(times, -1, axis=0)) / 6.0
             dy = (np.roll(values, 1, axis=0) - np.roll(values, -1, axis=0)) / 6.0

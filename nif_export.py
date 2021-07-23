@@ -643,7 +643,7 @@ class Mesh(SceneNode):
 
         # assign morph data
         for i, target in enumerate(controller.data.targets):
-            target.interpolation = morph_data.interpolations[i]
+            target.key_type = morph_data.interpolations[i]
             target.keys = morph_data.keys[i]
             target.vertices = morph_data.targets[i]
 
@@ -1129,7 +1129,7 @@ class Animation(SceneNode):
 
         # get keyframe controller
         controller = self.create_keyframe_controller()
-        controller.data.translations.interpolation = key_type
+        controller.data.translations.key_type = key_type
 
         # set the controller keys
         controller.data.translations.keys = keys
@@ -1179,8 +1179,8 @@ class Animation(SceneNode):
 
         # prepare euler rotations
         rotations = controller.data.rotations
-        rotations.interpolation = nif.NiRotData.KeyType.EULER_KEY
-        rotations.euler_data = tuple(nif.NiFloatData(interpolation=key_type) for _ in range(3))
+        rotations.key_type = nif.NiRotData.KeyType.EULER_KEY
+        rotations.euler_data = tuple(nif.NiFloatData(key_type=key_type) for _ in range(3))
 
         for i, euler_data in enumerate(rotations.euler_data):
             axis_fcurves = [fc for fc in fcurves if fc.array_index == i]
@@ -1270,7 +1270,7 @@ class Animation(SceneNode):
         controller = self.create_keyframe_controller()
 
         # set the controller keys
-        controller.data.scales.interpolation = key_type
+        controller.data.scales.key_type = key_type
         controller.data.scales.keys = keys
 
         # update start/stop times
@@ -1305,7 +1305,7 @@ class Animation(SceneNode):
                 if key_type is None:
                     continue
 
-                output.interpolation = key_type
+                output.key_type = key_type
                 output.keys = self.collect_keyframe_points(fcurves, key_type)
 
         try:
@@ -1369,7 +1369,7 @@ class Animation(SceneNode):
                 color_field=color_field,
                 target=ni_prop,
                 data=nif.NiPosData(
-                    interpolation=key_type,
+                    key_type=key_type,
                     keys=keys
                 ),
             )
@@ -1398,10 +1398,7 @@ class Animation(SceneNode):
         controller = nif.NiAlphaController(
             cycle_type=self.exporter.cycle_type,
             target=ni_prop,
-            data=nif.NiFloatData(
-                interpolation=key_type,
-                keys=keys
-            ),
+            data=nif.NiFloatData(key_type=key_type, keys=keys),
         )
 
         # update controller times

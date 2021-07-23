@@ -9,7 +9,7 @@ class NiMorphDataMorphTarget(NiFloatData):  # TODO Not NiObject
 
     def load(self, stream, num_vertices=0):
         num_keys = stream.read_uint()
-        self.interpolation = KeyType(stream.read_int())
+        self.key_type = KeyType(stream.read_int())
         if num_keys:
             self.keys = stream.read_floats(num_keys, self.key_size)
         if num_vertices:
@@ -18,7 +18,7 @@ class NiMorphDataMorphTarget(NiFloatData):  # TODO Not NiObject
     def save(self, stream):
         num_keys = len(self.keys)
         stream.write_uint(num_keys)
-        stream.write_int(self.interpolation)
+        stream.write_int(self.key_type)
         if num_keys:
             stream.write_floats(self.keys)
         if len(self.vertices):

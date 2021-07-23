@@ -267,7 +267,7 @@ class Importer:
             if len(t.values):
                 # convert to pose space
                 t.values[:] = t.values @ posed_offset[:3, :3].T + posed_offset[:3, 3]
-                if t.interpolation.name == "BEZ_KEY":
+                if t.key_type.name == "BEZ_KEY":
                     t.in_tans[:] = t.in_tans @ posed_offset[:3, :3].T
                     t.out_tans[:] = t.out_tans @ posed_offset[:3, :3].T
 
@@ -1054,7 +1054,7 @@ class Animation(SceneNode):
         action = self.get_action(bl_object)
 
         # convert time to frame
-        text_data.times = np.ceil(text_data.times * bpy.context.scene.render.fps)
+        text_data.times[:] = np.ceil(text_data.times * bpy.context.scene.render.fps)
 
         for frame, text in text_data.keys.tolist():
             for name in filter(None, text.splitlines()):
@@ -1335,7 +1335,7 @@ class Animation(SceneNode):
 
     @staticmethod
     def create_interpolation_data(ni_data, fcurves, axis=...):
-        if ni_data.interpolation.name  == 'LIN_KEY':
+        if ni_data.key_type.name  == 'LIN_KEY':
             for kp in fcurves.keyframe_points:
                 kp.interpolation = 'LINEAR'
         else:
