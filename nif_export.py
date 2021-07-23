@@ -1456,8 +1456,9 @@ class Animation(SceneNode):
                 fc = action.fcurves.new(data_path, index=i, action_group=group_name)
 
         # fill in missing keyframes
+        scene = bpy.context.scene
         frames_per_axis = [{kp.co[0] for kp in fc.keyframe_points} for fc in fcurves]
-        required_frames = set().union(*frames_per_axis)
+        required_frames = {scene.frame_start, scene.frame_end}.union(*frames_per_axis)
         for fc, frames in zip(fcurves, frames_per_axis):
             for frame in (required_frames - frames):
                 fc.keyframe_points.insert(frame, fc.evaluate(frame), options={'FAST'})
