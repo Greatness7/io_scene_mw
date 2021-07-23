@@ -306,10 +306,6 @@ class Exporter:
 
 
 class SceneNode:
-    """ TODO
-        support for multiple armatures
-    """
-
     def __init__(self, exporter, source, parent=None):
         self.exporter = exporter
         #
@@ -318,6 +314,7 @@ class SceneNode:
         #
         self.parent = parent
         self.children = list()
+        #
         if isinstance(source, bpy.types.PoseBone):
             self.matrix_local = np.asarray(source.bone.matrix_local, dtype="<f")
         else:
@@ -1138,17 +1135,11 @@ class Animation(SceneNode):
         controller.start_time = min(keys[0, 0], controller.start_time)
         controller.stop_time = max(keys[-1, 0], controller.stop_time)
 
-        # convert from pose space
-        if self.parent:
-
-            if isinstance(self.source, bpy.types.PoseBone):
-                offset = self.get_posed_offset()
-            else:
-                offset = la.inv(self.parent.matrix_world)
-
+        # convert to local space
+        offset = self.to_local_space()
+        if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
             t = controller.data.translations
             t.values[:] = t.values @ offset[:3, :3].T + offset[:3, 3]
-
             if key_type.name == "BEZ_KEY":
                 t.in_tans[:] = t.in_tans @ offset[:3, :3].T
                 t.out_tans[:] = t.out_tans @ offset[:3, :3].T
@@ -1179,7 +1170,7 @@ class Animation(SceneNode):
 
         # prepare euler rotations
         rotations = controller.data.rotations
-        rotations.key_type = nif.NiRotData.KeyType.EULER_KEY
+        rotations.key_type = rotations.KeyType.EULER_KEY
         rotations.euler_data = tuple(nif.NiFloatData(key_type=key_type) for _ in range(3))
 
         for i, euler_data in enumerate(rotations.euler_data):
@@ -1198,6 +1189,15 @@ class Animation(SceneNode):
             # update start/stop times
             controller.start_time = min(keys[0, 0], controller.start_time)
             controller.stop_time = max(keys[-1, 0], controller.stop_time)
+
+        # convert to local space
+        offset = self.to_local_space()
+        if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
+            rotations.convert_to_quaternions()
+            values = controller.data.rotations.values
+            offset = nif_utils.quaternion_from_matrix(offset)
+            nif_utils.quaternion_mul(offset, values, out=values)
+            values /= la.norm(values, axis=1)[:, None]
 
         return True
 
@@ -1220,11 +1220,15 @@ class Animation(SceneNode):
         # split times from values
         values = keys[:, 1:]
 
-        # pose / axis corrections
+        # apply axis corrections
         if isinstance(self.source, bpy.types.PoseBone):
             offset = nif_utils.quaternion_from_matrix(self.axis_correction)
             nif_utils.quaternion_mul(values, offset, out=values)
-            offset = nif_utils.quaternion_from_matrix(self.get_posed_offset())
+
+        # convert to local space
+        offset = self.to_local_space()
+        if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
+            offset = nif_utils.quaternion_from_matrix(offset)
             nif_utils.quaternion_mul(offset, values, out=values)
 
         # normalize rotation keys
@@ -1276,6 +1280,16 @@ class Animation(SceneNode):
         # update start/stop times
         controller.start_time = min(keys[0, 0], controller.start_time)
         controller.stop_time = max(keys[-1, 0], controller.stop_time)
+
+        # convert to local space
+        offset = self.to_local_space()
+        if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
+            offset_scale = decompose(offset)[-1][-1]
+            s = controller.data.scales
+            s.values[:] *= offset_scale
+            if key_type.name == "BEZ_KEY":
+                s.in_tans[:] *= offset_scale
+                s.out_tans[:] *= offset_scale
 
         return True
 
@@ -1409,14 +1423,14 @@ class Animation(SceneNode):
 
         return True
 
-    def get_posed_offset(self):
-        offset = self.source.id_data.convert_space(
-            pose_bone=self.source,
-            matrix=ID44.T,
-            from_space="LOCAL",
-            to_space="WORLD",
-        )
-        return la.solve(self.parent.matrix_world, offset)
+    def to_local_space(self):
+        if isinstance(self.source, bpy.types.PoseBone):
+            matrix = self.source.id_data.convert_space(
+                pose_bone=self.source, matrix=ID44.T, from_space="LOCAL", to_space="WORLD"
+            )
+            return la.solve(self.parent.matrix_world, matrix)
+        else: # non-bone animations
+            return np.asarray(self.source.matrix_parent_inverse, dtype="<f")
 
     @staticmethod
     def get_fcurves_dict(bl_object):
