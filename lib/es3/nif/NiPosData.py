@@ -16,23 +16,23 @@ class NiPosData(NiFloatData):
         raise Exception(f"{self.type} does not support '{self.interpolation}'")
 
     @property
-    def values(self):
+    def values(self) -> ndarray:
         return self.keys[:, 1:4]
 
     @property
-    def in_tans(self):
+    def in_tans(self) -> ndarray:
         return self.keys[:, 4:7]
 
     @property
-    def out_tans(self):
-        return self.keys[:, 7:10]
-
-    @property
-    def tcb(self):
-        return self.keys[:, 4:7]
+    def out_tans(self) -> ndarray:
+        return self.keys[:, 7:]
 
     def apply_scale(self, scale):
         if self.interpolation == KeyType.BEZ_KEY:
             self.keys[:, 1:] *= scale  # scale values and tangents
         else:
             self.keys[:, 1:4] *= scale  # scale values only
+
+
+if __name__ == "__main__":
+    from es3.utils.typing import *

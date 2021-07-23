@@ -35,24 +35,24 @@ class NiFloatData(NiObject):
             stream.write_floats(self.keys)
 
     @property
-    def times(self):
+    def times(self) -> ndarray:
         return self.keys[:, 0]
 
     @property
-    def values(self):
+    def values(self) -> ndarray:
         return self.keys[:, 1]
 
     @property
-    def in_tans(self):
+    def in_tans(self) -> ndarray:
         return self.keys[:, 2]
 
     @property
-    def out_tans(self):
+    def out_tans(self) -> ndarray:
         return self.keys[:, 3]
 
     @property
-    def tcb(self):
-        return self.keys[:, 1:4]
+    def tcb(self) -> ndarray:
+        return self.keys[:, -3:]
 
     @property
     def key_size(self):
@@ -64,7 +64,7 @@ class NiFloatData(NiObject):
             return 5  # (time, value, tension, continuity, bias)
         raise Exception(f"{self.type} does not support '{self.interpolation}'")
 
-    def get_start_stop_times(self):
+    def get_start_stop_times(self) -> tuple[int, int]:
         if len(self.keys) == 0:
             return (0, 0)
         else:
@@ -122,7 +122,7 @@ class NiFloatData(NiObject):
 
             # incoming handles
             handles[0, ..., 0] = times - dx
-            handles[0, ..., 1] =  values.T - dy.T
+            handles[0, ..., 1] = values.T - dy.T
             # outgoing handles
             handles[1, ..., 0] = times + dx
             handles[1, ..., 1] = values.T + dy.T

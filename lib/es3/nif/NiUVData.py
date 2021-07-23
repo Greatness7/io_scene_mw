@@ -22,7 +22,7 @@ class NiUVData(NiObject):
         self.u_tiling_data.save(stream)
         self.v_tiling_data.save(stream)
 
-    def get_start_stop_times(self):
+    def get_start_stop_times(self) -> tuple[int, int]:
         keys = list(filter(len, (
             self.u_offset_data.keys,
             self.v_offset_data.keys,

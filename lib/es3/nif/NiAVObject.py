@@ -66,41 +66,41 @@ class NiAVObject(NiObjectNET):
         super().sort()
         self.properties.sort(key=key)
 
-    def apply_scale(self, scale):
+    def apply_scale(self, scale: float):
         self.translation *= scale
         if self.bounding_volume:
             self.bounding_volume.apply_scale(scale)
 
-    def get_property(self, property_type):
+    def get_property(self, property_type: Type[T]) -> T:
         for prop in self.properties:
             if isinstance(prop, property_type):
                 return prop
 
     @property
-    def matrix(self):
+    def matrix(self) -> ndarray:
         return compose(self.translation, self.rotation, self.scale)
 
     @matrix.setter
-    def matrix(self, value):
+    def matrix(self, value: ndarray):
         self.translation, self.rotation, self.scale = decompose_uniform(value)
 
-    def matrix_relative_to(self, ancestor):
+    def matrix_relative_to(self, ancestor: NiAVObject) -> ndarray:
         path = reversed(list(self.find_path(ancestor)))
         return dotproduct([obj.matrix for obj in path])
 
     @property
-    def is_biped(self):
+    def is_biped(self) -> bool:
         return self.name.lower().startswith("bip01")
 
     @property
-    def is_shadow(self):
+    def is_shadow(self) -> bool:
         return self.name.lower().startswith(("shadow", "tri shadow"))
 
     @property
-    def is_bounding_box(self):
+    def is_bounding_box(self) -> bool:
         return bool(self.bounding_volume) and self.name.lower().startswith("bounding box")
 
-    def descendants(self, breadth_first=False):
+    def descendants(self, breadth_first=False) -> Iterator[NiAVObject]:
         queue = deque(filter(None, self.children))
         extend, iterator = (queue.extendleft, iter) if breadth_first else \
                            (queue.extend, reversed)
@@ -109,7 +109,7 @@ class NiAVObject(NiObjectNET):
             yield node
             extend(child for child in iterator(node.children) if child)
 
-    def descendants_pairs(self, breadth_first=False):
+    def descendants_pairs(self, breadth_first=False) -> Iterator[Tuple[NiAVObject, NiAVObject]]:
         """Similar to descendants, but yielding pairs of (parent, node)."""
 
         queue = deque((self, child) for child in self.children if child)
@@ -120,7 +120,7 @@ class NiAVObject(NiObjectNET):
             yield parent, node
             extend((node, child) for child in iterator(node.children) if child)
 
-    def find_path(self, ancestor, breadth_first=True):
+    def find_path(self, ancestor, breadth_first=True) -> Iterator[NiAVObject]:
         parents = {}
         for parent, node in ancestor.descendants_pairs(breadth_first):
             parents[node] = parent

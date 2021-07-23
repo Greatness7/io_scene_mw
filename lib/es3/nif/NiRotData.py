@@ -51,20 +51,20 @@ class NiRotData(NiFloatData):
                 stream.write_floats(self.keys)
 
     @property
-    def values(self):
+    def values(self) -> ndarray:
         return self.keys[:, 1:5]
 
     @property
-    def in_tans(self):
-        raise NotImplementedError
+    def in_tans(self) -> ndarray:
+        raise IndexError
 
     @property
-    def out_tans(self):
-        raise NotImplementedError
+    def out_tans(self) -> ndarray:
+        raise IndexError
 
     @property
-    def tcb(self):
-        return self.keys[:, 5:8]
+    def tcb(self) -> ndarray:
+        return self.keys[:, -3:]
 
     @property
     def key_size(self):

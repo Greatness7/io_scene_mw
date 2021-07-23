@@ -25,19 +25,19 @@ class NiTextKeyExtraData(NiExtraData):
             stream.write_str(value)
 
     @property
-    def times(self):
+    def times(self) -> ndarray:
         return self.keys["f0"]
 
     @times.setter
-    def times(self, array):
+    def times(self, array: ndarray):
         self.keys["f0"] = array
 
     @property
-    def values(self):
+    def values(self) -> ndarray:
         return self.keys["f1"]
 
     @values.setter
-    def values(self, array):
+    def values(self, array: ndarray):
         self.keys["f1"] = array
 
     @staticmethod

@@ -43,11 +43,11 @@ class NiSkinData(NiObject):
             item.update_center_radius(vertices[indices])
 
     @property
-    def matrix(self):
+    def matrix(self) -> ndarray:
         return compose(self.translation, self.rotation, self.scale)
 
     @matrix.setter
-    def matrix(self, value):
+    def matrix(self, value: ndarray):
         self.translation, self.rotation, self.scale = decompose_uniform(value)
 
 

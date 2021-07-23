@@ -48,11 +48,11 @@ class NiSkinDataBoneData(NiObject):  # TODO Not NiObject
             self.radius = self.scale * radius
 
     @property
-    def matrix(self):
+    def matrix(self) -> ndarray:
         return compose(self.translation, self.rotation, self.scale)
 
     @matrix.setter
-    def matrix(self, value):
+    def matrix(self, value: ndarray):
         self.translation, self.rotation, self.scale = decompose_uniform(value)
 
 

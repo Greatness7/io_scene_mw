@@ -28,11 +28,11 @@ class NiBoxBV(NiBoundingVolume):
         self.extents *= scale
 
     @property
-    def matrix(self):
+    def matrix(self) -> ndarray:
         return compose(self.center, self.axes, self.extents)
 
     @matrix.setter
-    def matrix(self, value):
+    def matrix(self, value: ndarray):
         self.center, self.axes, self.extents = decompose(value)
 
 

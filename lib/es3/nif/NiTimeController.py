@@ -49,7 +49,7 @@ class NiTimeController(NiObject):
         stream.write_float(self.stop_time)
         stream.write_link(self.target)
 
-    def update_start_stop_times(self):
+    def update_start_stop_times(self) -> tuple[int, int]:
         if self.data:
             self.start_time, self.stop_time = self.data.get_start_stop_times()
         else:
