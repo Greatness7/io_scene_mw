@@ -51,20 +51,26 @@ class NiTextKeyExtraData(NiExtraData):
             return f"{group_name} stop"
 
     def get_animation_groups(self):
-        sentinel = None
+        group_stop = ""
         group_name = ""
         start_index = 0
         for i, text in enumerate(self.values.tolist()):
-            for line in text.splitlines():
+            for line in filter(None, text.splitlines()):
                 line_lower = line.lower()
-                if not sentinel and line_lower.endswith(" start"):
-                    sentinel = self._get_stop_text(line_lower)
-                    group_name = line[:-6]  # trim " start"
-                    start_index = i
-                    continue
-                if line_lower == sentinel:
+
+                if line_lower == group_stop:
                     yield (group_name, (start_index, i))
-                    sentinel = None
+                    group_stop = ""
+                    continue
+
+                if group_stop != "":
+                    # keep searching until we hit the group stop
+                    continue
+
+                if line_lower.endswith(" start"):
+                    group_stop = self._get_stop_text(line_lower)
+                    group_name = line[:-6]
+                    start_index = i
 
     def expand_groups(self):
         temp = []
@@ -74,7 +80,7 @@ class NiTextKeyExtraData(NiExtraData):
             for line in filter(None, text.splitlines()):
                 lowercased = line.lower()
                 if (lowercased in seen) and ("sound" not in lowercased):
-                    print(f"Skipped duplicate text key '{lowercased}' at {time:.3f}. Previous at {seen[lowercased]:.3f}.")
+                    print(f"Skipped duplicate text key '{line}' at {time:.3f}. Previous at {seen[lowercased]:.3f}.")
                     continue
 
                 seen[lowercased] = time
