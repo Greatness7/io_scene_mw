@@ -516,10 +516,6 @@ class MarkersListSort(bpy.types.Operator):
     bl_label = "Sort Markers"
     bl_description = "Sort markers by their timings"
 
-    @classmethod
-    def poll(cls, context):
-        return context.space_data.ui_mode == 'ACTION'
-
     def execute(self, context):
         try:
             markers = context.active_object.animation_data.action.pose_markers
@@ -541,7 +537,12 @@ class MarkersPanel(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.space_data.ui_mode == 'ACTION'
+        sd = context.space_data
+        if sd.type == 'DOPESHEET_EDITOR' and sd.ui_mode == 'ACTION':
+            try:
+                return bool(context.active_object.animation_data.action)
+            except:
+                pass
 
     def draw(self, context):
         space_data = context.space_data
