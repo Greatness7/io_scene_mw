@@ -546,7 +546,8 @@ class Mesh(SceneNode):
         if hasattr(self, "vertex_transform"):
             ni.vertices *= self.vertex_transform
 
-        ni.vertices = ni.vertices[ni.triangles].reshape(-1, 3)
+        if len(ni.triangles):
+            ni.vertices = ni.vertices[ni.triangles].reshape(-1, 3)
 
     def create_triangles(self, ni, bl):
         ni.triangles.resize(len(bl.polygons), 3)
@@ -567,6 +568,8 @@ class Mesh(SceneNode):
 
     def create_uv_sets(self, ni, bl):
         if self.is_collider:
+            return
+        if not any(uv.data for uv in bl.uv_layers):
             return
 
         ni.uv_sets.resize(len(bl.uv_layers), len(ni.vertices), 2)
@@ -818,7 +821,7 @@ class Mesh(SceneNode):
     # -- optimizer functions --
 
     def optimize_geometry(self, data, skin_data, morph_data):
-        if not len(data.vertices):
+        if not len(data.triangles):
             return
 
         # clear duplicates
