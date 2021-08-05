@@ -744,6 +744,8 @@ class Mesh(SceneNode):
         triangles = self.source.data.triangles
 
         if len(normals):
+            # re-unitize, fixes landscape meshes
+            normals /= la.norm(normals, axis=1, keepdims=True)
             # reconstruct as per-triangle layout
             normals = normals[triangles].reshape(-1, 3)
 

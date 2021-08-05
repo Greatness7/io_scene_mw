@@ -556,15 +556,14 @@ class Mesh(SceneNode):
     def create_normals(self, ni, bl):
         if self.is_collider:
             return
+        if bl["ignore_normals"]:
+            return
 
-        # TODO custom UI for ignore normals
-        if not bl["ignore_normals"]:
-            ni.normals.resize(len(ni.vertices), 3)
-            bl.calc_normals_split()
-            bl.loops.foreach_get("normal", ni.normals.ravel())
-            bl.free_normals_split()
-            # RuntimeWarning: invalid value encountered in true_divide
-            ni.normals /= la.norm(ni.normals, axis=1)[:, None]
+        ni.normals.resize(len(ni.vertices), 3)
+        bl.calc_normals_split()
+        bl.loops.foreach_get("normal", ni.normals.ravel())
+        bl.free_normals_split()
+        ni.normals /= la.norm(ni.normals, axis=1, keepdims=True)
 
     def create_uv_sets(self, ni, bl):
         if self.is_collider:
