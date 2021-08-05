@@ -813,7 +813,8 @@ class Mesh(SceneNode):
         for i in active_material_indices:
             material = bl_object.material_slots[i].material
             indices = loops[material_indices == i].ravel()
-            material_data.append((material, indices))
+            if len(indices):
+                material_data.append((material, indices))
 
         return material_data
 
