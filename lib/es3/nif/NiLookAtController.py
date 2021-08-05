@@ -22,7 +22,7 @@ class NiLookAtController(NiTimeController):
 
     # convenience properties
     flip = bool_property(mask=0x0010)
-    axis = enum_property(Axis, mask=0x0001, pos=5)
+    axis = enum_property(Axis, mask=0x0060, pos=5)
 
     def load(self, stream):
         super().load(stream)
