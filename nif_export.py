@@ -267,13 +267,22 @@ class Exporter:
         return objects
 
     def get_root_output(self, roots):
-        if len(roots) == 1:
-            root = roots[0]
-            if self.preserve_root_tranforms:
-                return root.output
-            if np.allclose(root.matrix_local, ID44, rtol=0, atol=1e-4):
-                return root.output
-        return nif.NiNode(name=self.filepath.name, flags=12, children=[r.output for r in roots])
+        root = nif.NiNode(name=self.filepath.name, children=[r.output for r in roots])
+
+        if self.export_animations and not self.extract_keyframe_data:
+            # we probably want the animations to actually be visible if any are assigned
+            for obj in root.descendants():
+                if obj.controller:
+                    root = nif.NiBSAnimationNode(name=root.name, children=root.children, animated=True)
+                    break
+
+        if type(root) is nif.NiNode and len(roots) == 1:
+            # if there's only one root and it has no transforms, use it as the file root
+            no_transforms = np.allclose(roots[0].matrix_local, ID44, rtol=0, atol=1e-4)
+            if no_transforms or self.preserve_root_tranforms:
+                root = roots[0].output
+
+        return root
 
     def iter_bones(self, root):
         """yields bone nodes in hierarchical order"""
