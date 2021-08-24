@@ -880,8 +880,6 @@ class Material(SceneNode):
         # Material Name
         if not self.importer.use_existing_materials:
             bl_prop.material.name = ni_prop.name
-        # Material Flags
-        bl_prop.material_flags = ni_prop.flags
         # Material Color
         bl_prop.ambient_color[:3] = ni_prop.ambient_color
         bl_prop.diffuse_color[:3] = ni_prop.diffuse_color
@@ -896,8 +894,6 @@ class Material(SceneNode):
         self.animation.create_alpha_controller(bl_prop, ni_prop)
 
     def create_texturing_property(self, bl_prop, ni_prop):
-        # Texture Flags
-        bl_prop.texture_flags = ni_prop.flags
         # Texture Slots
         for name in nif.NiTexturingProperty.texture_keys:
             self.create_texturing_property_map(bl_prop, ni_prop, name)

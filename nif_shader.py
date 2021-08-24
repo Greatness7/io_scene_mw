@@ -396,11 +396,7 @@ class TextureSlot(bpy.types.PropertyGroup):
 class NiMaterialProps(bpy.types.PropertyGroup, NodeTreeWrapper):
     material: bpy.props.PointerProperty(type=bpy.types.Material)
     texture_slots: bpy.props.CollectionProperty(type=TextureSlot)
-
-    material_flags: bpy.props.IntProperty()
-    texture_flags: bpy.props.IntProperty()
     alpha_flags: bpy.props.IntProperty()
-
     shine: bpy.props.FloatProperty()
 
     # -------------

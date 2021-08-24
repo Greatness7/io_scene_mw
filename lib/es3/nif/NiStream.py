@@ -70,6 +70,10 @@ class NiStream:
                 obj = cache[obj] = cache.setdefault(key, obj)
                 return obj
 
+        # flags on these properties do nothing and can interfere with the merging process
+        for prop in self.objects_of_type((nif.NiMaterialProperty, nif.NiTexturingProperty)):
+            prop.flags = 0
+
         for obj in self.objects_of_type(nif.NiAVObject):
             for i, prop in enumerate(obj.properties):
                 if prop is None:

@@ -931,8 +931,6 @@ class Material(SceneNode):
         ni_prop = nif.NiMaterialProperty()
         # Material Name
         ni_prop.name = bl_prop.material.name
-        # Material Flags
-        ni_prop.flags = bl_prop.material_flags
         # Material Color
         ni_prop.ambient_color[:] = bl_prop.ambient_color[:3]
         ni_prop.diffuse_color[:] = bl_prop.diffuse_color[:3]
@@ -970,8 +968,6 @@ class Material(SceneNode):
         if not any(slot.image for slot in bl_prop.texture_slots):
             return
         ni_prop = nif.NiTexturingProperty()
-        # Texture Flags
-        ni_prop.flags = bl_prop.texture_flags
         # Texture Slots
         for name in nif.NiTexturingProperty.texture_keys:
             self.create_texturing_property_map(bl_prop, ni_prop, name)
