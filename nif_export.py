@@ -270,8 +270,10 @@ class Exporter:
         root = nif.NiNode(name=self.filepath.name, children=[r.output for r in roots])
 
         if self.export_animations and not self.extract_keyframe_data:
-            # we probably want the animations to actually be visible if any are assigned
+            # convert to NiBSAnimationNode if controllers are present without text keys
             for obj in root.descendants():
+                if obj.extra_datas.find_type(nif.NiTextKeyExtraData):
+                    break
                 if obj.controller:
                     root = nif.NiBSAnimationNode(name=root.name, children=root.children, animated=True)
                     break
