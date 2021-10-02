@@ -832,6 +832,9 @@ class Mesh(SceneNode):
     # -- optimizer functions --
 
     def optimize_geometry(self, data, skin_data, morph_data):
+        if len(data.vertices) == 0:
+            return
+
         # clear duplicates
         indices, inverse = nif_utils.unique_rows(
             data.vertices,
