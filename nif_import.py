@@ -797,6 +797,9 @@ class Mesh(SceneNode):
             vertices = np.vstack((vertices, new_vertices))
             vertex_weights = np.hstack((vertex_weights, new_vertex_weights))
             vertex_morphs = np.hstack((vertex_morphs, new_vertex_morphs))
+
+            # copy is needed since shapes could share data
+            triangles = triangles.copy()
             triangles[target_faces] = new_vertex_indices.reshape(-1, 3)
         # '''
 
