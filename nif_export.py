@@ -157,6 +157,7 @@ class Exporter:
     def resolve_depsgraph(self):
         temp_modifiers = []
         temp_hide_view = []
+        temp_mute_keys = []
         try:
             meshes = [node.source for node, cls in self.nodes.items() if cls is Mesh]
             for source in meshes:
@@ -171,13 +172,20 @@ class Exporter:
                         m.show_viewport = False
                         temp_hide_view.append(m)
 
-                # ensure meshes are triangualted
+                # ensure meshes are triangulated
                 if not is_triangulated:
                     m = source.modifiers.new("", "TRIANGULATE")
                     m.keep_custom_normals = True
                     m.quad_method = "FIXED"
                     m.ngon_method = "CLIP"
                     temp_modifiers.append((source, m))
+
+                # ensure all shape keys are mute
+                if source.data.shape_keys:
+                    for k in source.data.shape_keys.key_blocks:
+                        if k.mute != True:
+                            k.mute = True
+                            temp_mute_keys.append(k)
 
             # get evaluated dependency graph
             self.depsgraph = bpy.context.evaluated_depsgraph_get()
@@ -186,6 +194,8 @@ class Exporter:
                 m.show_viewport = True
             for s, m in temp_modifiers:
                 s.modifiers.remove(m)
+            for k in temp_mute_keys:
+                k.mute = False
 
     def export_keyframe_data(self, data):
         nif_path = self.filepath
