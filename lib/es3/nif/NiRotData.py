@@ -20,7 +20,7 @@ class AxisOrder(IntEnum):
 
 class NiRotData(NiFloatData):
     euler_axis_order: int32 = AxisOrder.XYZ
-    euler_data: Tuple[NiFloatData, ...] = ()
+    euler_data: tuple[NiFloatData, ...] = ()
 
     # provide access to related enums
     AxisOrder = AxisOrder

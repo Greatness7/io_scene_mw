@@ -6,8 +6,8 @@ from .NiAVObject import NiAVObject
 
 
 class NiGeometry(NiAVObject):
-    data: Optional[NiGeometryData] = None
-    skin: Optional[NiSkinInstance] = None
+    data: NiGeometryData | None = None
+    skin: NiSkinInstance | None = None
 
     # flags access
     compress_vertices = bool_property(mask=0x0008)

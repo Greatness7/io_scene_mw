@@ -39,18 +39,18 @@ def zeros(*shape: int, dtype=np.float32) -> ndarray:
     return _zeros(shape, dtype)  # type: ignore
 
 
-def dotproduct(arrays: List[ndarray]) -> ndarray:
+def dotproduct(arrays: list[ndarray]) -> ndarray:
     return reduce(dot, arrays)
 
 
-def compose(translation: ndarray, rotation: ndarray, scale: Union[ndarray, float]) -> ndarray:
+def compose(translation: ndarray, rotation: ndarray, scale: float |  ndarray) -> ndarray:
     matrix = ID44.copy()
     matrix[:3, 3] = translation
     matrix[:3, :3] = rotation * scale
     return matrix
 
 
-def decompose(matrix: ndarray) -> Tuple[ndarray, ndarray, ndarray]:
+def decompose(matrix: ndarray) -> tuple[ndarray, ndarray, ndarray]:
     translation = matrix[:3, 3]
     rotation = matrix[:3, :3]
     # scale = sqrt(square(rotation).sum(axis=0))
@@ -60,7 +60,7 @@ def decompose(matrix: ndarray) -> Tuple[ndarray, ndarray, ndarray]:
     return translation.copy(), (rotation / scale), scale
 
 
-def decompose_uniform(matrix: ndarray) -> Tuple[ndarray, ndarray, float]:
+def decompose_uniform(matrix: ndarray) -> tuple[ndarray, ndarray, float]:
     translation = matrix[:3, 3]
     rotation = matrix[:3, :3]
     d = float(det(rotation))
@@ -71,7 +71,7 @@ def decompose_uniform(matrix: ndarray) -> Tuple[ndarray, ndarray, float]:
     return translation.copy(), (rotation / scale), scale
 
 
-def quaternion_from_euler_angle(angle: Union[ndarray, float], euler_axis: int, out=None) -> ndarray:
+def quaternion_from_euler_angle(angle: float |  ndarray, euler_axis: int, out=None) -> ndarray:
     div2 = np.atleast_1d(angle / 2.0)
 
     if out is None:

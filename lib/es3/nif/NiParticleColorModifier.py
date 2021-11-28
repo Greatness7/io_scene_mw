@@ -4,7 +4,7 @@ from .NiParticleModifier import NiParticleModifier
 
 
 class NiParticleColorModifier(NiParticleModifier):
-    color_data: Optional[NiColorData] = None
+    color_data: NiColorData | None = None
 
     _refs = (*NiParticleModifier._refs, "color_data")
 

@@ -4,7 +4,7 @@ from .NiBoundingVolume import NiBoundingVolume
 
 
 class NiUnionBV(NiBoundingVolume):
-    bounding_volumes: List[Optional[NiBoundingVolume]] = []
+    bounding_volumes: list[NiBoundingVolume | None] = []
 
     bound_type = NiBoundingVolume.BoundType.UNION_BV
 

@@ -4,9 +4,9 @@ from .NiObject import NiObject
 
 
 class NiSkinInstance(NiObject):
-    data: Optional[NiSkinData] = None
-    root: Optional[NiAVObject] = None
-    bones: List[Optional[NiAVObject]] = []
+    data: NiSkinData | None = None
+    root: NiAVObject | None = None
+    bones: list[NiAVObject | None] = []
 
     _refs = (*NiObject._refs, "data")
     _ptrs = (*NiObject._ptrs, "root", "bones")

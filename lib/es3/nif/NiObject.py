@@ -5,8 +5,8 @@ from .NiMeta import NiMeta
 
 class NiObject(metaclass=NiMeta):
 
-    _refs = ()  # type: Tuple[str, ...]
-    _ptrs = ()  # type: Tuple[str, ...]
+    _refs = ()  # type: tuple[str, ...]
+    _ptrs = ()  # type: tuple[str, ...]
 
     def __init__(self, **kwargs):
         for k, v in kwargs.items():

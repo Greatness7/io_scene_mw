@@ -22,7 +22,7 @@ class NiFlipController(NiTimeController):
     affected_map: int32 = AffectedMap.BASE_MAP
     flip_start_time: float32 = 0.0
     secs_per_frame: float32 = 0.0
-    textures: List[NiSourceTexture] = []
+    textures: list[NiSourceTexture] = []
 
     # provide access to related enums
     AffectedMap = AffectedMap

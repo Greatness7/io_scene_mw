@@ -7,7 +7,7 @@ from .NiPixelFormat import NiPixelFormat
 
 class NiPixelData(NiObject):
     pixel_format: NiPixelFormat = NiPixelFormat()
-    palette: Optional[NiPalette] = None
+    palette: NiPalette | None = None
     pixel_stride: int32 = 0
     mipmaps: ndarray = zeros(0, dtype="<I")
     pixel_data: ndarray = zeros(0, dtype="<B")

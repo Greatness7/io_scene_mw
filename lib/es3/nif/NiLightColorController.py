@@ -4,7 +4,7 @@ from .NiTimeController import NiTimeController
 
 
 class NiLightColorController(NiTimeController):
-    data: Optional[NiPosData] = None
+    data: NiPosData | None = None
 
     _refs = (*NiTimeController._refs, "data")
 

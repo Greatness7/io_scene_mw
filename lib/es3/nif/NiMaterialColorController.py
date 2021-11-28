@@ -14,7 +14,7 @@ class ColorField(IntEnum):
 
 
 class NiMaterialColorController(NiTimeController):
-    data: Optional[NiPosData] = None
+    data: NiPosData | None = None
 
     # provide access to related enums
     ColorField = ColorField

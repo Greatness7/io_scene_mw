@@ -21,8 +21,8 @@ class NiPathController(NiTimeController):
     max_bank_angle: float32 = 0.0
     smoothing: float32 = 0.0
     follow_axis: int16 = FollowAxis.AXIS_X
-    path_data: Optional[NiPosData] = None
-    percentage_data: Optional[NiFloatData] = None
+    path_data: NiPosData | None = None
+    percentage_data: NiFloatData | None = None
 
     # provide access to related enums
     BankDirection = BankDirection

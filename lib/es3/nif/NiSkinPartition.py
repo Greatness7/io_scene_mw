@@ -57,7 +57,7 @@ class NiPartition(NiObject):  # TODO Not NiObject
 
 
 class NiSkinPartition(NiObject):
-    partitions: List[NiPartition] = []
+    partitions: list[NiPartition] = []
 
     def load(self, stream):
         num_partitions = stream.read_uint()

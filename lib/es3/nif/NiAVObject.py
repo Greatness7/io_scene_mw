@@ -22,11 +22,11 @@ class NiAVObject(NiObjectNET):
     rotation: NiMatrix3 = ID33
     scale: float32 = 1.0
     velocity: NiPoint3 = ZERO3
-    properties: List[Optional[NiProperty]] = []
-    bounding_volume: Optional[NiBoundingVolume] = None
+    properties: list[NiProperty | None] = []
+    bounding_volume: NiBoundingVolume | None = None
 
     # TODO: remove
-    children = []  # type: List[Optional[NiAVObject]]
+    children = []  # type: list[NiAVObject | None]
 
     # provide access to related enums
     PropagateMode = PropagateMode
@@ -71,7 +71,7 @@ class NiAVObject(NiObjectNET):
         if self.bounding_volume:
             self.bounding_volume.apply_scale(scale)
 
-    def get_property(self, property_type: Type[T]) -> T:
+    def get_property(self, property_type: type[T]) -> T:
         for prop in self.properties:
             if isinstance(prop, property_type):
                 return prop
@@ -109,7 +109,7 @@ class NiAVObject(NiObjectNET):
             yield node
             extend(child for child in iterator(node.children) if child)
 
-    def descendants_pairs(self, breadth_first=False) -> Iterator[Tuple[NiAVObject, NiAVObject]]:
+    def descendants_pairs(self, breadth_first=False) -> Iterator[tuple[NiAVObject, NiAVObject]]:
         """Similar to descendants, but yielding pairs of (parent, node)."""
 
         queue = deque((self, child) for child in self.children if child)

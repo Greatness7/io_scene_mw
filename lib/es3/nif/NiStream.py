@@ -15,7 +15,7 @@ class NiStream:
     TYPES = vars(nif)
 
     def __init__(self):
-        self.roots: List[NiObject] = []
+        self.roots: list[NiObject] = []
 
     def load(self, filepath: PathLike):
         with NiBinaryStream.reader(filepath) as stream:
@@ -39,17 +39,17 @@ class NiStream:
                 obj.apply_scale(scale)
 
     @property
-    def root(self) -> Optional[NiObject]:
+    def root(self) -> NiObject | None:
         return self.roots[0] if self.roots else None
 
     @root.setter
-    def root(self, node: Optional[NiObject]):
+    def root(self, node: NiObject | None):
         self.roots = [node]
 
     def objects(self, iterator=chain.from_iterable) -> Iterator[NiObject]:
         yield from iterator(root._traverse({None}) for root in self.roots)
 
-    def objects_of_type(self, cls: Type[T]) -> Iterator[T]:
+    def objects_of_type(self, cls: type[T]) -> Iterator[T]:
         return (obj for obj in self.objects() if isinstance(obj, cls))
 
     def find_object_by_name(self, name, object_type=None, fn=str.lower):
@@ -166,7 +166,7 @@ class NiStream:
         skeleton_root.extra_datas.appendleft(kf_text_data)
 
         # collect controllers/targets
-        controllers_to_attach: Dict[str, nif.NiKeyframeController] = {
+        controllers_to_attach: dict[str, nif.NiKeyframeController] = {
             s.string_data: c for s, c in zip(kf_string_datas, kf_root.controllers)
         }
 

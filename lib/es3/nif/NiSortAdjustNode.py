@@ -13,7 +13,7 @@ class SortingMode(IntEnum):
 
 class NiSortAdjustNode(NiNode):
     sorting_mode: int32 = SortingMode.SORTING_OFF
-    sub_sorter: Optional[NiAccumulator] = None
+    sub_sorter: NiAccumulator | None = None
 
     # provide access to related enums
     SortingMode = SortingMode

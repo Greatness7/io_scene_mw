@@ -5,7 +5,7 @@ from .NiTriBasedGeomData import NiTriBasedGeomData
 
 
 class NiTriStripsData(NiTriBasedGeomData):
-    strips: List[ndarray] = []
+    strips: list[ndarray] = []
 
     def load(self, stream):
         super().load(stream)

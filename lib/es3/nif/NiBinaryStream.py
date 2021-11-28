@@ -70,7 +70,7 @@ class NiBinaryStream(BinaryStream):
     def write_link(self, obj: NiObject):
         self.write_int(self.history.get(obj, -1))
 
-    def read_links(self) -> List[int]:
+    def read_links(self) -> list[int]:
         length = self.read_uint()
         if length:
             links = self.read(length * 4)
@@ -85,7 +85,7 @@ class NiBinaryStream(BinaryStream):
         else:
             self.write_uint(0)
 
-    def read_type(self, cls: Type[NiObject]) -> NiObject:
+    def read_type(self, cls: type[NiObject]) -> NiObject:
         obj = cls.__new__(cls)
         obj.load(self)
         return obj

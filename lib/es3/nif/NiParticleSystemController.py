@@ -26,17 +26,17 @@ class NiParticleSystemController(NiTimeController):
     emitter_width: float32 = 0.0
     emitter_height: float32 = 0.0
     emitter_depth: float32 = 0.0
-    emitter: Optional[NiAVObject] = None
+    emitter: NiAVObject | None = None
     spawn_generations: uint16 = 0
     spawn_percentage: float32 = 0.0  # [0.0, 1.0]
     spawn_multiplier: uint16 = 1
     spawned_speed_chaos: float32 = 0.0
     spawned_direction_chaos: float32 = 0.0
-    particles: List[NiPerParticleData] = []
+    particles: list[NiPerParticleData] = []
     num_active_particles: uint16 = 0
-    emitter_modifier: Optional[NiEmitterModifier] = None
-    particle_modifier: Optional[NiParticleModifier] = None
-    particle_collider: Optional[NiParticleCollider] = None
+    emitter_modifier: NiEmitterModifier | None = None
+    particle_modifier: NiParticleModifier | None = None
+    particle_collider: NiParticleCollider | None = None
     compute_dynamic_bounding_volume: uint8 = 0
 
     _refs = (*NiTimeController._refs, "emitter_modifier", "particle_modifier", "particle_collider")

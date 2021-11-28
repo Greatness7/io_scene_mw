@@ -6,8 +6,8 @@ from .NiObject import NiObject
 
 class NiObjectNET(NiObject):
     name: str = ""
-    controller: Optional[NiTimeController] = None
-    extra_data: Optional[NiExtraData] = None
+    controller: NiTimeController | None = None
+    extra_data: NiExtraData | None = None
 
     _refs = (*NiObject._refs, "extra_data", "controller")
 

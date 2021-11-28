@@ -14,8 +14,8 @@ def _sort_children_key(child):
 
 
 class NiNode(NiAVObject):
-    children: List[Optional[NiAVObject]] = []
-    effects: List[Optional[NiDynamicEffect]] = []
+    children: list[NiAVObject | None] = []
+    effects: list[NiDynamicEffect | None] = []
 
     _refs = (*NiAVObject._refs, "children", "effects")
 

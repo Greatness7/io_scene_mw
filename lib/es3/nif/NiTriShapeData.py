@@ -6,7 +6,7 @@ from .NiTriBasedGeomData import NiTriBasedGeomData
 
 class NiTriShapeData(NiTriBasedGeomData):
     triangles: ndarray = zeros(0, 3, dtype="<H")
-    shared_normals: List[ndarray] = []
+    shared_normals: list[ndarray] = []
 
     def load(self, stream):
         super().load(stream)

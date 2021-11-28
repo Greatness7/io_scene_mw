@@ -5,7 +5,7 @@ from .NiTimeController import NiTimeController
 
 class NiUVController(NiTimeController):
     texture_set: uint16 = 0
-    data: Optional[NiUVData] = None
+    data: NiUVData | None = None
 
     _refs = (*NiTimeController._refs, "data")
 

@@ -29,7 +29,7 @@ class NiTextureEffect(NiDynamicEffect):
     texture_clamping: int32 = ClampMode.WRAP_S_WRAP_T
     texture_type: int32 = TextureType.PROJECTED_LIGHT
     coordinate_generation_type: int32 = CoordGenType.WORLD_PARALLEL
-    source_texture: Optional[NiSourceTexture] = None
+    source_texture: NiSourceTexture | None = None
     clipping_plane_enable: uint8 = 0
     clipping_plane: NiPlane = ZERO4
     ps2_l: int16 = 0

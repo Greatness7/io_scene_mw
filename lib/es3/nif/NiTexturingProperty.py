@@ -47,16 +47,16 @@ class _TextureMapSource:
 
 class NiTexturingProperty(NiProperty):
     apply_mode: int32 = ApplyMode.APPLY_MODULATE
-    base_texture: Optional[NiTexturingPropertyMap] = None
-    dark_texture: Optional[NiTexturingPropertyMap] = None
-    detail_texture: Optional[NiTexturingPropertyMap] = None
-    gloss_texture: Optional[NiTexturingPropertyMap] = None
-    glow_texture: Optional[NiTexturingPropertyMap] = None
-    bump_map_texture: Optional[NiTexturingPropertyBumpMap] = None
-    decal_0_texture: Optional[NiTexturingPropertyMap] = None
-    decal_1_texture: Optional[NiTexturingPropertyMap] = None
-    decal_2_texture: Optional[NiTexturingPropertyMap] = None
-    decal_3_texture: Optional[NiTexturingPropertyMap] = None
+    base_texture: NiTexturingPropertyMap | None = None
+    dark_texture: NiTexturingPropertyMap | None = None
+    detail_texture: NiTexturingPropertyMap | None = None
+    gloss_texture: NiTexturingPropertyMap | None = None
+    glow_texture: NiTexturingPropertyMap | None = None
+    bump_map_texture: NiTexturingPropertyBumpMap | None = None
+    decal_0_texture: NiTexturingPropertyMap | None = None
+    decal_1_texture: NiTexturingPropertyMap | None = None
+    decal_2_texture: NiTexturingPropertyMap | None = None
+    decal_3_texture: NiTexturingPropertyMap | None = None
 
     # provide access to related enums
     ApplyMode = ApplyMode

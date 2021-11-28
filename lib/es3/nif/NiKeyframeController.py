@@ -4,7 +4,7 @@ from .NiTimeController import NiTimeController
 
 
 class NiKeyframeController(NiTimeController):
-    data: Optional[NiKeyframeData] = None
+    data: NiKeyframeData | None = None
 
     _refs = (*NiTimeController._refs, "data")
 

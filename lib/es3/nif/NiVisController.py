@@ -4,7 +4,7 @@ from .NiTimeController import NiTimeController
 
 
 class NiVisController(NiTimeController):
-    data: Optional[NiVisData] = None
+    data: NiVisData | None = None
 
     _refs = (*NiTimeController._refs, "data")
 

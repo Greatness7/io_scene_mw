@@ -6,7 +6,7 @@ from .NiObject import NiObject
 
 class NiMorphData(NiObject):
     relative_targets: uint8 = 1
-    targets: List[NiMorphDataMorphTarget] = []
+    targets: list[NiMorphDataMorphTarget] = []
 
     def load(self, stream):
         num_targets = stream.read_uint()

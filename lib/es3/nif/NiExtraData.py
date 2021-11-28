@@ -4,7 +4,7 @@ from .NiObject import NiObject
 
 
 class NiExtraData(NiObject):
-    next: Optional[NiExtraData] = None
+    next: NiExtraData | None = None
     bytes_remaining: uint32 = 0
 
     _refs = (*NiObject._refs, "next")

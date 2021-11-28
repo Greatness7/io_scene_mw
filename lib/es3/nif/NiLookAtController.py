@@ -13,7 +13,7 @@ class Axis(IntEnum):
 
 
 class NiLookAtController(NiTimeController):
-    look_at: Optional[NiAVObject] = None
+    look_at: NiAVObject | None = None
 
     _ptrs = (*NiTimeController._ptrs, "look_at")
 

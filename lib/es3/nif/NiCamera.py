@@ -8,8 +8,8 @@ class NiCamera(NiAVObject):
     view_frustum: NiFrustum = ZERO6
     view_port: NiRect = ZERO4
     lod_adjust: float32 = 0.0
-    scene: Optional[NiNode] = None
-    screen_polygons: List[Optional[NiScreenPolygon]] = []
+    scene: NiNode | None = None
+    screen_polygons: list[NiScreenPolygon | None] = []
 
     _refs = (*NiAVObject._refs, "scene")
 

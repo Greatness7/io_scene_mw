@@ -135,7 +135,7 @@ class LinkedList:
             if isinstance(item, item_type):
                 return owner, item
 
-    def find_type(self, item_type: Type[T]) -> T:
+    def find_type(self, item_type: type[T]) -> T:
         result = self.find_type_with_owner(item_type)
         if result is not None:
             _, item = result

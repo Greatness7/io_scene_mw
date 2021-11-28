@@ -4,8 +4,8 @@ from .NiObject import NiObject
 
 
 class NiParticleModifier(NiObject):
-    next: Optional[NiParticleModifier] = None
-    controller: Optional[NiParticleSystemController] = None
+    next: NiParticleModifier | None = None
+    controller: NiParticleSystemController | None = None
 
     _refs = (*NiObject._refs, "next")
     _ptrs = (*NiObject._refs, "controller")

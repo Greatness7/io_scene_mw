@@ -13,13 +13,13 @@ class CycleType(IntEnum):
 
 
 class NiTimeController(NiObject):
-    next: Optional[NiTimeController] = None
+    next: NiTimeController | None = None
     flags: uint16 = 8
     frequency: float32 = 1.0
     phase: float32 = 0.0
     start_time: float32 = 0.0
     stop_time: float32 = 0.0
-    target: Optional[NiObjectNET] = None
+    target: NiObjectNET | None = None
 
     # provide access to related enums
     CycleType = CycleType

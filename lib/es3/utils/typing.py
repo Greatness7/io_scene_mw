@@ -17,7 +17,7 @@ from typing import (
     Counter,
     DefaultDict,
     Deque,
-    Dict,
+    # Dict,
     FrozenSet,
     Generator,
     Generic,
@@ -26,7 +26,7 @@ from typing import (
     Iterable,
     Iterator,
     KeysView,
-    List,
+    # List,
     Mapping,
     MappingView,
     MutableMapping,
@@ -35,10 +35,10 @@ from typing import (
     NamedTuple,
     NewType,
     NoReturn,
-    Optional,
+    # Optional,
     Reversible,
     Sequence,
-    Set,
+    # Set,
     Sized,
     SupportsAbs,
     SupportsBytes,
@@ -47,11 +47,11 @@ from typing import (
     SupportsInt,
     SupportsRound,
     Text,
-    Tuple,
-    Type,
+    # Tuple,
+    # Type,
     TYPE_CHECKING,
     TypeVar,
-    Union,
+    # Union,
     ValuesView,
 )
 
@@ -80,4 +80,4 @@ if TYPE_CHECKING:
     NiMatrix3 = ndarray  # float[3, 3]
 
     T = TypeVar("T")
-    PathLike = Union[AnyStr, Path]
+    PathLike = AnyStr | Path

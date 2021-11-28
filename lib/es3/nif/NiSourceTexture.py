@@ -31,7 +31,7 @@ class AlphaFormat(IntEnum):
 
 class NiSourceTexture(NiTexture):
     filename: str = ""
-    pixel_data: Optional[NiPixelData] = None
+    pixel_data: NiPixelData | None = None
     pixel_layout: int32 = PixelLayout.PALETTIZED_4
     use_mipmaps: int32 = UseMipMaps.YES
     alpha_format: int32 = AlphaFormat.ALPHA_DEFAULT

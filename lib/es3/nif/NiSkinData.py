@@ -9,8 +9,8 @@ class NiSkinData(NiObject):
     rotation: NiMatrix3 = ID33
     translation: NiPoint3 = ZERO3
     scale: float32 = 1.0
-    skin_partition: Optional[NiSkinPartition] = None
-    bone_data: List[NiSkinDataBoneData] = []
+    skin_partition: NiSkinPartition | None = None
+    bone_data: list[NiSkinDataBoneData] = []
 
     _refs = (*NiObject._refs, "skin_partition")
 

@@ -4,7 +4,7 @@ from .NiTimeController import NiTimeController
 
 
 class NiMorpherController(NiTimeController):
-    data: Optional[NiMorphData] = None
+    data: NiMorphData | None = None
 
     _refs = (*NiTimeController._refs, "data")
 

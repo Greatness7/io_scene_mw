@@ -5,7 +5,7 @@ from .NiObject import NiObject
 
 class NiBltSource(NiObject):
     filename: str = ""
-    pixel_data: Optional[NiPixelData] = None
+    pixel_data: NiPixelData | None = None
 
     def load(self, stream):
         has_external_texture = stream.read_ubyte()

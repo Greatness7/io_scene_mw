@@ -13,7 +13,7 @@ class NiSequence(NiObject):
     sequence_name: str = ""
     keyframe_file: str = ""
     unknown_int: int32 = 0
-    unknown_object: Optional[NiObject] = None
+    unknown_object: NiObject | None = None
     name_controller_pairs: ndarray = zeros(0, dtype=_dtype)
 
     def load(self, stream):
@@ -49,7 +49,7 @@ class NiSequence(NiObject):
 
 
 class NiKeyframeManager(NiTimeController):
-    sequences: List[NiSequence] = []
+    sequences: list[NiSequence] = []
 
     def load(self, stream):
         super().load(stream)

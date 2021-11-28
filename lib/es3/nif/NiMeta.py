@@ -6,7 +6,7 @@ from es3.utils.math import np
 class NiMeta(type):
     __slots__ = ()
 
-    def __new__(cls, name: str, bases: Tuple[type, ...], namespace: Dict[str, Any]):
+    def __new__(cls, name: str, bases: tuple[type, ...], namespace: dict[str, Any]):
 
         # store the type name for serialization
         namespace.setdefault("type", name)
@@ -52,7 +52,7 @@ _hashable_types = (
     type(Ellipsis),
     type(NotImplemented),
 )
-_defaults_cache: Dict[tuple, Callable[[], Any]] = {}
+_defaults_cache: dict[tuple, Callable[[], Any]] = {}
 
 
 def _defaults_getter(value: T) -> Callable[[], T]:
@@ -68,7 +68,7 @@ def _defaults_getter(value: T) -> Callable[[], T]:
     return type(value)
 
 
-def _create_defaults(name: str, bases: Tuple[type, ...], defaults_dict: Dict[str, Any]):
+def _create_defaults(name: str, bases: tuple[type, ...], defaults_dict: dict[str, Any]):
     _bases = tuple(b.defaults for b in bases if isinstance(b, NiMeta))
     _dict = {k: _defaults_getter(v) for k, v in defaults_dict.items()}
     return type(name + "Defaults", _bases, _dict)
