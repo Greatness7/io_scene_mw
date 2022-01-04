@@ -927,9 +927,16 @@ class Material(SceneNode):
         except AttributeError:
             pass
 
+        # Re-use duplicate materials
         if material in self.exporter.materials:
             ni_object.properties = self.exporter.materials[material]
-            return  # material already processed
+            # Blender keeps UV animations on the material, but NIF keeps them on the object.
+            # Thus copying a material to the new object doesn't copy over any UV animations.
+            # Go through and manually copy them instead.
+            for slot in bl_prop.texture_slots:
+                if slot.image:
+                    self.animation.create_uv_controller(bl_prop, slot)
+            return
 
         if bl_prop is None:
             # Not a MW Material
