@@ -864,7 +864,10 @@ class Mesh(SceneNode):
         )
 
         # update face data
-        data.triangles = inverse[np.arange(inverse.size, dtype=int).reshape(-1, 3)]
+        try:
+            data.triangles = inverse[np.arange(inverse.size, dtype=int).reshape(-1, 3)]
+        except ValueError:
+            raise ValueError(f"Invalid geometry data (no faces?): {self}")
 
         # update vert data
         self.extract_vertex_data(indices, data, data, skin_data, skin_data, morph_data, morph_data)

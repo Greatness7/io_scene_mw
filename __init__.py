@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 81),
+    "version": (0, 8, 82),
     "blender": (2, 93, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
