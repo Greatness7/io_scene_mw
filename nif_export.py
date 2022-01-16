@@ -934,8 +934,7 @@ class Material(SceneNode):
             # Thus copying a material to the new object doesn't copy over any UV animations.
             # Go through and manually copy them instead.
             for slot in bl_prop.texture_slots:
-                if slot.image:
-                    self.animation.create_uv_controller(bl_prop, slot)
+                self.animation.create_uv_controller(bl_prop, slot)
             return
 
         if bl_prop is None:
@@ -1329,6 +1328,8 @@ class Animation(SceneNode):
 
     def create_uv_controller(self, bl_prop, bl_slot):
         if not self.exporter.export_animations:
+            return False
+        if not (bl_slot.image and bl_slot.layer):
             return False
 
         anims = self.get_fcurves_dict(bl_prop.texture_group.node_tree)
