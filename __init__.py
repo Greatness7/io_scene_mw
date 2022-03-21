@@ -1,8 +1,8 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 82),
-    "blender": (2, 93, 0),
+    "version": (0, 8, 83),
+    "blender": (3, 0, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
     "wiki_url": "https://blender-morrowind.readthedocs.io/",
@@ -367,7 +367,7 @@ class ImportScene(bpy.types.Operator, ImportHelper):
         description=(
             "Re-use existing materials from the blender scene if present (rather than creating new materials)."
             " Pre-existing material names must match the base texture name (without extension) to be eligible."
-            " When enabled newly imported materials are automatically renamed to their base texture file name."
+            " When enabled newly imported materials are automatically renamed to their base texture file name"
         ),
         default=False,
     )
