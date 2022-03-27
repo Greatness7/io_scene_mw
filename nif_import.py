@@ -1350,7 +1350,7 @@ class Animation(SceneNode):
     @staticmethod
     def update_frame_range(controller):
         scene = bpy.context.scene
-        frame_end = np.ceil(controller.stop_time * scene.render.fps)
+        frame_end = int(np.ceil(controller.stop_time * scene.render.fps))
         scene.frame_end = scene.frame_preview_end = max(scene.frame_end, frame_end)
 
     def set_mute(self, state, fcurves=None):
