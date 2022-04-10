@@ -1055,7 +1055,7 @@ class Animation(SceneNode):
         action = self.get_action(bl_object)
 
         # convert time to frame
-        text_data.times[:] = np.ceil(text_data.times * bpy.context.scene.render.fps)
+        text_data.times[:] = np.round(text_data.times * bpy.context.scene.render.fps)
 
         for frame, text in text_data.keys.tolist():
             for name in filter(None, text.splitlines()):
