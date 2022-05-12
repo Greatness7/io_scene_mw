@@ -924,7 +924,7 @@ class Material(SceneNode):
             ni_slot = getattr(ni_prop, slot_name)
             # only supports slots with texture image attached
             image = self.create_image(ni_slot.source.filename)
-        except AttributeError:
+        except (AttributeError, LookupError):
             return
 
         # texture image
