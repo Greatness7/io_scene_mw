@@ -17,7 +17,7 @@ from functools import cached_property
 from . import nif_utils
 from . import nif_shader
 
-from bpy_extras.io_utils import axis_conversion
+from bpy_extras.io_utils import axis_conversion  # type: ignore
 
 biped_axis_correction = np.array(axis_conversion('Y', 'Z', '-X', 'Z').to_4x4(), dtype="<f")
 biped_axis_correction_inverse = la.inv(biped_axis_correction)

@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 import bpy
-from bpy_extras.io_utils import ExportHelper, ImportHelper
+from bpy_extras.io_utils import ExportHelper, ImportHelper  # type: ignore
 
 PATH = Path(__file__).parent
 
