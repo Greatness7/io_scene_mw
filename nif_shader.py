@@ -179,26 +179,28 @@ class NodeTreeWrapper:
         outputs.new('NodeSocketColor', "Decal 2 Texture")
         outputs.new('NodeSocketColor', "Decal 3 Texture")
         outputs.new('NodeSocketColor', "Base Alpha")
+        outputs.new('NodeSocketColor', "Dark Alpha")
         outputs.new('NodeSocketColor', "Decal 0 Alpha")
         outputs.new('NodeSocketColor', "Decal 1 Alpha")
         outputs.new('NodeSocketColor', "Decal 2 Alpha")
         outputs.new('NodeSocketColor', "Decal 3 Alpha")
 
         # color links
-        links.new(base_image.outputs[0], sockets[0])
-        links.new(dark_image.outputs[0], sockets[1])
-        links.new(deta_image.outputs[0], sockets[2])
-        links.new(glow_image.outputs[0], sockets[3])
-        links.new(dec0_image.outputs[0], sockets[4])
-        links.new(dec1_image.outputs[0], sockets[5])
-        links.new(dec2_image.outputs[0], sockets[6])
-        links.new(dec3_image.outputs[0], sockets[7])
+        links.new(base_image.outputs[0], sockets["Base Texture"])
+        links.new(dark_image.outputs[0], sockets["Dark Texture"])
+        links.new(deta_image.outputs[0], sockets["Detail Texture"])
+        links.new(glow_image.outputs[0], sockets["Glow Texture"])
+        links.new(dec0_image.outputs[0], sockets["Decal 0 Texture"])
+        links.new(dec1_image.outputs[0], sockets["Decal 1 Texture"])
+        links.new(dec2_image.outputs[0], sockets["Decal 2 Texture"])
+        links.new(dec3_image.outputs[0], sockets["Decal 3 Texture"])
         # alpha links
-        links.new(base_image.outputs[1], sockets[8])
-        links.new(dec0_image.outputs[1], sockets[9])
-        links.new(dec1_image.outputs[1], sockets[10])
-        links.new(dec2_image.outputs[1], sockets[11])
-        links.new(dec3_image.outputs[1], sockets[12])
+        links.new(base_image.outputs[1], sockets["Base Alpha"])
+        links.new(dark_image.outputs[1], sockets["Dark Alpha"])
+        links.new(dec0_image.outputs[1], sockets["Decal 0 Alpha"])
+        links.new(dec1_image.outputs[1], sockets["Decal 1 Alpha"])
+        links.new(dec2_image.outputs[1], sockets["Decal 2 Alpha"])
+        links.new(dec3_image.outputs[1], sockets["Decal 3 Alpha"])
 
     def create_node(self, name, node_type, x, y):
         node = self.nodes.new(node_type)
@@ -360,7 +362,10 @@ class TextureSlot(bpy.types.PropertyGroup):
         inputs = self.shader_inputs
         links = self.id_data.node_tree.links
         for name in self.active_socket_names():
-            links.new(outputs[name], inputs[name])
+            try:
+                links.new(outputs[name], inputs[name])
+            except KeyError:
+                pass
 
     def remove_links(self):
         outputs = self.outputs
@@ -368,7 +373,10 @@ class TextureSlot(bpy.types.PropertyGroup):
         links = self.id_data.node_tree.links
         for name in self.active_socket_names():
             for outer_link in inputs[name].links:
-                links.remove(outer_link)
+                try:
+                    links.remove(outer_link)
+                except KeyError:
+                    pass
 
     @staticmethod
     def get_chain_from_uv(uv_node):
