@@ -780,6 +780,22 @@ class CreateRadiusSphere(bpy.types.Operator):
         return center, radius
 
 
+class ClearMaterials(bpy.types.Operator):
+    bl_idname = "scene.mw_clear_materials"
+    bl_options = {"REGISTER", "UNDO"}
+    bl_label = "Clear Morrowind Materials"
+
+    def execute(self, context):
+        for material in list(bpy.data.materials):
+            try:
+                material.mw.validate()
+                if material.users <= 1:
+                    bpy.data.materials.remove(material)
+            except:
+                continue
+        return {'FINISHED'}
+
+
 # --------
 # REGISTER
 # --------
@@ -809,6 +825,7 @@ classes = (
     *MaterialPanelTextures,
     NiObjectProps,
     CreateRadiusSphere,
+    ClearMaterials,
     nif_shader.TextureSlot,
     nif_shader.NiMaterialProps,
 )
