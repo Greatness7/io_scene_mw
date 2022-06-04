@@ -19,7 +19,7 @@ The *Morrowind Blender Plugin* is an open source project with the goal of bringi
 
 ### Requirements
 
-- **Blender 2.8.2 (64-bit)** or newer. Available on the [official Blender download page](https://blender.org/download/).
+- **Blender 3.1 (64-bit)** or newer. Available on the [official Blender download page](https://blender.org/download/).
 - **Windows Users** will need the [Microsoft Visual Studio 2019 Redistributable (x64)](https://aka.ms/vs/16/release/vc_redist.x64.exe) package.
 
 
