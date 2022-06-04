@@ -53,6 +53,7 @@ class Exporter:
         self.filepath = pathlib.Path(filepath)
         self.nodes = {}
         self.materials = {}
+        self.pixel_datas = {}
         self.history = collections.defaultdict(set)
         self.armatures = collections.defaultdict(set)
         self.colliders = collections.defaultdict(set)
@@ -1037,7 +1038,13 @@ class Material(SceneNode):
 
         # source image
         ni_slot.source = nif.NiSourceTexture()
-        ni_slot.source.filename = bpy.path.abspath(filepath)
+
+        if (bl_slot.image.source == "GENERATED") or bl_slot.image.packed_file:
+            include_alpha = bl_prop.use_alpha_blend or bl_prop.use_alpha_clip
+            ni_slot.source.pixel_data = self.create_pixel_data(bl_slot.image, include_alpha)
+        else:
+            ni_slot.source.filename = bpy.path.abspath(filepath)
+
         setattr(ni_prop, name, ni_slot)
 
         # uv animations
@@ -1053,6 +1060,47 @@ class Material(SceneNode):
             m = nif.NiStencilProperty.DrawMode.DRAW_BOTH
             ni_prop = nif.NiStencilProperty(draw_mode=m)
             ni_object.properties.append(ni_prop)
+
+    def create_pixel_data(self, image, include_alpha) -> nif.NiPixelData:
+        if pixel_data := self.exporter.pixel_datas.get(image):
+            assert pixel_data.format.has_alpha == include_alpha
+        else:
+            assert image.channels == 4
+
+            width, height = image.size
+            for i in (width, height):
+                if (i == 0) or (i & (i - 1) != 0):
+                    raise ValueError("Image dimensions must be a power of 2")
+
+            # TODO: dxt compression (does not work in OpenMW yet)
+            if include_alpha:
+                pixel_format = nif.NiPixelFormat.RGBA
+                pixel_stride = 4
+            else:
+                pixel_format = nif.NiPixelFormat.RGB
+                pixel_stride = 3
+
+            pixel_data = nif.NiPixelData(pixel_format=pixel_format, pixel_stride=pixel_stride)
+
+            # TODO: generated mipmaps (image.resize() might work)
+            pixel_data.mipmap_levels.resize((1, 3))
+            pixel_data.mipmap_levels[:] = [width, height, 0]
+
+            # generated images seem to always have alpha channels
+            pixel_floats = np.empty((width, height, 4), np.float32)
+            image.pixels.foreach_get(pixel_floats.ravel())
+            if pixel_stride == 3:
+                pixel_floats = pixel_floats[:, :, :3]
+
+            # convert pixels from opengl layout to directx layout
+            pixel_floats = np.flipud(pixel_floats)
+
+            # convert pixels from floats into flat array of bytes
+            pixel_data.pixel_data = (pixel_floats.ravel() * 255.0).round().astype(np.ubyte)
+
+            self.exporter.pixel_datas[image] = pixel_data
+
+        return pixel_data
 
     @staticmethod
     def create_fallback_property(ni_object, material):
