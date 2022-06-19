@@ -614,12 +614,13 @@ class Mesh(SceneNode):
         self.create_vertices(bl_object, ni_data.vertices)
         self.create_triangles(bl_object, ni_data.triangles)
 
-        self.create_normals(bl_object, ni_data.normals)
         self.create_vertex_colors(bl_object, ni_data.vertex_colors)
         self.create_uv_sets(bl_object, ni_data.uv_sets)
 
         self.create_vertex_weights(bl_object, ni_data.vertex_weights)
         self.create_vertex_morphs(bl_object, ni_data.vertex_morphs)
+
+        self.create_normals(bl_object, ni_data.normals)
 
         try:
             self.output.display_type = self.parent.output.display_type
@@ -645,7 +646,6 @@ class Mesh(SceneNode):
         ob.data.polygons.foreach_set("use_smooth", [True] * n)
 
         ob.data.update()
-        ob.data.validate(verbose=False, clean_customdata=False)
 
     def create_normals(self, ob, normals):
         if len(normals) == 0:
@@ -666,12 +666,11 @@ class Mesh(SceneNode):
 
             # apply custom normals
             if not self.importer.ignore_custom_normals:
-                try:
-                    # Will errors if `ob.data.validate` modified the geometry.
+                if ob.data.validate(verbose=False, clean_customdata=False):
+                    print(f"Warning: Invalid mesh data, custom normals will be skipped: ({ob.name})")
+                else:
                     ob.data.normals_split_custom_set(normals)
                     ob.data.use_auto_smooth = True
-                except RuntimeError:
-                    print(f"Warning: Failed to create custom normals: ({ob.name})")
 
     def create_uv_sets(self, ob, uv_sets):
         for i, uv in enumerate(uv_sets[:8]):  # max 8 uv sets (blender limitation)
