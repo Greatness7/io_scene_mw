@@ -1397,6 +1397,10 @@ class Animation(SceneNode):
                 bl_node.inputs["Scale"].path_from_id("default_value"),
         }
 
+        # bail if no keyframes present
+        if not any(map(anims.get, channels.values())):
+            return False
+
         for outputs, data_path in channels.items():
             for i, output in enumerate(outputs):
                 fcurves = [fc for fc in anims[data_path] if fc.array_index == i]
