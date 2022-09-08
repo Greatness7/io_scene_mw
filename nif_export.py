@@ -937,8 +937,9 @@ class Material(SceneNode):
             # Blender keeps UV animations on the material, but NIF keeps them on the object.
             # Thus copying a material to the new object doesn't copy over any UV animations.
             # Go through and manually copy them instead.
-            for slot in bl_prop.texture_slots:
-                self.animation.create_uv_controller(bl_prop, slot)
+            if bl_prop is not None:
+                for slot in bl_prop.texture_slots:
+                    self.animation.create_uv_controller(bl_prop, slot)
             return
 
         if bl_prop is None:
