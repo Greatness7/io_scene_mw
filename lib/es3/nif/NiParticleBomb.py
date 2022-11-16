@@ -54,6 +54,12 @@ class NiParticleBomb(NiParticleModifier):
         stream.write_floats(self.position)
         stream.write_floats(self.direction)
 
+    def apply_time_scale(self, scale: float):
+        super().apply_time_scale(scale)
+        self.duration *= scale
+        self.delta_v *= scale
+        self.start_time *= scale
+
 
 if __name__ == "__main__":
     from es3.utils.typing import *

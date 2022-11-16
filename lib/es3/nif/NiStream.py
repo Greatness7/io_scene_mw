@@ -38,6 +38,11 @@ class NiStream:
             for obj in self.objects():
                 obj.apply_scale(scale)
 
+    def apply_time_scale(self, scale: float):
+        if not isclose(scale, 1.0, rel_tol=0, abs_tol=1e-6):
+            for obj in self.objects():
+                obj.apply_time_scale(scale)
+
     @property
     def root(self) -> NiObject | None:
         return self.roots[0] if self.roots else None

@@ -55,6 +55,12 @@ class NiTimeController(NiObject):
         else:
             self.start_time, self.stop_time = 0, 0
 
+    def apply_time_scale(self, scale: float):
+        super().apply_time_scale(scale)
+        self.phase *= scale
+        self.start_time *= scale
+        self.stop_time *= scale
+
 
 if __name__ == "__main__":
     from es3.nif import NiObjectNET

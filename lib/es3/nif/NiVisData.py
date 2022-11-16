@@ -40,6 +40,11 @@ class NiVisData(NiObject):
         else:
             return (self.times[0], self.times[-1])
 
+    def apply_time_scale(self, scale: float):
+        super().apply_time_scale(scale)
+        if len(self.keys):
+            self.times[:] *= scale
+
 
 if __name__ == "__main__":
     from es3.utils.typing import *

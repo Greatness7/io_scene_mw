@@ -38,3 +38,9 @@ class NiKeyframeData(NiObject):
             stop_time = max(stop_time, times[1])
 
         return start_time, stop_time
+
+    def apply_time_scale(self, scale: float):
+        super().apply_time_scale(scale)
+        self.rotations.apply_time_scale(scale)
+        self.translations.apply_time_scale(scale)
+        self.scales.apply_time_scale(scale)

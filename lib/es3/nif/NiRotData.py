@@ -122,6 +122,11 @@ class NiRotData(NiFloatData):
                 for other in q_keys[index == v, 1:]:
                     quaternion_mul(other, q, out=q)
 
+    def apply_time_scale(self, scale: float):
+        super().apply_time_scale(scale)
+        for euler_data in self.euler_data:
+            euler_data.apply_time_scale(scale)
+
 
 if __name__ == "__main__":
     from es3.utils.typing import *

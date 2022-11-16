@@ -31,6 +31,11 @@ class NiMorphData(NiObject):
     def basis(self):
         return self.targets[0].vertices
 
+    def apply_time_scale(self, scale: float):
+        super().apply_time_scale(scale)
+        for target in self.targets:
+            target.apply_time_scale(scale)
+
 
 if __name__ == "__main__":
     from es3.utils.typing import *

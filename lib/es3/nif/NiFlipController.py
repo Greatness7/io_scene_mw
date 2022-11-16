@@ -43,6 +43,11 @@ class NiFlipController(NiTimeController):
         stream.write_float(self.secs_per_frame)
         stream.write_links(self.textures)
 
+    def apply_time_scale(self, scale: float):
+        super().apply_time_scale(scale)
+        self.flip_start_time *= scale
+        self.secs_per_frame *= scale
+
 
 if __name__ == "__main__":
     from es3.nif import NiSourceTexture

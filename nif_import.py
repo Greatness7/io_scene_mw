@@ -78,6 +78,9 @@ class Importer:
         # scale correction
         data.apply_scale(self.scale_correction)
 
+        # time correction
+        data.apply_time_scale(bpy.context.scene.render.fps)
+
         # resolve heirarchy
         roots = self.resolve_nodes(data.roots)
 
@@ -717,10 +720,6 @@ class Mesh(SceneNode):
 
         # add morph keys
         for i, target in enumerate(self.source.morph_targets):
-
-            # from times to frames
-            target.keys[:, 0] *= bpy.context.scene.render.fps
-
             # create morph targets
             shape_key = ob.shape_key_add(name="")
             shape_key.data.foreach_set("co", vertex_morphs[i].ravel())
@@ -1062,13 +1061,10 @@ class Animation(SceneNode):
 
         action = self.get_action(bl_object)
 
-        # convert time to frame
-        text_data.times[:] = np.round(text_data.times * bpy.context.scene.render.fps)
-
         for frame, text in text_data.keys.tolist():
             for name in filter(None, text.splitlines()):
                 assert len(name) < 64, f"Marker exceeds character limit ({name})"
-                action.pose_markers.new(name).frame = int(frame)
+                action.pose_markers.new(name).frame = round(frame)
 
     def create_kf_controller(self, bl_object):
         controller = self.source.controllers.find_type(nif.NiKeyframeController)
@@ -1091,9 +1087,6 @@ class Animation(SceneNode):
         data = controller.data.translations
         if len(data.keys) == 0:
             return
-
-        # convert time to frame
-        data.keys[:, 0] *= bpy.context.scene.render.fps
 
         # get blender data path
         data_path = self.output.path_from_id("location")
@@ -1124,9 +1117,6 @@ class Animation(SceneNode):
             if len(data.keys) == 0:
                 continue
 
-            # convert time to frame
-            data.keys[:, 0] *= bpy.context.scene.render.fps
-
             # get blender data path
             data_path = self.output.path_from_id("rotation_euler")
 
@@ -1142,9 +1132,6 @@ class Animation(SceneNode):
         if len(data.keys) == 0:
             return
 
-        # convert time to frame
-        data.keys[:, 0] *= bpy.context.scene.render.fps
-
         # get blender data path
         data_path = self.output.path_from_id("rotation_quaternion")
 
@@ -1159,9 +1146,6 @@ class Animation(SceneNode):
         data = controller.data.scales
         if len(data.keys) == 0:
             return
-
-        # convert time to frame
-        data.keys[:, 0] *= bpy.context.scene.render.fps
 
         # get blender data path
         data_path = self.output.path_from_id("scale")
@@ -1184,9 +1168,6 @@ class Animation(SceneNode):
             return
 
         keys = np.empty((len(data.keys), 2), dtype=np.float32)
-
-        # convert time to frame
-        keys[:, 0] = data.times * bpy.context.scene.render.fps
 
         # invert appculled flag
         keys[:, 1] = 1 - data.values
@@ -1249,8 +1230,6 @@ class Animation(SceneNode):
 
         for sources, data_path in channels.items():
             for i, uv_data in enumerate(sources):
-                # convert from times to frames
-                uv_data.keys[:, 0] *= bpy.context.scene.render.fps
                 # build blender fcurves
                 fc = action.fcurves.new(data_path, index=i, action_group=uv_name)
                 fc.keyframe_points.add(len(uv_data.keys))
@@ -1284,9 +1263,6 @@ class Animation(SceneNode):
         else:
             raise NotImplementedError(f"'{controller.color_field}' animations are not supported")
 
-        # convert time to frame
-        keys[:, 0] *= bpy.context.scene.render.fps
-
         # create blender action
         action = self.get_action(bl_prop.material.node_tree)
 
@@ -1315,9 +1291,6 @@ class Animation(SceneNode):
         keys = controller.data.keys
         if len(keys) == 0:
             return
-
-        # convert time to frame
-        keys[:, 0] *= bpy.context.scene.render.fps
 
         # create blender action
         action = self.get_action(bl_prop.material.node_tree)

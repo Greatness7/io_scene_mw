@@ -116,6 +116,17 @@ class NiParticleSystemController(NiTimeController):
         stream.write_link(self.particle_collider)
         stream.write_ubyte(self.compute_dynamic_bounding_volume)
 
+    def apply_time_scale(self, scale: float):
+        super().apply_time_scale(scale)
+        self.emit_start_time *= scale
+        self.emit_stop_time *= scale
+        self.lifespan *= scale
+        self.lifespan_variation *= scale
+        for particle in self.particles:
+            particle.age *= scale
+            particle.lifespan *= scale
+            particle.last_update *= scale
+
 
 if __name__ == "__main__":
     from es3.nif import NiAVObject, NiEmitterModifier, NiParticleCollider, NiParticleModifier

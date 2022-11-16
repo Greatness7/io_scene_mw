@@ -17,6 +17,11 @@ class NiParticleGrowFade(NiParticleModifier):
         stream.write_float(self.grow_time)
         stream.write_float(self.fade_time)
 
+    def apply_time_scale(self, scale: float):
+        super().apply_time_scale(scale)
+        self.grow_time *= scale
+        self.fade_time *= scale
+
 
 if __name__ == "__main__":
     from es3.utils.typing import *

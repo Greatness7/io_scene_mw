@@ -86,6 +86,7 @@ class Exporter:
         data = nif.NiStream()
         data.root = self.get_root_output(roots)
         data.apply_scale(self.scale_correction)
+        data.apply_time_scale(1 / bpy.context.scene.render.fps)
         data.merge_properties(ignore={"name", "shine", "specular_color"})
         data.sort()
         self.setup_markers(data)
@@ -1165,7 +1166,7 @@ class Animation(SceneNode):
         text_data.keys.resize(len(markers))
 
         for i, marker in enumerate(markers):
-            time = marker.frame / bpy.context.scene.render.fps
+            time = marker.frame
             name = marker.name.replace("; ", "\r\n")
             text_data.keys[i] = time, name
 
@@ -1624,9 +1625,6 @@ class Animation(SceneNode):
                 # collect outgoing tangents
                 fc.keyframe_points.foreach_get("handle_right", temp.ravel())
                 keys[:, i + num_axes * 2] = (temp[:, 1] - keys[:, i]) * 3.0
-
-        # convert from frames to times
-        keys[:, 0] /= bpy.context.scene.render.fps
 
         # sort the keys by their times
         keys = keys[keys[:, 0].argsort()]

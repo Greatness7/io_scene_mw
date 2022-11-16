@@ -40,3 +40,10 @@ class NiUVData(NiObject):
             stop_time = max(item[-1, 0], stop_time)
 
         return (start_time, stop_time)
+
+    def apply_time_scale(self, scale: float):
+        super().apply_time_scale(scale)
+        self.u_offset_data.apply_time_scale(scale)
+        self.v_offset_data.apply_time_scale(scale)
+        self.u_tiling_data.apply_time_scale(scale)
+        self.v_tiling_data.apply_time_scale(scale)

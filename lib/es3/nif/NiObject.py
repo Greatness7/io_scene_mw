@@ -34,6 +34,9 @@ class NiObject(metaclass=NiMeta):
     def apply_scale(self, scale):
         pass
 
+    def apply_time_scale(self, scale: float):
+        pass
+
     def _links(self):
         for name in self._refs:
             item = getattr(self, name)
