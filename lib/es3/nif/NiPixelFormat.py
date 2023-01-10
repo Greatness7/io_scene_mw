@@ -34,7 +34,7 @@ class NiPixelFormat(NiObject):
         self.format = PixelFormat(stream.read_int())
         self.color_masks = stream.read_uints(4)
         self.bits_per_pixel = stream.read_uint()
-        self.compare_bits = stream.read_uint(2)
+        self.compare_bits = stream.read_uints(2)
 
     def save(self, stream):
         stream.write_int(self.format)
