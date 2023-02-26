@@ -2,7 +2,7 @@ import bpy
 
 
 def addon_preferences(context):
-    return context.preferences.addons["io_scene_mw"].preference
+    return context.preferences.addons["io_scene_mw"].preferences
 
 
 class TexturePath(bpy.types.PropertyGroup):
@@ -18,9 +18,7 @@ class TexturePathList(bpy.types.UIList):
     bl_idname = "PREFERENCES_UL_MW_TexturePathList"
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        is_active = getattr(active_data, active_propname) == index
-        checkbox_icon = "CHECKBOX_HLT" if is_active else "CHECKBOX_DEHLT"
-        layout.prop(item, "name", icon=checkbox_icon, emboss=False)
+        layout.prop(item, "name", emboss=False)
 
 
 class TexturePathAdd(bpy.types.Operator):
