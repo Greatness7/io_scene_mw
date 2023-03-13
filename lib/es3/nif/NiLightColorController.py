@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from es3.utils.flags import bool_property
+
 from .NiTimeController import NiTimeController
 
 
@@ -7,6 +9,8 @@ class NiLightColorController(NiTimeController):
     data: NiPosData | None = None
 
     _refs = (*NiTimeController._refs, "data")
+
+    ambient = bool_property(mask=0x0010)
 
     def load(self, stream):
         super().load(stream)
