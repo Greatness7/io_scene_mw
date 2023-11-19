@@ -139,8 +139,6 @@ class NodeTreeWrapper:
 
         nodes = group.node_tree.nodes
         links = group.node_tree.links
-        inputs = group.node_tree.inputs
-        outputs = group.node_tree.outputs
 
         # make nodes
         base_image = nodes.new('ShaderNodeTexImage')
@@ -168,39 +166,38 @@ class NodeTreeWrapper:
             slot.node_tree = group.node_tree
             slot.name = node.name
 
-        # output sockets
-        sockets = nodes.new('NodeGroupOutput').inputs
-        outputs.new('NodeSocketColor', "Base Texture")
-        outputs.new('NodeSocketColor', "Dark Texture")
-        outputs.new('NodeSocketColor', "Detail Texture")
-        outputs.new('NodeSocketColor', "Glow Texture")
-        outputs.new('NodeSocketColor', "Decal 0 Texture")
-        outputs.new('NodeSocketColor', "Decal 1 Texture")
-        outputs.new('NodeSocketColor', "Decal 2 Texture")
-        outputs.new('NodeSocketColor', "Decal 3 Texture")
-        outputs.new('NodeSocketColor', "Base Alpha")
-        outputs.new('NodeSocketColor', "Dark Alpha")
-        outputs.new('NodeSocketColor', "Decal 0 Alpha")
-        outputs.new('NodeSocketColor', "Decal 1 Alpha")
-        outputs.new('NodeSocketColor', "Decal 2 Alpha")
-        outputs.new('NodeSocketColor', "Decal 3 Alpha")
+        # outputs
+        self.new_output_socket(group, 'NodeSocketColor', "Base Texture")
+        self.new_output_socket(group, 'NodeSocketColor', "Dark Texture")
+        self.new_output_socket(group, 'NodeSocketColor', "Detail Texture")
+        self.new_output_socket(group, 'NodeSocketColor', "Glow Texture")
+        self.new_output_socket(group, 'NodeSocketColor', "Decal 0 Texture")
+        self.new_output_socket(group, 'NodeSocketColor', "Decal 1 Texture")
+        self.new_output_socket(group, 'NodeSocketColor', "Decal 2 Texture")
+        self.new_output_socket(group, 'NodeSocketColor', "Decal 3 Texture")
+        self.new_output_socket(group, 'NodeSocketColor', "Base Alpha")
+        self.new_output_socket(group, 'NodeSocketColor', "Dark Alpha")
+        self.new_output_socket(group, 'NodeSocketColor', "Decal 0 Alpha")
+        self.new_output_socket(group, 'NodeSocketColor', "Decal 1 Alpha")
+        self.new_output_socket(group, 'NodeSocketColor', "Decal 2 Alpha")
+        self.new_output_socket(group, 'NodeSocketColor', "Decal 3 Alpha")
 
-        # color links
-        links.new(base_image.outputs[0], sockets["Base Texture"])
-        links.new(dark_image.outputs[0], sockets["Dark Texture"])
-        links.new(deta_image.outputs[0], sockets["Detail Texture"])
-        links.new(glow_image.outputs[0], sockets["Glow Texture"])
-        links.new(dec0_image.outputs[0], sockets["Decal 0 Texture"])
-        links.new(dec1_image.outputs[0], sockets["Decal 1 Texture"])
-        links.new(dec2_image.outputs[0], sockets["Decal 2 Texture"])
-        links.new(dec3_image.outputs[0], sockets["Decal 3 Texture"])
-        # alpha links
-        links.new(base_image.outputs[1], sockets["Base Alpha"])
-        links.new(dark_image.outputs[1], sockets["Dark Alpha"])
-        links.new(dec0_image.outputs[1], sockets["Decal 0 Alpha"])
-        links.new(dec1_image.outputs[1], sockets["Decal 1 Alpha"])
-        links.new(dec2_image.outputs[1], sockets["Decal 2 Alpha"])
-        links.new(dec3_image.outputs[1], sockets["Decal 3 Alpha"])
+        # links
+        output = nodes.new('NodeGroupOutput')
+        links.new(base_image.outputs["Color"], output.inputs["Base Texture"])
+        links.new(dark_image.outputs["Color"], output.inputs["Dark Texture"])
+        links.new(deta_image.outputs["Color"], output.inputs["Detail Texture"])
+        links.new(glow_image.outputs["Color"], output.inputs["Glow Texture"])
+        links.new(dec0_image.outputs["Color"], output.inputs["Decal 0 Texture"])
+        links.new(dec1_image.outputs["Color"], output.inputs["Decal 1 Texture"])
+        links.new(dec2_image.outputs["Color"], output.inputs["Decal 2 Texture"])
+        links.new(dec3_image.outputs["Color"], output.inputs["Decal 3 Texture"])
+        links.new(base_image.outputs["Alpha"], output.inputs["Base Alpha"])
+        links.new(dark_image.outputs["Alpha"], output.inputs["Dark Alpha"])
+        links.new(dec0_image.outputs["Alpha"], output.inputs["Decal 0 Alpha"])
+        links.new(dec1_image.outputs["Alpha"], output.inputs["Decal 1 Alpha"])
+        links.new(dec2_image.outputs["Alpha"], output.inputs["Decal 2 Alpha"])
+        links.new(dec3_image.outputs["Alpha"], output.inputs["Decal 3 Alpha"])
 
     def create_node(self, name, node_type, x, y):
         node = self.nodes.new(node_type)
@@ -224,6 +221,13 @@ class NodeTreeWrapper:
         if "MW Shader" not in m.node_tree.nodes:
             raise TypeError("Invalid Material: mw_shader not present")
         return self
+
+    @staticmethod
+    def new_output_socket(group, socket_type, name):
+        if bpy.app.version >= (4, 0, 0):
+            group.node_tree.interface.new_socket(name, in_out='OUTPUT', socket_type=socket_type)
+        else:
+            group.node_tree.outputs.new(socket_type, name)
 
 
 class TextureSlot(bpy.types.PropertyGroup):
