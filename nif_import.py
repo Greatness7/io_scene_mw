@@ -670,7 +670,8 @@ class Mesh(SceneNode):
                     print(f"Warning: Invalid mesh data, custom normals will be skipped: ({ob.name})")
                 else:
                     ob.data.normals_split_custom_set(normals)
-                    ob.data.use_auto_smooth = True
+                    if bpy.app.version < (4, 1, 0):
+                        ob.data.use_auto_smooth = True
 
     def create_uv_sets(self, ob, uv_sets):
         for i, uv in enumerate(uv_sets[:8]):  # max 8 uv sets (blender limitation)

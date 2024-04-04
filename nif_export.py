@@ -589,9 +589,13 @@ class Mesh(SceneNode):
             return
 
         ni.normals.resize(len(ni.vertices), 3)
-        bl.calc_normals_split()
-        bl.loops.foreach_get("normal", ni.normals.ravel())
-        bl.free_normals_split()
+        if bpy.app.version >= (4, 1, 0):
+            bl.corner_normals.foreach_get("vector", ni.normals.ravel())
+        else:
+            bl.calc_normals_split()
+            bl.loops.foreach_get("normal", ni.normals.ravel())
+            bl.free_normals_split()
+
         ni.normals /= la.norm(ni.normals, axis=1, keepdims=True)
 
     def create_uv_sets(self, ni, bl):
@@ -891,9 +895,9 @@ class Mesh(SceneNode):
 
     @staticmethod
     def optimize_vertex_cache(data, skin, morphs):
-        vertex_remap, triangles = meshoptimizer.optimize(data.vertices, data.triangles)
+        vertex_remap, triangles = meshoptimizer.optimize(data.vertices, data.triangles.astype(np.uint))
         if len(data.triangles):
-            data.triangles = triangles
+            data.triangles = triangles.astype(np.ushort)
         if len(data.vertices):
             data.vertices[vertex_remap] = data.vertices.copy()
         if len(data.normals):
