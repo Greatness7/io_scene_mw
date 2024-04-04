@@ -895,9 +895,9 @@ class Mesh(SceneNode):
 
     @staticmethod
     def optimize_vertex_cache(data, skin, morphs):
-        vertex_remap, triangles = meshoptimizer.optimize(data.vertices, data.triangles.astype(np.uint))
+        vertex_remap, triangles = meshoptimizer.optimize(data.vertices, data.triangles.astype(np.uint32))
         if len(data.triangles):
-            data.triangles = triangles.astype(np.ushort)
+            data.triangles = triangles.astype(np.uint16)
         if len(data.vertices):
             data.vertices[vertex_remap] = data.vertices.copy()
         if len(data.normals):
