@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 95),
+    "version": (0, 8, 96),
     "blender": (3, 0, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
@@ -509,6 +509,58 @@ class MarkersList(bpy.types.UIList):
         self.pose_markers.active.select = True
 
 
+class MarkersListCopy(bpy.types.Operator):
+    bl_idname = "marker.mw_markers_copy"
+    bl_options = {"REGISTER", "UNDO"}
+
+    bl_label = "Copy Markers"
+    bl_description = "Copy pose markers to the system clipboard"
+
+    def execute(self, context):
+        try:
+            markers = context.active_object.animation_data.action.pose_markers
+        except:
+            return {"CANCELLED"}
+
+        bpy.context.window_manager.clipboard = "\n".join(
+            f"{marker.frame} {marker.name}" for marker in markers
+        )
+
+        return {"FINISHED"}
+
+
+class MarkersListPaste(bpy.types.Operator):
+    bl_idname = "marker.mw_markers_paste"
+    bl_options = {"REGISTER", "UNDO"}
+
+    bl_label = "Paste Markers"
+    bl_description = "Paste pose markers from the system clipboard"
+
+    def execute(self, context):
+        try:
+            action = context.active_object.animation_data.action
+        except AttributeError:
+            action = context.active_object.animation_data_create().action = (
+                bpy.data.actions.new(f"{context.active_object.name}Action")
+            )
+
+        markers = action.pose_markers
+
+        for marker in markers:
+            markers.remove(marker)
+
+        for line in bpy.context.window_manager.clipboard.split("\n"):
+            try:
+                frame, _, name = line.partition(" ")
+                frame = int(frame)
+            except (AttributeError, ValueError):
+                print(f"Invalid marker format: {line}")
+            else:
+                markers.new(name).frame = frame
+
+        return {"FINISHED"}
+
+
 class MarkersListSort(bpy.types.Operator):
     bl_idname = "marker.mw_markers_sort"
     bl_options = {"REGISTER", "UNDO"}
@@ -527,6 +579,18 @@ class MarkersListSort(bpy.types.Operator):
             for m, t in zip(markers, temp):
                 m.frame, m.name = t
         return {"FINISHED"}
+
+
+class MarkersListMenu(bpy.types.Menu):
+    bl_idname = "DOPESHEET_MT_markers_menu"
+    bl_label = "Markers Specials"
+
+    def draw(self, _context):
+        layout = self.layout
+        layout.operator("marker.mw_markers_copy", icon="COPYDOWN")
+        layout.operator("marker.mw_markers_paste", icon="PASTEDOWN")
+        layout.separator()
+        layout.operator("marker.mw_markers_sort", icon="SORTTIME")
 
 
 class MarkersPanel(bpy.types.Panel):
@@ -562,10 +626,11 @@ class MarkersPanel(bpy.types.Panel):
 
         # Markers Operators
         col = row.column(align=True)
-        col.operator("marker.add", icon='ADD', text="")
-        col.operator("marker.delete", icon='REMOVE', text="")
+        col.operator("marker.add", icon="ADD", text="")
+        col.operator("marker.delete", icon="REMOVE", text="")
         col.separator()
-        col.operator("marker.mw_markers_sort", icon='SORTTIME', text="")
+        col.menu("DOPESHEET_MT_markers_menu", icon="DOWNARROW_HLT", text="")
+
         col.enabled = space_data.show_pose_markers
 
 
@@ -816,8 +881,11 @@ classes = (
     ImportScene,
     ExportScene,
     ObjectPanel,
-    MarkersList,
+    MarkersListCopy,
+    MarkersListPaste,
     MarkersListSort,
+    MarkersListMenu,
+    MarkersList,
     MarkersPanel,
     MaterialCreateShader,
     MaterialPanel,
