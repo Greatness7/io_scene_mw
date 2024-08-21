@@ -1525,7 +1525,9 @@ class Animation(SceneNode):
             )
             return la.solve(self.parent.matrix_world, matrix)
         else: # non-bone animations
-            return np.asarray(self.source.matrix_parent_inverse, dtype="<f")
+            if self.parent is not None:
+                return la.inv(self.parent.matrix_world)
+            return ID44
 
     @staticmethod
     def get_fcurves_dict(bl_object):
