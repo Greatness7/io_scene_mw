@@ -1068,7 +1068,7 @@ class Material(SceneNode):
 
     def create_pixel_data(self, image, include_alpha) -> nif.NiPixelData:
         if pixel_data := self.exporter.pixel_datas.get(image):
-            assert pixel_data.format.has_alpha == include_alpha
+            assert pixel_data.pixel_format.has_alpha == include_alpha
         else:
             assert image.channels == 4
 
