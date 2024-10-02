@@ -1003,9 +1003,12 @@ class Material(SceneNode):
             name = f"{base_name}.{index:03}"
 
     @staticmethod
-    def resolve_texture_path(relpath):
+    def resolve_texture_path(
+        relpath,
+        case_insensitive = pathlib.Path(__file__.upper()).exists()
+    ):
         # get the initial filepath
-        path = pathlib.Path(relpath.lower())
+        path = pathlib.Path(bpy.path.native_pathsep(relpath).lower())
 
         # discard "data files" prefix
         if path.parts[0] == "data files":
@@ -1022,11 +1025,15 @@ class Material(SceneNode):
         prefs = bpy.context.preferences.addons["io_scene_mw"].preferences
         for item in prefs.texture_paths:
             abspath = item.name / path
-            if abspath.parent.exists():
-                for suffix in suffixes:
-                    abspath = abspath.with_suffix(suffix)
-                    if abspath.exists():
-                        return abspath
+            for suffix in suffixes:
+                abspath = abspath.with_suffix(suffix)
+                if not case_insensitive:
+                    abspath = pathlib.Path(bpy.path.resolve_ncase(str(abspath)))
+                if abspath.exists():
+                    return abspath
+
+
+
 
         return ("textures" / path)
 
