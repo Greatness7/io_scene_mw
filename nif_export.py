@@ -176,9 +176,10 @@ class Exporter:
                 # ensure meshes are triangulated
                 if not is_triangulated:
                     m = source.modifiers.new("", "TRIANGULATE")
-                    m.keep_custom_normals = True
                     m.quad_method = "FIXED"
                     m.ngon_method = "CLIP"
+                    if bpy.app.version < (4, 2, 0):
+                        m.keep_custom_normals = True
                     temp_modifiers.append((source, m))
 
                 # ensure all shape keys are mute
@@ -321,7 +322,9 @@ class Exporter:
 
     @property
     def scale_correction(self):
-        addon = bpy.context.preferences.addons["io_scene_mw"]
+        addon = bpy.context.preferences.addons[
+            "bl_ext.user_default.io_scene_mw" if bpy.app.version >= (4, 2, 0) else "io_scene_mw"
+        ]
         return 1 / addon.preferences.scale_correction
 
     @property

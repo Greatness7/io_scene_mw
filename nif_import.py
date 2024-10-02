@@ -376,7 +376,9 @@ class Importer:
 
     @property
     def scale_correction(self):
-        addon = bpy.context.preferences.addons["io_scene_mw"]
+        addon = bpy.context.preferences.addons[
+            "bl_ext.user_default.io_scene_mw" if bpy.app.version >= (4, 2, 0) else "io_scene_mw"
+        ]
         return addon.preferences.scale_correction
 
 
@@ -1022,8 +1024,10 @@ class Material(SceneNode):
         suffixes = {path.suffix, ".dds", ".tga", ".bmp"}
 
         # evaluate final image path
-        prefs = bpy.context.preferences.addons["io_scene_mw"].preferences
-        for item in prefs.texture_paths:
+        addon = bpy.context.preferences.addons[
+            "bl_ext.user_default.io_scene_mw" if bpy.app.version >= (4, 2, 0) else "io_scene_mw"
+        ]
+        for item in addon.preferences.texture_paths:
             abspath = item.name / path
             for suffix in suffixes:
                 abspath = abspath.with_suffix(suffix)
@@ -1031,9 +1035,6 @@ class Material(SceneNode):
                     abspath = pathlib.Path(bpy.path.resolve_ncase(str(abspath)))
                 if abspath.exists():
                     return abspath
-
-
-
 
         return ("textures" / path)
 

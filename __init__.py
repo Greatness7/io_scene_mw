@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 100),
+    "version": (0, 8, 101),
     "blender": (3, 0, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",
@@ -18,6 +18,7 @@ from bpy_extras.io_utils import ExportHelper, ImportHelper  # type: ignore
 
 PATH = Path(__file__).parent
 
+VERSION = bl_info["version"]
 
 # ------------
 # Make lib contents accessible to other addons or scripts.
@@ -56,10 +57,10 @@ class UpdateCheck(bpy.types.Operator):
     def execute(self, context):
         version, zipball_url = self.get_latest_version_info()
 
-        if version > bl_info["version"]:
+        if version > VERSION:
             # require manual install on non-patch releases
             # cannot replace native libraries while loaded
-            if version[:2] > bl_info["version"][:2]:
+            if version[:2] > VERSION[:2]:
                 Preferences.update_status = "UPDATE_FORBIDDEN"
                 Preferences.update_url = zipball_url
             else:
@@ -381,9 +382,10 @@ class ImportScene(bpy.types.Operator, ImportHelper):
         return context.mode == 'OBJECT'
 
     def execute(self, context):
-        print(f"Blender Morrowind Plugin {bl_info['version']}")
+        print(f"Blender Morrowind Plugin {VERSION}")
         from . import nif_import
         kwargs = self.as_keywords(ignore=("filename_ext", "filter_glob", "check_existing"))
+
         return nif_import.load(context, **kwargs)
 
 
@@ -460,7 +462,7 @@ class ExportScene(bpy.types.Operator, ExportHelper):
         return context.mode == 'OBJECT'
 
     def execute(self, context):
-        print(f"Blender Morrowind Plugin {bl_info['version']}")
+        print(f"Blender Morrowind Plugin {VERSION}")
         from . import nif_export
         kwargs = self.as_keywords(ignore=("filename_ext", "filter_glob", "check_existing"))
         return nif_export.save(context, **kwargs)
