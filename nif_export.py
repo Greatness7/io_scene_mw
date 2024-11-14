@@ -322,9 +322,7 @@ class Exporter:
 
     @property
     def scale_correction(self):
-        addon = bpy.context.preferences.addons[
-            "bl_ext.user_default.io_scene_mw" if bpy.app.version >= (4, 2, 0) else "io_scene_mw"
-        ]
+        addon = bpy.context.preferences.addons[__package__]
         return 1 / addon.preferences.scale_correction
 
     @property
