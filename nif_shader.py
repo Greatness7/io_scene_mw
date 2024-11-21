@@ -27,7 +27,8 @@ def create_material(name=""):
     material = bpy.data.materials.new(name)
     material.use_nodes = True
     material.blend_method = "OPAQUE"
-    material.shadow_method = "NONE"
+    if bpy.app.version < (4, 3, 0):
+        material.shadow_method = "NONE"
     material.alpha_threshold = 0.0
     material.use_backface_culling = True
     material.show_transparent_back = False
