@@ -1,12 +1,19 @@
 import platform
 
-if platform.system() == 'Linux':
-	from .linux import meshoptimizer
-elif platform.system() == 'Darwin':
-	from .macos import meshoptimizer
-elif platform.system() == 'Windows':
-	from .windows import meshoptimizer
-else:
-    raise ImportError('Unsupported OS')
+system = platform.system()
+architecture = platform.machine()
 
-optimize = meshoptimizer.optimize
+if system == "Linux":
+    from .linux import meshoptimizer
+elif system == "Darwin":
+    if architecture == "x86_64":
+        from .macos.x86_64 import meshoptimizer
+    elif architecture == "arm64":
+        from .macos.arm64 import meshoptimizer
+elif system == "Windows":
+    from .windows import meshoptimizer
+
+try:
+    optimize = meshoptimizer.optimize
+except (NameError, AttributeError):
+    ImportError(f"Unsupported system or architecture: {system}/{architecture}")
