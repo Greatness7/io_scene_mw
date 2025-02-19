@@ -13,5 +13,5 @@ license = ["SPDX:GPL-2.0-or-later"]
 platforms = ["windows-x64", "macos-arm64", "linux-x64"]
 
 [permissions]
-files = "Import/export FBX from/to disk"
+files = "Import/export NIF from/to disk"
 clipboard = "Copy and paste pose markers"
