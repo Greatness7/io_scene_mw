@@ -312,6 +312,7 @@ class Importer:
     @process.register("NiLODNode")
     @process.register("NiSwitchNode")
     @process.register("NiBSAnimationNode")
+    @process.register("NiCollisionSwitch")
     def process_empty(self, node):
         self.nodes[node] = Empty
 
