@@ -2,7 +2,6 @@ import bpy
 
 import timeit
 import pathlib
-import itertools
 import collections
 
 import numpy as np

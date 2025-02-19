@@ -2,14 +2,12 @@ import bpy
 
 import timeit
 import pathlib
-import itertools
 import collections
 
 import numpy as np
 import numpy.linalg as la
 
 from es3 import nif
-from es3.utils import meshoptimizer
 from es3.utils.math import ID44, compose, decompose
 
 from . import nif_utils
