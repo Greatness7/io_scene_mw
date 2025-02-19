@@ -105,6 +105,14 @@ class NiSourceTexture(NiTexture):
 
         self.filename = str(path).replace(pathlib.os.sep, "\\")
 
+    @property
+    def file_name(self) -> str:
+        return self.filename
+
+    @file_name.setter
+    def file_name(self, file_name):
+        self.filename = file_name
+
 
 if __name__ == "__main__":
     from es3.nif import NiPixelData
