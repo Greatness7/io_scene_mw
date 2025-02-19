@@ -1,16 +1,14 @@
-[tool.poetry]
+[project]
 name = "io_scene_mw"
-version = "0.0.0"
+version = "0.8.104"
 description = ""
-authors = []
+authors = [{ name = "Greatness7" }]
+dependencies = []
+requires-python = ">=3.11, <3.12"
+readme = "README.md"
 
-[tool.poetry.dependencies]
-python = "^3.10"
-
-[tool.poetry.dev-dependencies]
-numpy = "^1.22"
-fake-bpy-module-latest = "^20220602"
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+[dependency-groups]
+dev = [
+    "numpy (>=1.24, <1.25)",
+    "fake-bpy-module-latest",
+]
