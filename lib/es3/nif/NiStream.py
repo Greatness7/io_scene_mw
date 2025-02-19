@@ -113,8 +113,7 @@ class NiStream:
 
         def extract_kf_controller(owner):
             if isinstance(owner, nif.NiObjectNET):
-                kf_controller = owner.controllers.discard_type(nif.NiKeyframeController)
-                if kf_controller:
+                if kf_controller := owner.controllers.discard_type(nif.NiKeyframeController):
                     kf_controller.target = None
                     kf_controllers[owner] = kf_controller
 

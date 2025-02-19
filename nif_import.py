@@ -674,9 +674,9 @@ class Mesh(SceneNode):
                         ob.data.use_auto_smooth = True
 
     def create_uv_sets(self, ob, uv_sets):
-        for i, uv in enumerate(uv_sets[:8]):  # max 8 uv sets (blender limitation)
-            ob.data.uv_layers.new()
-            ob.data.uv_layers[i].data.foreach_set("uv", uv.ravel())
+        for uv_set in uv_sets[:8]:  # max 8 uv sets (blender limitation)
+            uv = ob.data.uv_layers.new()
+            uv.data.foreach_set("uv", uv_set.ravel())
 
     def create_vertex_colors(self, ob, vertex_colors):
         if len(vertex_colors):
@@ -700,7 +700,7 @@ class Mesh(SceneNode):
 
             weights = vertex_weights[i]
             for j in np.flatnonzero(weights).tolist():
-                vg.add([j], weights[j], "ADD")
+                vg.add((j,), weights[j], "ADD")
 
     def create_vertex_morphs(self, ob, vertex_morphs):
         if not len(vertex_morphs):
