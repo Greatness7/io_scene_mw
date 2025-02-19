@@ -34,7 +34,7 @@ class NiVisData(NiObject):
     def values(self, array: ndarray):
         self.keys["f1"] = array
 
-    def get_start_stop_times(self) -> tuple[int, int]:
+    def get_start_stop_times(self) -> tuple[float, float]:
         if len(self.keys) == 0:
             return (0, 0)
         else:

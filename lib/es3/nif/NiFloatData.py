@@ -64,7 +64,7 @@ class NiFloatData(NiObject):
             return 5  # (time, value, tension, continuity, bias)
         raise Exception(f"{self.type} does not support '{self.key_type}'")
 
-    def get_start_stop_times(self) -> tuple[int, int]:
+    def get_start_stop_times(self) -> tuple[float, float]:
         if len(self.keys) == 0:
             return (0, 0)
         else:

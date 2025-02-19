@@ -24,7 +24,7 @@ class NiKeyframeData(NiObject):
     def apply_scale(self, scale):
         self.translations.apply_scale(scale)
 
-    def get_start_stop_times(self) -> tuple[int, int]:
+    def get_start_stop_times(self) -> tuple[float, float]:
         start_time = float('inf')
         stop_time = -start_time
 

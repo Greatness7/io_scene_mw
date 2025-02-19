@@ -10,6 +10,8 @@ from es3.utils.math import np
 class NiBinaryStream(BinaryStream):
     __slots__ = "history",
 
+    history: dict[NiObject, int]
+
     def read_objects(self, object_types) -> Iterable[NiObject]:
         # prep history
         self.history = {}
