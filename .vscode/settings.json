@@ -1,3 +1,8 @@
 {
-    "python.analysis.extraPaths": ["lib"]
+    "python.analysis.extraPaths": [
+        "lib"
+    ],
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportInvalidTypeForm": false
+    }
 }
