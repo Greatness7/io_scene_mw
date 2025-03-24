@@ -1,6 +1,6 @@
 [project]
 name = "io_scene_mw"
-version = "0.8.104"
+version = "0.8.105"
 description = ""
 authors = [{ name = "Greatness7" }]
 dependencies = []

@@ -1161,7 +1161,7 @@ class Animation(SceneNode):
         if len(markers) == 0:
             return False
 
-        text_data = self.output.extra_data = nif.NiTextKeyExtraData()
+        text_data = nif.NiTextKeyExtraData()
         text_data.keys.resize(len(markers))
 
         for i, marker in enumerate(markers):
@@ -1171,6 +1171,8 @@ class Animation(SceneNode):
 
         text_data.collapse_groups()
         text_data.keys.sort()
+
+        self.output.extra_data = text_data
 
         return True
 
