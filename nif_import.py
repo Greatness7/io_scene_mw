@@ -1312,7 +1312,13 @@ class Animation(SceneNode):
         try:
             action = bl_object.animation_data.action
         except AttributeError:
-            action = bl_object.animation_data_create().action = bpy.data.actions.new(f"{bl_object.name}Action")
+            action = bpy.data.actions.new(f"{bl_object.name}Action")
+            anim_data = bl_object.animation_data_create()
+            anim_data.action = action
+
+            if bpy.app.version >= (4, 4, 0):
+                anim_data.action_slot = action.slots.new(id_type=bl_object.id_type, name=bl_object.name)
+
         return action
 
     @staticmethod
