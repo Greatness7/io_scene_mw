@@ -145,7 +145,6 @@ class TextureProperties(bpy.types.PropertyGroup):
                 pass
 
     def remove_links(self):
-        outputs = self.outputs
         inputs = self.shader_inputs
         links = self.id_data.node_tree.links
         for name in self.active_socket_names():
@@ -172,10 +171,10 @@ class TextureProperties(bpy.types.PropertyGroup):
 
     def active_socket_names(self):
         outputs = self.texture_node.outputs
-        return (l.to_socket.name for o in outputs for l in o.links)
+        return (link.to_socket.name for o in outputs for link in o.links)
 
     def nodes_of_type(self, bl_idname):
-        return (n for n in self.nodes if n.bl_idname == bl_idname)
+        return (node for node in self.nodes if node.bl_idname == bl_idname)
 
 
 class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):

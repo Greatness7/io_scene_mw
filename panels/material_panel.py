@@ -28,10 +28,9 @@ class MaterialPanel(bpy.types.Panel, MaterialPanelBase):
     bl_label = "Morrowind"
 
     def draw(self, context):
-        ob = context.active_object
         material = context.material
         try:
-            this = material.mw.validate()
+            material.mw.validate()
             MaterialPanelBase.is_active = True
         except (AttributeError, TypeError):
             MaterialPanelBase.is_active = False

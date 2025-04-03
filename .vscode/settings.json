@@ -1,4 +1,13 @@
 {
+    "[python]": {
+        "editor.tabSize": 4,
+        "editor.formatOnSave": false,
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.codeActionsOnSave": {
+            // "source.fixAll": "explicit",
+            // "source.organizeImports": "explicit"
+        }
+    },
     "python.analysis.extraPaths": [
         "lib"
     ],

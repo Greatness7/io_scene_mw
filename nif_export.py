@@ -185,7 +185,7 @@ class Exporter:
                 # ensure all shape keys are mute
                 if source.data.shape_keys:
                     for k in source.data.shape_keys.key_blocks:
-                        if k.mute != True:
+                        if not k.mute:
                             k.mute = True
                             temp_mute_keys.append(k)
 
@@ -435,7 +435,7 @@ class SceneNode:
         if self.is_bounding_box:
             return
 
-        l, r, s = decompose(self.matrix_local)
+        t, r, s = decompose(self.matrix_local)
 
         if not np.allclose(s[:1], s[1:], rtol=0, atol=0.001):
             print(f"[INFO] {self.source.name} has non-uniform scale")
@@ -446,7 +446,7 @@ class SceneNode:
             except AttributeError:
                 pass  # pose bone
 
-            self.matrix_local = compose(l, r, 1)
+            self.matrix_local = compose(t, r, 1)
             for child in self.children:
                 child.matrix_local[:3, :3] *= s
 
@@ -499,9 +499,9 @@ class Empty(SceneNode):
         return self.output
 
     def create_bounding_volume(self):
-        l, r, s = decompose(self.matrix_world)
+        t, r, s = decompose(self.matrix_world)
         s *= self.source.empty_display_size
-        self.output.bounding_volume = nif.NiBoxBV(center=l, axes=r, extents=s)
+        self.output.bounding_volume = nif.NiBoxBV(center=t, axes=r, extents=s)
         self.output.matrix = ID44
 
 

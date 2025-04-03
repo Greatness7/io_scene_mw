@@ -213,9 +213,9 @@ class Importer:
         root_bone = next(self.iter_bones(root))
 
         # calculate corrected transformation matrix
-        l, r, s = decompose(root_bone.matrix_posed)
+        t, r, s = decompose(root_bone.matrix_posed)
         r = nif_utils.snap_rotation(r)
-        corrected_matrix = compose(l, r, s)
+        corrected_matrix = compose(t, r, s)
 
         # only do corrections if they are necessary
         if np.allclose(root_bone.matrix_world, corrected_matrix, rtol=0, atol=1e-6):
@@ -266,11 +266,13 @@ class Importer:
 
             t = kf_controller.data.translations
             if len(t.values):
+                rotation = posed_offset[:3, :3].T
+                translation = posed_offset[:3, 3]
                 # convert to pose space
-                t.values[:] = t.values @ posed_offset[:3, :3].T + posed_offset[:3, 3]
+                t.values[:] = t.values @ rotation + translation
                 if t.key_type.name == "BEZ_KEY":
-                    t.in_tans[:] = t.in_tans @ posed_offset[:3, :3].T
-                    t.out_tans[:] = t.out_tans @ posed_offset[:3, :3].T
+                    t.in_tans[:] = t.in_tans @ rotation
+                    t.out_tans[:] = t.out_tans @ rotation
 
             r = kf_controller.data.rotations
             if len(r.values):
@@ -1209,7 +1211,7 @@ class Animation(SceneNode):
             bl_slot = next(s for s in bl_prop.texture_slots if s.layer == uv_name)
             bl_node = bl_slot.mapping_node
         except (IndexError, StopIteration):
-            print(f"Warning: skipping NiUVController due to invalid texture set")
+            print("Warning: skipping NiUVController due to invalid texture set")
             return
 
         channels = {

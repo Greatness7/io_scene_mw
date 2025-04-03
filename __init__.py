@@ -31,7 +31,7 @@ register, unregister = bpy.utils.register_submodule_factory(__name__, submodules
 
 
 if "reload" in locals():
-    reload()  # pyright: ignore[reportUndefinedVariable]
+    reload()  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
 
 
 def reload() -> None:
