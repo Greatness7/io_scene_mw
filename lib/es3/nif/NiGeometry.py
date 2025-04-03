@@ -4,6 +4,8 @@ from es3.utils.flags import bool_property
 from es3.utils.math import decompose_uniform, zeros
 from .NiAVObject import NiAVObject
 
+import numpy.linalg as la
+
 
 class NiGeometry(NiAVObject):
     data: NiGeometryData | None = None
@@ -92,8 +94,11 @@ class NiGeometry(NiAVObject):
             if len(deformed_norms):
                 deformed_norms[i] += w * (data.normals[i] @ rotation.T)
 
+        # re-unitize normals
+        deformed_norms /= la.norm(deformed_norms, axis=1, keepdims=True)
+
         data.vertices = deformed_verts
-        data.normals = deformed_norms  # TODO: normalize?
+        data.normals = deformed_norms
 
 
 if __name__ == "__main__":
