@@ -9,10 +9,15 @@ def execute(mesh):
     image = get_base_texture_image(mesh.active_material)
 
     material = create_material(name)
-    try:  # assign to active index if viable
-        mesh.data.materials[mesh.active_material_index] = material
+
+    try:
+        slot = mesh.material_slots[mesh.active_material_index]
     except IndexError:
-        mesh.data.materials.append(material)
+        mesh.data.materials.append(None)
+        slot = mesh.material_slots[-1]
+
+    slot.link = 'OBJECT'
+    slot.material = material
 
     try:
         material.mw.base_texture.image = image

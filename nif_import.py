@@ -50,6 +50,7 @@ class Importer:
         vars(self).update(config)
         self.nodes = {}
         self.materials = {}
+        self.mesh_data = {}
         self.history = collections.defaultdict(set)
         self.armatures = collections.defaultdict(set)
         self.colliders = collections.defaultdict(set)
@@ -369,6 +370,18 @@ class Importer:
             if getattr(node.source, "skin", None):
                 yield node
 
+    def get_mesh_data(self, shape, name) -> bpy.types.Mesh:
+        if shape.morph_targets or shape.bone_influences:
+            # TODO: Support instancing of animated and skinned meshes.
+            return bpy.data.meshes.new(name)
+
+        try:
+            bl_data = self.mesh_data[shape.data]
+        except KeyError:
+            bl_data = self.mesh_data[shape.data] = bpy.data.meshes.new(name)
+
+        return bl_data
+
     def import_keyframe_data(self, data):
         kf_path = self.filepath.with_suffix(".kf")
         if not kf_path.exists():
@@ -608,23 +621,26 @@ class Mesh(SceneNode):
         self.__dict__ = node.__dict__
 
     def create(self):
-        bl_data = bpy.data.meshes.new(self.name)
+        bl_data = self.importer.get_mesh_data(self.source, self.name)
         bl_object = Empty(self).create(bl_data)
+
         if len(self.source.data.vertices) == 0:
             return bl_object
 
-        ni_data = self.get_mesh_data()
+        # We only need to calculate the geometry once per mesh instance.
+        if bl_data.users == 1:
+            ni_data = self.calc_geometry_data()
 
-        self.create_vertices(bl_object, ni_data.vertices)
-        self.create_triangles(bl_object, ni_data.triangles)
+            self.create_vertices(bl_object, ni_data.vertices)
+            self.create_triangles(bl_object, ni_data.triangles)
 
-        self.create_vertex_colors(bl_object, ni_data.vertex_colors)
-        self.create_uv_sets(bl_object, ni_data.uv_sets)
+            self.create_vertex_colors(bl_object, ni_data.vertex_colors)
+            self.create_uv_sets(bl_object, ni_data.uv_sets)
 
-        self.create_vertex_weights(bl_object, ni_data.vertex_weights)
-        self.create_vertex_morphs(bl_object, ni_data.vertex_morphs)
+            self.create_vertex_weights(bl_object, ni_data.vertex_weights)
+            self.create_vertex_morphs(bl_object, ni_data.vertex_morphs)
 
-        self.create_normals(bl_object, ni_data.normals)
+            self.create_normals(bl_object, ni_data.normals)
 
         try:
             self.output.display_type = self.parent.output.display_type
@@ -737,7 +753,7 @@ class Mesh(SceneNode):
         # update frame range
         animation.update_frame_range(self.source.controller)
 
-    def get_mesh_data(self):
+    def calc_geometry_data(self):
         vertices = self.source.data.vertices
         normals = self.source.data.normals
         uv_sets = self.source.data.uv_sets.copy()
@@ -834,6 +850,14 @@ class Material(SceneNode):
         ni_texture = properties.get(nif.NiTexturingProperty)
         ni_wireframe = properties.get(nif.NiWireframeProperty)
 
+        # Vertex colors need a texturing property present to be visible.
+        if (ni_texture is None) and len(self.source.data.vertex_colors):
+            ni_texture = nif.NiTexturingProperty()
+
+        # Blender stores wireframe on the object rather than a material.
+        if ni_wireframe and ni_wireframe.wireframe:
+            self.output.display_type = "WIRE"
+
         # Re-Use Materials
         name = self.calc_name_from_textures(ni_texture)
         if self.apply_existing_material(name, ni_alpha):
@@ -853,7 +877,7 @@ class Material(SceneNode):
             bl_prop = self.importer.materials[props_hash] = nif_shader.execute(self.output)
         else:
             # material already exists, reuse it
-            self.output.data.materials.append(bl_prop.material)
+            self.link_object_material(self.output, bl_prop.material)
             return
         finally:
             if self.importer.use_existing_materials:
@@ -979,6 +1003,10 @@ class Material(SceneNode):
         return " | ".join(f"{k.rpartition('_')[0]}:{v}" for k, v in names.items())
 
     def apply_existing_material(self, name, ni_alpha):
+        """
+        Check if a material with the same name and properties already exists
+        in the current blend file. If so, use it instead of making a new one.
+        """
         if not self.importer.use_existing_materials:
             return
 
@@ -992,15 +1020,30 @@ class Material(SceneNode):
                 bl_prop = bpy.data.materials[name].mw.validate()
             except (LookupError, TypeError):
                 break
+
             if (
                 bl_prop.use_vertex_colors == use_vertex_colors
                 and bl_prop.use_alpha_blend == use_alpha_blend
                 and bl_prop.use_alpha_clip == use_alpha_clip
             ):
-                self.output.data.materials.append(bl_prop.material)
+                self.link_object_material(self.output, bl_prop.material)
                 return True
+
             index += 1
             name = f"{base_name}.{index:03}"
+
+    @staticmethod
+    def link_object_material(bl_object, bl_material):
+        # Use any existing empty material slot first.
+        for slot in bl_object.material_slots:
+            if slot.material is None:
+                break
+        else:
+            bl_object.data.materials.append(None)
+            slot = bl_object.material_slots[-1]
+
+        slot.link = "OBJECT"
+        slot.material = bl_material
 
     @staticmethod
     def resolve_texture_path(
