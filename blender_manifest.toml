@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "io_scene_mw"
-version = "0.8.105"
+version = "0.8.106"
 name = "Morrowind Blender Plugin"
 tagline = "Import/Export files for Morrowind"
 maintainer = "Greatness7 <greatness7@gmail.com>"
