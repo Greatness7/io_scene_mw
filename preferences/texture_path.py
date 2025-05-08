@@ -2,7 +2,7 @@ import bpy
 
 
 def addon_preferences(context):
-    return context.preferences.addons[__package__].preferences
+    return context.preferences.addons["io_scene_mw"].preferences
 
 
 class TexturePath(bpy.types.PropertyGroup):
