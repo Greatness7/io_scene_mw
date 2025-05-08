@@ -6,7 +6,7 @@ import bpy
 bl_info = {
     "name": "Morrowind (.nif)",
     "author": "Greatness7",
-    "version": (0, 8, 107),
+    "version": (0, 8, 108),
     "blender": (3, 6, 0),
     "location": "File > Import/Export > Morrowind (.nif)",
     "description": "Import/Export files for Morrowind",

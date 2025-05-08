@@ -1,6 +1,6 @@
 [project]
 name = "io_scene_mw"
-version = "0.8.107"
+version = "0.8.108"
 description = "Morrowind Blender Plugin"
 authors = [{ name = "Greatness7" }]
 dependencies = []
