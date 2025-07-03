@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import pathlib
 from enum import IntEnum
 
@@ -73,7 +74,7 @@ class NiSourceTexture(NiTexture):
         stream.write_ubyte(self.is_static)
 
     def sanitize_filename(self):
-        filename = self.filename.lower().replace("\\", pathlib.os.sep)
+        filename = self.filename.lower().replace("\\", os.sep)
 
         try:
             path = pathlib.Path(filename)
@@ -103,7 +104,7 @@ class NiSourceTexture(NiTexture):
                 return
             path = path.relative_to(path.parents[textures_index])
 
-        self.filename = str(path).replace(pathlib.os.sep, "\\")
+        self.filename = str(path).replace(os.sep, "\\")
 
     @property
     def file_name(self) -> str:
