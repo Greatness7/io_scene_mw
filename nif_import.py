@@ -742,7 +742,7 @@ class Mesh(SceneNode):
 
             # create morph fcurves
             data_path = shape_key.path_from_id("value")
-            fc = action.fcurves.new(data_path)
+            fc = animation.create_fcurves(action, data_path)
 
             # add fcurve keyframes
             fc.keyframe_points.add(len(target.keys))
@@ -1136,7 +1136,7 @@ class Animation(SceneNode):
 
         # build blender fcurves
         for i in range(3):
-            fc = action.fcurves.new(data_path, index=i, action_group=self.bone_name)
+            fc = self.animation.create_fcurves(action, data_path, index=i, action_group=self.bone_name)
             fc.keyframe_points.add(len(data.keys))
             fc.keyframe_points.foreach_set("co", data.keys[:, (0, i+1)].ravel())
             self.create_interpolation_data(data, fc, axis=i)
@@ -1164,7 +1164,7 @@ class Animation(SceneNode):
             data_path = self.output.path_from_id("rotation_euler")
 
             # build blender fcurves
-            fc = action.fcurves.new(data_path, index=i, action_group=self.output.name)
+            fc = self.animation.create_fcurves(action, data_path, index=i, action_group=self.output.name)
             fc.keyframe_points.add(len(data.keys))
             fc.keyframe_points.foreach_set("co", data.keys[:, :2].ravel())
             self.create_interpolation_data(data, fc)
@@ -1180,7 +1180,7 @@ class Animation(SceneNode):
 
         # build blender fcurves
         for i in range(4):
-            fc = action.fcurves.new(data_path, index=i, action_group=self.output.name)
+            fc = self.animation.create_fcurves(action, data_path, index=i, action_group=self.output.name)
             fc.keyframe_points.add(len(data.keys))
             fc.keyframe_points.foreach_set("co", data.keys[:, (0, i+1)].ravel())
             fc.update()
@@ -1195,7 +1195,7 @@ class Animation(SceneNode):
 
         # build blender fcurves
         for i in range(3):
-            fc = action.fcurves.new(data_path, index=i, action_group=self.output.name)
+            fc = self.animation.create_fcurves(action, data_path, index=i, action_group=self.output.name)
             fc.keyframe_points.add(len(data.keys))
             fc.keyframe_points.foreach_set("co", data.keys[:, :2].ravel())
             self.create_interpolation_data(controller.data.scales, fc)
@@ -1226,7 +1226,7 @@ class Animation(SceneNode):
             return
 
         # build blender fcurves
-        fc = action.fcurves.new(data_path, index=0, action_group=self.output.name)
+        fc = self.animation.create_fcurves(action, data_path, index=0, action_group=self.output.name)
         fc.keyframe_points.add(len(keys))
         fc.keyframe_points.foreach_set("co", keys.ravel())
         fc.update()
@@ -1274,7 +1274,7 @@ class Animation(SceneNode):
         for sources, data_path in channels.items():
             for i, uv_data in enumerate(sources):
                 # build blender fcurves
-                fc = action.fcurves.new(data_path, index=i, action_group=uv_name)
+                fc = self.animation.create_fcurves(action, data_path, index=i, action_group=uv_name)
                 fc.keyframe_points.add(len(uv_data.keys))
                 fc.keyframe_points.foreach_set("co", uv_data.keys[:, :2].ravel())
                 self.create_interpolation_data(uv_data, fc)
@@ -1311,7 +1311,7 @@ class Animation(SceneNode):
 
         # build blender fcurves
         for i in range(3):
-            fc = action.fcurves.new(data_path, index=i, action_group=bl_prop.material.name)
+            fc = self.animation.create_fcurves(action, data_path, index=i, action_group=bl_prop.material.name)
             fc.keyframe_points.add(len(keys))
             fc.keyframe_points.foreach_set("co", keys[:, (0, i+1)].ravel())
             self.create_interpolation_data(data, fc)
@@ -1342,7 +1342,7 @@ class Animation(SceneNode):
         data_path = bl_prop.opacity_input.path_from_id("default_value")
 
         # build blender fcurves
-        fc = action.fcurves.new(data_path, index=0, action_group=bl_prop.material.name)
+        fc = self.animation.create_fcurves(action, data_path, index=0, action_group=bl_prop.material.name)
         fc.keyframe_points.add(len(keys))
         fc.keyframe_points.foreach_set("co", keys[:, :2].ravel())
         self.create_interpolation_data(data, fc)
@@ -1363,6 +1363,15 @@ class Animation(SceneNode):
                 anim_data.action_slot = action.slots.new(id_type=bl_object.id_type, name=bl_object.name)
 
         return action
+
+    @staticmethod
+    def create_fcurves(action, data_path, index=0, action_group=""):
+        if bpy.app.version >= (5, 0, 0):
+            from bpy_extras import anim_utils
+            channelbag = anim_utils.action_ensure_channelbag_for_slot(action, *action.slots)
+            return channelbag.fcurves.ensure(data_path, index=index, group_name=action_group)
+        else:
+            return action.fcurves.new(data_path, index=index, action_group=action_group)
 
     @staticmethod
     def create_interpolation_data(ni_data, fcurves, axis=...):

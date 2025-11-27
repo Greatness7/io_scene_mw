@@ -1537,7 +1537,13 @@ class Animation(SceneNode):
         fcurves_dict = collections.defaultdict(list)
 
         try:
-            fcurves = bl_object.animation_data.action.fcurves
+            anim_data = bl_object.animation_data
+            if bpy.app.version >= (5, 0, 0):
+                from bpy_extras import anim_utils
+                channelbag = anim_utils.animdata_get_channelbag_for_assigned_slot(anim_data)
+                fcurves = channelbag.fcurves
+            else:
+                fcurves = anim_data.action.fcurves
         except AttributeError:
             pass
         else:
