@@ -64,7 +64,8 @@ class Importer:
 
         # fix transforms
         if self.discard_root_transforms:
-            data.root.matrix = ID44
+            if isinstance(data.root, nif.NiNode):
+                data.root.matrix = ID44
 
         # attach kf file
         if self.attach_keyframe_data:
