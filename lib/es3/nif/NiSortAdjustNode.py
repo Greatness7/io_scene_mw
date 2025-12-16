@@ -9,6 +9,7 @@ class SortingMode(IntEnum):
     SORTING_INHERIT = 0
     SORTING_OFF = 1
     SORTING_SUBSORT = 2
+    SORTING_GROUPED = 64
 
 
 class NiSortAdjustNode(NiNode):
