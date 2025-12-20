@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from es3.utils.math import compose, decompose_uniform, ID33, la, np, ZERO3, zeros
+from es3.utils.math import compose, decompose_uniform, ID33, la, np, ZERO3, zeros, get_exact_center_radius
 from .NiObject import NiObject
 
 _dtype = np.dtype("<H, <f")
@@ -38,12 +38,16 @@ class NiSkinDataBoneData(NiObject):  # TODO Not NiObject
         self.center *= scale
         self.radius *= scale
 
-    def update_center_radius(self, vertices):
+    def update_center_radius(self, vertices, exact_precision=None):
         if len(vertices) == 0:
             self.center[:] = self.radius = 0
         else:
-            center = (vertices.min(axis=0) + vertices.max(axis=0)) * 0.5
-            radius = float(la.norm(center - vertices, axis=1).max())
+            if exact_precision is None:
+                center = (vertices.min(axis=0) + vertices.max(axis=0)) * 0.5
+                radius = float(la.norm(center - vertices, axis=1).max())
+            else:
+                center, radius = get_exact_center_radius(vertices, precision=exact_precision)
+
             self.center = self.scale * (self.rotation @ center) + self.translation
             self.radius = self.scale * radius
 

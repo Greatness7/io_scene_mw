@@ -98,3 +98,17 @@ def quaternion_mul(a, b, out=None):
     )
 
     return np.stack(result, axis=-1, out=out)
+
+
+def get_exact_center_radius(vertices, precision=0.001) -> tuple[float, float]:
+    if len(vertices) == 0:
+        return 0.0, 0.0
+
+    from .miniball import get_bounding_ball
+
+    rounded = np.round(vertices / precision) * precision
+    _, indices = np.unique(rounded, axis=0, return_index=True)
+
+    center, radius_sq = get_bounding_ball(vertices[indices], epsilon=0.001)
+
+    return center, radius_sq ** 0.5

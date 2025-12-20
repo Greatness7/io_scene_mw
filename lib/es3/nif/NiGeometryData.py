@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from es3.utils.math import la, ZERO3, zeros
+from es3.utils.math import la, ZERO3, zeros, get_exact_center_radius
 from .NiObject import NiObject
 
 
@@ -57,12 +57,20 @@ class NiGeometryData(NiObject):
         self.center *= scale
         self.radius *= scale
 
-    def update_center_radius(self):
+    def update_center_radius(self, exact_precision=None):
         if len(self.vertices) == 0:
             self.center[:] = self.radius = 0
         else:
-            self.center = 0.5 * (self.vertices.min(axis=0) + self.vertices.max(axis=0))
-            self.radius = float(la.norm(self.center - self.vertices, axis=1).max())
+            vertices = self.vertices
+
+            if exact_precision is None:
+                center = 0.5 * (vertices.min(axis=0) + vertices.max(axis=0))
+                radius = float(la.norm(center - vertices, axis=1).max())
+            else:
+                center, radius = get_exact_center_radius(vertices, precision=exact_precision)
+
+            self.center = center
+            self.radius = radius
 
 
 if __name__ == "__main__":

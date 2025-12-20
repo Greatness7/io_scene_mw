@@ -563,7 +563,7 @@ class Mesh(SceneNode):
             self.create_vertex_groups(tri, tri_skin)
             self.create_vertex_morphs(tri, tri_morphs)
 
-            tri.data.update_center_radius()
+            tri.data.update_center_radius(exact_precision=self.exporter.vertex_precision)
 
         return self.output
 
@@ -653,7 +653,7 @@ class Mesh(SceneNode):
             bone_data.matrix = la.solve(skin_data.bones[i].matrix_bind, offset)
 
             # apply center/radius
-            bone_data.update_center_radius(trishape.data.vertices[j])
+            bone_data.update_center_radius(trishape.data.vertices[j], exact_precision=self.exporter.vertex_precision)
 
         # filter unused bones
         skin.bones = [*filter(None, skin.bones)]

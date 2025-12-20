@@ -44,13 +44,13 @@ class ShowRadius(bpy.types.Operator):
     @staticmethod
     def get_center_radius(vertices):
         import numpy as np
+        from es3.utils.math import get_exact_center_radius
 
         # convert to numpy array
         array = np.empty((len(vertices), 3))
         vertices.foreach_get("co", array.ravel())
 
         # calc center and radius
-        center = (array.min(axis=0) + array.max(axis=0)) / 2
-        radius = np.linalg.norm(center - array, axis=1).max()
+        center, radius = get_exact_center_radius(array)
 
         return center, radius
