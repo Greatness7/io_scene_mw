@@ -782,8 +782,10 @@ class Mesh(SceneNode):
         except (AttributeError, IndexError):
             return morph_data
 
+        fcurves = Animation.get_fcurves(shape_keys.animation_data)
+
         animation = self.animation
-        data_paths = {fc.data_path: fc for fc in action.fcurves}
+        data_paths = {fc.data_path: fc for fc in fcurves}
 
         # isolate unmuted layers
         fcurves_dict = {None: basis}
@@ -1533,15 +1535,21 @@ class Animation(SceneNode):
             return ID44
 
     @staticmethod
+    def get_fcurves(anim_data):
+        if bpy.app.version >= (5, 0, 0):
+            from bpy_extras import anim_utils
+            channelbag = anim_utils.animdata_get_channelbag_for_assigned_slot(anim_data)
+            return channelbag.fcurves
+        return anim_data.action.fcurves
+
+    @staticmethod
     def get_fcurves_dict(bl_object):
         fcurves_dict = collections.defaultdict(list)
 
         try:
             anim_data = bl_object.animation_data
             if bpy.app.version >= (5, 0, 0):
-                from bpy_extras import anim_utils
-                channelbag = anim_utils.animdata_get_channelbag_for_assigned_slot(anim_data)
-                fcurves = channelbag.fcurves
+                fcurves = Animation.get_fcurves(anim_data)
             else:
                 fcurves = anim_data.action.fcurves
         except AttributeError:
