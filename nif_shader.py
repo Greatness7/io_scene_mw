@@ -34,7 +34,7 @@ def create_material(name=""):
     material.blend_method = "OPAQUE"
     if bpy.app.version < (4, 3, 0):
         material.shadow_method = "NONE"
-    material.alpha_threshold = 0.0
+    material.alpha_threshold = 133 / 255
     material.use_backface_culling = True
     material.show_transparent_back = False
     material.mw.material = material
