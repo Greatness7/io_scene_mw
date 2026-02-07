@@ -127,9 +127,6 @@ class NiStream:
             for node in root.descendants():
                 extract_kf_controller(node)
 
-        if not kf_controllers:
-            raise ValueError("extract_keyframe_data: no NiKeyframeController objects were found.")
-
         # create x.kf output
         output = nif.NiStream()
 

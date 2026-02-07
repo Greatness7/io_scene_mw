@@ -777,7 +777,6 @@ class Mesh(SceneNode):
         # collect shape key data
         try:
             shape_keys = self.source.data.shape_keys
-            action = shape_keys.animation_data.action
             basis = shape_keys.key_blocks[0]
         except (AttributeError, IndexError):
             return morph_data
