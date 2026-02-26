@@ -37,10 +37,10 @@ class NiSkinData(NiObject):
         for item in self.bone_data:
             item.apply_scale(scale)
 
-    def update_center_radius(self, vertices, exact_precision=None):
+    def update_center_radius(self, vertices, exact=False):
         for item in self.bone_data:
             indices = item.vertex_weights["f0"]
-            item.update_center_radius(vertices[indices], exact_precision=exact_precision)
+            item.update_center_radius(vertices[indices], exact=exact)
 
     @property
     def matrix(self) -> ndarray:

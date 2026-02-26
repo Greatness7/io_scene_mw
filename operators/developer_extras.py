@@ -50,7 +50,8 @@ class ShowRadius(bpy.types.Operator):
         array = np.empty((len(vertices), 3))
         vertices.foreach_get("co", array.ravel())
 
-        # calc center and radius
-        center, radius = get_exact_center_radius(array)
+        center, radius = get_exact_center_radius(
+            array.astype(dtype=np.float64, order="C", copy=False)
+        )
 
         return center, radius

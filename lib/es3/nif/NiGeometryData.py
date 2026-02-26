@@ -57,17 +57,21 @@ class NiGeometryData(NiObject):
         self.center *= scale
         self.radius *= scale
 
-    def update_center_radius(self, exact_precision=None):
+    def update_center_radius(self, exact=False):
+        import numpy as np
+
         if len(self.vertices) == 0:
             self.center[:] = self.radius = 0
         else:
             vertices = self.vertices
 
-            if exact_precision is None:
+            if not exact:
                 center = 0.5 * (vertices.min(axis=0) + vertices.max(axis=0))
                 radius = float(la.norm(center - vertices, axis=1).max())
             else:
-                center, radius = get_exact_center_radius(vertices, precision=exact_precision)
+                center, radius = get_exact_center_radius(
+                    vertices.astype(dtype=np.float64, order="C", copy=False)
+                )
 
             self.center = center
             self.radius = radius
