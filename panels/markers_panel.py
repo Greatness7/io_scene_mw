@@ -125,7 +125,11 @@ class MarkersPanel(bpy.types.Panel):
         except AttributeError:
             return
 
-        self.layout.template_ID(space_data, "action", new="action.new", unlink="action.unlink")
+        if bpy.app.version >= (5, 0, 0):
+            self.layout.template_action(context.active_object, new="action.new", unlink="action.unlink")
+        else:
+            self.layout.template_ID(space_data, "action", new="action.new", unlink="action.unlink")
+
         if action is None:
             return
 
