@@ -100,7 +100,7 @@ class NiFloatData(NiObject):
             handles[0, ..., 1] = values.T - in_dy
             # outgoing handles
             handles[1, ..., 0] = times + out_dx
-            handles[1, ..., 1] = values.T - out_dy
+            handles[1, ..., 1] = values.T + out_dy
 
         return handles
 
