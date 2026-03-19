@@ -70,6 +70,41 @@ class ExportScene(bpy.types.Operator, ExportHelper):
         default=True,
     )
 
+    strip_numeric_suffixes: bpy.props.BoolProperty(
+        name="Strip Numeric Suffixes",
+        description=(
+            "Remove Blender's automatic numeric suffixes (.001, .002, etc.) from object and material names during export."
+            " Disable this if you have animations that rely on these suffixes"
+        ),
+        default=False,
+    )
+
+    enable_switch_nodes: bpy.props.BoolProperty(
+        name="Enable Switch Nodes",
+        description=(
+            "Automatically convert objects with 'SWITCH_' prefix to NiSwitchNode."
+            " Disable this to export them as regular NiNode objects"
+        ),
+        default=False,
+    )
+
+    export_root_as_bs_animation_node: bpy.props.BoolProperty(
+        name="Export Root as non-random NiBSAnimationNode",
+        description=(
+            "Export the root node as a NiBSAnimationNode instead of a NiNode, with not_random flag set."
+        ),
+        default=False,
+    )
+
+    convert_pickproxy_to_collision_switch: bpy.props.BoolProperty(
+        name="Convert PickProxy to CollisionSwitch",
+        description=(
+            "Automatically convert root node called 'PickProxy' to niCollisionSwitch."
+            " Disable this to export them as regular NiNode objects"
+        ),
+        default=False,
+    )
+
     @classmethod
     def poll(cls, context):
         return context.mode == "OBJECT"
