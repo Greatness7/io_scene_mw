@@ -1,22 +1,11 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "io_scene_mw"
-version = "0.8.117"
+version = "0.8.118"
 description = "Morrowind Blender Plugin"
 authors = [{ name = "Greatness7" }]
 dependencies = []
 requires-python = ">=3.11, <3.12"
 readme = "README.md"
-
-[tool.setuptools]
-py-modules = []
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["lib*", "operators*", "panels*", "preferences*", "properties*"]
 
 [dependency-groups]
 dev = [
