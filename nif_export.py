@@ -1,4 +1,3 @@
-from os import name
 import bpy
 
 import timeit
@@ -24,14 +23,6 @@ biped_axis_correction_inverse = la.inv(biped_axis_correction)
 
 other_axis_correction = np.array(axis_conversion('-Z', '-Y', 'Y', 'Z').to_4x4(), dtype="<f")
 other_axis_correction_inverse = la.inv(other_axis_correction)
-
-
-def strip_blender_suffix(name):
-    """Remove Blender's automatic numeric suffixes like .001, .002, etc."""
-    base_name, *suffix = name.rsplit('.', 1)
-    if suffix and suffix[0].isnumeric():
-        return base_name
-    return name
 
 
 def save(context, filepath, **config):
@@ -377,9 +368,17 @@ class SceneNode:
 
     @cached_property
     def name(self):
-        stripped_name = strip_blender_suffix(self.source.name)
-        do_strip_suffixes = self.exporter.strip_numeric_suffixes or stripped_name in ("Bip01", "Root Bone", "Bounding Box")
-        return stripped_name if do_strip_suffixes else self.source.name
+        base_name = self.strip_blender_suffix(self.source.name)
+
+        # Always strip if the export option is active.
+        if self.exporter.strip_numeric_suffixes:
+            return base_name
+
+        # The engine requires exact matches for these.
+        if base_name in ("Bip01", "Root Bone", "Bounding Box"):
+            return base_name
+
+        return self.source.name
 
     @property
     def bone_name(self):
@@ -471,6 +470,14 @@ class SceneNode:
 
         for child in self.children:
             child.ensure_uniform_scale()
+
+    @staticmethod
+    def strip_blender_suffix(name):
+        """Remove Blender's automatic numeric suffixes like .001, .002, etc."""
+        base_name, *suffix = name.rsplit('.', 1)
+        if suffix and suffix[0].isnumeric():
+            return base_name
+        return name
 
     @property
     def animation(self):
