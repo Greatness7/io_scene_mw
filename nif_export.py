@@ -284,25 +284,33 @@ class Exporter:
         return objects
 
     def get_root_output(self, roots):
-        root = nif.NiNode(name=self.filepath.name, children=[r.output for r in roots])
+        file_name = self.filepath.name
+        root = nif.NiNode(name=file_name, children=[r.output for r in roots])
 
-        if self.export_animations and not self.extract_keyframe_data:
-            # convert to NiBSAnimationNode if controllers are present without text keys
-            for obj in root.descendants():
-                if obj.extra_datas.find_type(nif.NiTextKeyExtraData):
-                    break
-                if obj.controller:
-                    root = nif.NiBSAnimationNode(name=root.name, children=root.children, animated=True)
-                    break
-
-        if isinstance(root, nif.NiBSAnimationNode):
-            root.not_random = not self.randomize_animations
-
-        if type(root) is nif.NiNode and len(root.children) == 1:
-            # if there's only one root and it has no transforms, use it as the file root
+        # if there was only one root and it had no transforms, use it as the file root
+        if len(roots) == 1:
             no_transforms = np.allclose(roots[0].matrix_local, ID44, rtol=0, atol=1e-4)
             if no_transforms or self.preserve_root_tranforms:
                 root = roots[0].output
+
+        # if there are controllers but no text keys, we'll wrap in a NiBSAnimationNode
+        needs_animation_node = False
+
+        if self.export_animations and not self.extract_keyframe_data:
+            for node in root.descendants(breadth_first=True):
+                if node.extra_datas.find_type(nif.NiTextKeyExtraData):
+                    needs_animation_node = False
+                    break
+                if node.controller:
+                    needs_animation_node = True
+
+        if needs_animation_node:
+            # if conditions are met we can update in-place rather than using a wrapper
+            in_place =  type(root) is nif.NiNode and root.name not in ("Bip01", "Root Bone")
+            kwargs = root.asdict() if in_place else dict(name=file_name, children=[root])
+            root = nif.NiBSAnimationNode(**kwargs)
+            root.animated = True
+            root.not_random = not self.randomize_animations
 
         return root
 

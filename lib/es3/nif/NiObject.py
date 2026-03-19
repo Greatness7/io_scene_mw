@@ -69,6 +69,9 @@ class NiObject(metaclass=NiMeta):
     def attributes(cls):
         return {s for c in cls.__mro__[-2::-1] for s in c.__slots__}
 
+    def asdict(self) -> dict[str, object]:
+        return {attr: getattr(self, attr) for attr in self.attributes()}
+
     def _astuple(self, digits=4, ignore=()):
         # TODO atm this is only valid for NiProperty/NiSourceTexture/TexturingPropertyMap
         #   objects held in attributes are NOT converted to tuples... Should they be?
