@@ -42,6 +42,15 @@ class ExportScene(bpy.types.Operator, ExportHelper):
         default=True,
     )
 
+    randomize_animations: bpy.props.BoolProperty(
+        name="Randomize Animations",
+        description=(
+            "Enable animation randomization. If unchecked animation timings will be synchronized across all instances."
+            "\nThis does not affect animations that are controlled by text keys."
+        ),
+        default=True,
+    )
+
     extract_keyframe_data: bpy.props.BoolProperty(
         name="Extract Keyframe Data",
         description=(
@@ -84,14 +93,6 @@ class ExportScene(bpy.types.Operator, ExportHelper):
         description=(
             "Automatically convert objects with 'SWITCH_' prefix to NiSwitchNode."
             " Disable this to export them as regular NiNode objects"
-        ),
-        default=False,
-    )
-
-    export_root_as_bs_animation_node: bpy.props.BoolProperty(
-        name="Export Root as non-random NiBSAnimationNode",
-        description=(
-            "Export the root node as a NiBSAnimationNode instead of a NiNode, with not_random flag set."
         ),
         default=False,
     )

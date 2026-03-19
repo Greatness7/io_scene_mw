@@ -48,7 +48,7 @@ class Exporter:
     preserve_material_names = True
     strip_numeric_suffixes = True
     enable_switch_nodes = True
-    export_root_as_bs_animation_node = False
+    randomize_animations = False
 
     def __init__(self, filepath, config):
         vars(self).update(config)
@@ -286,12 +286,6 @@ class Exporter:
     def get_root_output(self, roots):
         root = nif.NiNode(name=self.filepath.name, children=[r.output for r in roots])
 
-        if type(root) is nif.NiNode and len(roots) == 1:
-            # if there's only one root and it has no transforms, use it as the file root
-            no_transforms = np.allclose(roots[0].matrix_local, ID44, rtol=0, atol=1e-4)
-            if no_transforms or self.preserve_root_tranforms:
-                root = roots[0].output
-
         if self.export_animations and not self.extract_keyframe_data:
             # convert to NiBSAnimationNode if controllers are present without text keys
             for obj in root.descendants():
@@ -301,9 +295,14 @@ class Exporter:
                     root = nif.NiBSAnimationNode(name=root.name, children=root.children, animated=True)
                     break
 
-        # Convert to NiBSAnimationNode if export_root_as_bs_animation_node is set
-        if self.export_root_as_bs_animation_node:
-            root = nif.NiBSAnimationNode(name=root.name, children=root.children, animated=True, not_random=True)
+        if isinstance(root, nif.NiBSAnimationNode):
+            root.not_random = not self.randomize_animations
+
+        if type(root) is nif.NiNode and len(root.children) == 1:
+            # if there's only one root and it has no transforms, use it as the file root
+            no_transforms = np.allclose(roots[0].matrix_local, ID44, rtol=0, atol=1e-4)
+            if no_transforms or self.preserve_root_tranforms:
+                root = roots[0].output
 
         return root
 
