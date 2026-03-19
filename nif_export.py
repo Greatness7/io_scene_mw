@@ -49,7 +49,6 @@ class Exporter:
     strip_numeric_suffixes = True
     enable_switch_nodes = True
     export_root_as_bs_animation_node = False
-    convert_pickproxy_to_collision_switch = False
 
     def __init__(self, filepath, config):
         vars(self).update(config)
@@ -302,14 +301,9 @@ class Exporter:
                     root = nif.NiBSAnimationNode(name=root.name, children=root.children, animated=True)
                     break
 
-
         # Convert to NiBSAnimationNode if export_root_as_bs_animation_node is set
         if self.export_root_as_bs_animation_node:
             root = nif.NiBSAnimationNode(name=root.name, children=root.children, animated=True, not_random=True)
-
-        # Convert PickProxy to NiCollisionSwitch with flags 32
-        if self.convert_pickproxy_to_collision_switch and root.name == "PickProxy":
-            root = nif.NiCollisionSwitch(name=root.name, children=root.children, flags=32)
 
         return root
 
@@ -375,7 +369,7 @@ class SceneNode:
             return base_name
 
         # The engine requires exact matches for these.
-        if base_name in ("Bip01", "Root Bone", "Bounding Box"):
+        if base_name in ("Bip01", "Bounding Box", "PickProxy", "Root Bone"):
             return base_name
 
         return self.source.name
@@ -502,6 +496,8 @@ class Empty(SceneNode):
                 self.output = nif.RootCollisionNode(app_culled=True)
             elif self.exporter.enable_switch_nodes and self.name.startswith("SWITCH_"):
                 self.output = nif.NiSwitchNode()
+            elif self.name == "PickProxy":
+                self.output = nif.NiCollisionSwitch(propagate=True)
             else:
                 self.output = nif.NiNode()
 

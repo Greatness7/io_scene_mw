@@ -96,15 +96,6 @@ class ExportScene(bpy.types.Operator, ExportHelper):
         default=False,
     )
 
-    convert_pickproxy_to_collision_switch: bpy.props.BoolProperty(
-        name="Convert PickProxy to CollisionSwitch",
-        description=(
-            "Automatically convert root node called 'PickProxy' to niCollisionSwitch."
-            " Disable this to export them as regular NiNode objects"
-        ),
-        default=False,
-    )
-
     @classmethod
     def poll(cls, context):
         return context.mode == "OBJECT"
