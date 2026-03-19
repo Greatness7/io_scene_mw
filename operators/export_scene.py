@@ -88,8 +88,8 @@ class ExportScene(bpy.types.Operator, ExportHelper):
         default=False,
     )
 
-    enable_switch_nodes: bpy.props.BoolProperty(
-        name="Enable Switch Nodes",
+    create_switch_nodes: bpy.props.BoolProperty(
+        name="Create Switch Nodes",
         description=(
             "Automatically convert objects with 'SWITCH_' prefix to NiSwitchNode."
             " Disable this to export them as regular NiNode objects"

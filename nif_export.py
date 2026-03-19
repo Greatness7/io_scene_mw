@@ -47,7 +47,7 @@ class Exporter:
     preserve_root_tranforms = False
     preserve_material_names = True
     strip_numeric_suffixes = True
-    enable_switch_nodes = True
+    create_switch_nodes = True
     randomize_animations = False
 
     def __init__(self, filepath, config):
@@ -493,10 +493,10 @@ class Empty(SceneNode):
         else:
             if self.source in self.exporter.colliders:
                 self.output = nif.RootCollisionNode(app_culled=True)
-            elif self.exporter.enable_switch_nodes and self.name.startswith("SWITCH_"):
-                self.output = nif.NiSwitchNode()
             elif self.name == "PickProxy":
                 self.output = nif.NiCollisionSwitch(propagate=True)
+            elif self.exporter.create_switch_nodes and self.name.startswith("SWITCH_"):
+                self.output = nif.NiSwitchNode()
             else:
                 self.output = nif.NiNode()
 
