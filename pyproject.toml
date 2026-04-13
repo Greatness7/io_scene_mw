@@ -12,3 +12,13 @@ dev = [
     "numpy (>=1.24, <1.25)",
     "fake-bpy-module-latest",
 ]
+
+[tool.ruff]
+ignore = ["F403", "F405", "E402"]
+
+# https://github.com/microsoft/pyright/blob/main/docs/configuration.md
+[tool.pyright]
+ignore = ["F403"]
+extraPaths = ["lib"]
+reportInvalidTypeForm = "none" # bpy
+reportIncompatibleMethodOverride = "none" # bpy

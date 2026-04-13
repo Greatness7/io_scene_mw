@@ -54,7 +54,7 @@ class Importer:
         self.history = collections.defaultdict(set)
         self.armatures = collections.defaultdict(set)
         self.colliders = collections.defaultdict(set)
-        self.active_collection = bpy.context.view_layer.active_layer_collection.collection
+        self.active_collection = bpy.context.view_layer.active_layer_collection.collection  # type: ignore
         self.filepath = pathlib.Path(filepath)
 
     def execute(self):
