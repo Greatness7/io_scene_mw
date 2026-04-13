@@ -20,11 +20,13 @@ lib = os.path.join(os.path.dirname(__file__), "lib")
 if lib not in sys.path:
     sys.path.append(lib)
 
-submodules = (
+submodules = [
     "preferences",
     "properties",
     "operators",
     "panels",
-)
+]
 
-register, unregister = bpy.utils.register_submodule_factory(__name__, submodules)
+# bpy.utils is absent when the package is imported outside Blender (e.g. under pytest)
+if hasattr(bpy, "utils"):
+    register, unregister = bpy.utils.register_submodule_factory(__name__, submodules)

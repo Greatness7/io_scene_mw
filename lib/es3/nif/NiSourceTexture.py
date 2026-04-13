@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from enum import IntEnum
 import os
 import pathlib
-from enum import IntEnum
 
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
+from .NiPixelData import NiPixelData
 from .NiTexture import NiTexture
 
 
@@ -45,7 +49,7 @@ class NiSourceTexture(NiTexture):
 
     _refs = (*NiTexture._refs, "pixel_data")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         has_external_texture = stream.read_ubyte()
         if has_external_texture:
@@ -59,7 +63,7 @@ class NiSourceTexture(NiTexture):
         self.alpha_format = AlphaFormat(stream.read_int())
         self.is_static = stream.read_ubyte()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_ubyte(bool(self.filename))
         if self.filename:
@@ -111,10 +115,5 @@ class NiSourceTexture(NiTexture):
         return self.filename
 
     @file_name.setter
-    def file_name(self, file_name):
+    def file_name(self, file_name: str) -> None:
         self.filename = file_name
-
-
-if __name__ == "__main__":
-    from es3.nif import NiPixelData
-    from es3.utils.typing import *

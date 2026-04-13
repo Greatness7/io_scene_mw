@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3
+from ..utils.math import ZERO3
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiProperty import NiProperty
 
 
@@ -12,7 +15,7 @@ class NiMaterialProperty(NiProperty):
     shine: float32 = 0.0
     alpha: float32 = 1.0
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.ambient_color = stream.read_floats(3)
         self.diffuse_color = stream.read_floats(3)
@@ -21,7 +24,7 @@ class NiMaterialProperty(NiProperty):
         self.shine = stream.read_float()
         self.alpha = stream.read_float()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_floats(self.ambient_color)
         stream.write_floats(self.diffuse_color)
@@ -29,7 +32,3 @@ class NiMaterialProperty(NiProperty):
         stream.write_floats(self.emissive_color)
         stream.write_float(self.shine)
         stream.write_float(self.alpha)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

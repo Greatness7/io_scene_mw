@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from es3.utils.linked_list import LinkedListHelper
+from ..utils.linked_list import LinkedListHelper
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
+from .NiExtraData import NiExtraData
 from .NiObject import NiObject
+from .NiTimeController import NiTimeController
 
 
 class NiObjectNET(NiObject):
@@ -11,23 +16,18 @@ class NiObjectNET(NiObject):
 
     _refs = (*NiObject._refs, "extra_data", "controller")
 
-    controllers = LinkedListHelper(name="controller")
-    extra_datas = LinkedListHelper(name="extra_data")
+    controllers = LinkedListHelper["NiTimeController"](name="controller")
+    extra_datas = LinkedListHelper["NiExtraData"](name="extra_data")
 
     def __repr__(self):
         return f"{self.type}<'{self.name}'>"
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         self.name = stream.read_str()
         self.extra_data = stream.read_link()
         self.controller = stream.read_link()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         stream.write_str(self.name)
         stream.write_link(self.extra_data)
         stream.write_link(self.controller)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiExtraData, NiTimeController
-    from es3.utils.typing import *

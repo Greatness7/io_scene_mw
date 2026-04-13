@@ -4,11 +4,43 @@ version = "0.8.120"
 description = "Morrowind Blender Plugin"
 authors = [{ name = "Greatness7" }]
 dependencies = []
-requires-python = ">=3.11, <3.12"
+requires-python = ">=3.10, <3.12"
 readme = "README.md"
 
 [dependency-groups]
 dev = [
     "numpy (>=1.24, <1.25)",
     "fake-bpy-module-latest",
+    "pyright==1.1.411",
+    "pytest>=9.1.1",
 ]
+
+[tool.ruff]
+line-length = 125
+
+[tool.ruff.lint]
+ignore = ["F403", "F405", "E402"]
+
+# The formatter is currently scoped to lib/ only
+[tool.ruff.format]
+exclude = [
+    "assets/**",
+    "ignore/**",
+    "operators/**",
+    "panels/**",
+    "preferences/**",
+    "properties/**",
+    "tests/**",
+    "__init__.py",
+    "nif_export.py",
+    "nif_import.py",
+    "nif_shader.py",
+    "nif_utils.py",
+]
+
+# https://github.com/microsoft/pyright/blob/main/docs/configuration.md
+[tool.pyright]
+extraPaths = ["lib"]
+pythonVersion = "3.10"
+reportInvalidTypeForm = "none" # bpy
+reportIncompatibleMethodOverride = "none" # bpy

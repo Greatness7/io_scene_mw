@@ -3,7 +3,11 @@ from __future__ import annotations
 from enum import IntEnum
 from operator import attrgetter
 
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiProperty import NiProperty
+from .NiSourceTexture import NiSourceTexture
 from .NiTexturingPropertyBumpMap import NiTexturingPropertyBumpMap
 from .NiTexturingPropertyMap import NiTexturingPropertyMap
 
@@ -30,18 +34,20 @@ class TextureMaps(IntEnum):
 
 
 class _TextureMapSource:
-    __slots__ = "name",
+    __slots__ = ("name",)
 
-    def __set_name__(self, owner, name):
+    def __set_name__(self, owner: type[NiTexturingProperty], name: str) -> None:
         # e.g. "_base_texture_source" -> "base_texture"
         self.name = name[1:-7]
 
-    def __get__(self, instance, owner):
-        texture_map = getattr(instance, self.name, None)
-        return texture_map and texture_map.source
+    def __get__(self, instance: NiTexturingProperty, owner: type[NiTexturingProperty]) -> NiSourceTexture | None:
+        texture_map: NiTexturingPropertyMap | None = getattr(instance, self.name, None)
+        return texture_map.source if texture_map is not None else None
 
-    def __set__(self, instance, value):
-        texture_map = getattr(instance, self.name, None)
+    def __set__(self, instance: NiTexturingProperty, value: NiSourceTexture | None) -> None:
+        texture_map: NiTexturingPropertyMap | None = getattr(instance, self.name, None)
+        if texture_map is None:
+            raise AttributeError(self.name)
         texture_map.source = value
 
 
@@ -79,7 +85,7 @@ class NiTexturingProperty(NiProperty):
     _decal_2_texture_source = _TextureMapSource()
     _decal_3_texture_source = _TextureMapSource()
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.apply_mode = ApplyMode(stream.read_int())
         num_texture_maps = stream.read_uint()
@@ -89,7 +95,7 @@ class NiTexturingProperty(NiProperty):
                 item = stream.read_type(NiTexturingPropertyBumpMap if i == 5 else NiTexturingPropertyMap)
                 setattr(self, self.texture_keys[i], item)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_int(self.apply_mode)
         texture_maps = self._get_active_texture_maps()
@@ -103,7 +109,3 @@ class NiTexturingProperty(NiProperty):
         maps = self.texture_maps
         required, optional = maps[:7], maps[7:]
         return (*required, *filter(None, optional))
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

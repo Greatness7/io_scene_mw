@@ -1,63 +1,20 @@
+# `X as X` marks a re-export, otherwise strict pyright flags unused imports.
 from typing import (
-    AbstractSet,
     Any,
-    AnyStr,
-    AsyncContextManager,
-    AsyncGenerator,
-    AsyncIterable,
-    AsyncIterator,
-    Awaitable,
-    ByteString,
-    Callable,
-    ClassVar,
-    Collection,
-    Container,
-    ContextManager,
-    Coroutine,
-    Counter,
-    DefaultDict,
-    Deque,
-    # Dict,
-    FrozenSet,
-    Generator,
-    Generic,
-    Hashable,
-    ItemsView,
-    Iterable,
-    Iterator,
-    KeysView,
-    # List,
-    Mapping,
-    MappingView,
-    MutableMapping,
-    MutableSequence,
-    MutableSet,
-    NamedTuple,
-    NewType,
-    NoReturn,
-    # Optional,
-    Reversible,
-    Sequence,
-    # Set,
-    Sized,
-    SupportsAbs,
-    SupportsBytes,
-    SupportsComplex,
-    SupportsFloat,
-    SupportsInt,
-    SupportsRound,
-    Text,
-    # Tuple,
-    # Type,
+    Callable as Callable,
+    Collection as Collection,
+    Generator as Generator,
+    Iterable as Iterable,
+    Iterator as Iterator,
+    Mapping as Mapping,
     TYPE_CHECKING,
     TypeVar,
-    # Union,
-    ValuesView,
 )
 
 if TYPE_CHECKING:
+    import os
+
     from numpy import ndarray
-    from pathlib import Path
 
     # aliases
     int8 = int
@@ -79,5 +36,10 @@ if TYPE_CHECKING:
     NiMatrix2 = ndarray  # float[2, 2]
     NiMatrix3 = ndarray  # float[3, 3]
 
+    # An unresolved object reference. On disk a link is an index into the object
+    # table. The `resolve_links` function swaps it for the object (or None) once
+    # every object has been read.
+    Link = Any
+
     T = TypeVar("T")
-    PathLike = AnyStr | Path
+    PathLike = str | os.PathLike[str]

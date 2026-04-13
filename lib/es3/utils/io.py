@@ -1,7 +1,13 @@
+from __future__ import annotations
+
 from io import BytesIO
 from struct import Struct
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from numpy.typing import DTypeLike, NDArray
 
 Byte = Struct("<b")  # int8
 UByte = Struct("<B")  # uint8
@@ -11,131 +17,118 @@ Int = Struct("<i")  # int32
 UInt = Struct("<I")  # uint32
 Float = Struct("<f")  # float32
 
+ByteDType = np.dtype(Byte.format)
+UByteDType = np.dtype(UByte.format)
+ShortDType = np.dtype(Short.format)
+UShortDType = np.dtype(UShort.format)
+IntDType = np.dtype(Int.format)
+UIntDType = np.dtype(UInt.format)
+FloatDType = np.dtype(Float.format)
+
 
 class BinaryStream(BytesIO):
-    __slots__ = (
-        "read_byte",
-        "read_bytes",
-        "read_ubyte",
-        "read_ubytes",
-        "read_short",
-        "read_shorts",
-        "read_ushort",
-        "read_ushorts",
-        "read_int",
-        "read_ints",
-        "read_uint",
-        "read_uints",
-        "read_float",
-        "read_floats",
-        "read_str",
-        "read_strs",
-        "write_byte",
-        "write_bytes",
-        "write_ubyte",
-        "write_ubytes",
-        "write_short",
-        "write_shorts",
-        "write_ushort",
-        "write_ushorts",
-        "write_int",
-        "write_ints",
-        "write_uint",
-        "write_uints",
-        "write_float",
-        "write_floats",
-        "write_str",
-        "write_strs",
-    )
+    __slots__ = ()
 
-    def __init__(self, initial_bytes=None):
-        super().__init__(initial_bytes)
+    def read_array(self, shape: int | tuple[int, ...], dtype: DTypeLike) -> NDArray[Any]:
+        array = np.empty(shape, dtype)
+        # ndarray only gained a typed __buffer__ in numpy 2.0; .data is the
+        # portable way to hand the checker something buffer-shaped.
+        self.readinto(array.data)
+        return array
 
-        (self.read_byte,
-         self.write_byte,
-         self.read_bytes,
-         self.write_bytes) = self.make_read_write_for_struct(Byte)
+    def write_array(self, array: NDArray[Any], dtype: DTypeLike) -> None:
+        if array.dtype != dtype:
+            array = array.astype(dtype, copy=False)
+        self.write(np.ascontiguousarray(array).data)
 
-        (self.read_ubyte,
-         self.write_ubyte,
-         self.read_ubytes,
-         self.write_ubytes) = self.make_read_write_for_struct(UByte)
+    def read_byte(self) -> int:
+        return Byte.unpack(self.read(1))[0]
 
-        (self.read_short,
-         self.write_short,
-         self.read_shorts,
-         self.write_shorts) = self.make_read_write_for_struct(Short)
+    def write_byte(self, value: int) -> None:
+        self.write(Byte.pack(value))
 
-        (self.read_ushort,
-         self.write_ushort,
-         self.read_ushorts,
-         self.write_ushorts) = self.make_read_write_for_struct(UShort)
+    def read_bytes(self, *shape: int) -> NDArray[Any]:
+        return self.read_array(shape, ByteDType)
 
-        (self.read_int,
-         self.write_int,
-         self.read_ints,
-         self.write_ints) = self.make_read_write_for_struct(Int)
+    def write_bytes(self, array: NDArray[Any]) -> None:
+        self.write_array(array, ByteDType)
 
-        (self.read_uint,
-         self.write_uint,
-         self.read_uints,
-         self.write_uints) = self.make_read_write_for_struct(UInt)
+    def read_ubyte(self) -> int:
+        return UByte.unpack(self.read(1))[0]
 
-        (self.read_float,
-         self.write_float,
-         self.read_floats,
-         self.write_floats) = self.make_read_write_for_struct(Float)
+    def write_ubyte(self, value: int) -> None:
+        self.write(UByte.pack(value))
 
-        (self.read_str,
-         self.write_str,
-         self.read_strs,
-         self.write_strs) = self.make_read_write_for_string(UInt)
+    def read_ubytes(self, *shape: int) -> NDArray[Any]:
+        return self.read_array(shape, UByteDType)
 
-    def make_read_write_for_struct(self, struct: Struct):
-        # declare these in the local scope for faster name resolution
-        read = self.read
-        write = self.write
-        pack = struct.pack
-        unpack = struct.unpack
-        size = struct.size
-        # these functions are used for efficient read/write of arrays
-        empty = np.empty
-        readinto = self.readinto
-        ubyte = np.dtype(UByte.format)
-        dtype = np.dtype(struct.format)
-        ascontiguousarray = np.ascontiguousarray
+    def write_ubytes(self, array: NDArray[Any]) -> None:
+        self.write_array(array, UByteDType)
 
-        def read_value():
-            return unpack(read(size))[0]
+    def read_short(self) -> int:
+        return Short.unpack(self.read(2))[0]
 
-        def write_value(value):
-            write(pack(value))
+    def write_short(self, value: int) -> None:
+        self.write(Short.pack(value))
 
-        def read_values(*shape):
-            array = empty(shape, dtype)
-            readinto(array)
-            return array
+    def read_shorts(self, *shape: int) -> NDArray[Any]:
+        return self.read_array(shape, ShortDType)
 
-        def write_values(array):
-            if array.dtype != dtype:
-                array = array.astype(dtype, copy=False)
-            write(ascontiguousarray(array).view(ubyte))
+    def write_shorts(self, array: NDArray[Any]) -> None:
+        self.write_array(array, ShortDType)
 
-        return read_value, write_value, read_values, write_values
+    def read_ushort(self) -> int:
+        return UShort.unpack(self.read(2))[0]
 
-    def make_read_write_for_string(self, struct: Struct):
-        # declare these in the local scope for faster name resolutions
-        read = self.read
-        write = self.write
-        pack = struct.pack
-        unpack = struct.unpack
+    def write_ushort(self, value: int) -> None:
+        self.write(UShort.pack(value))
 
-        def read_string():
-            value = read(unpack(read(4))[0])
-            return value.decode(errors="surrogateescape")
+    def read_ushorts(self, *shape: int) -> NDArray[Any]:
+        return self.read_array(shape, UShortDType)
 
-        def write_string(value):
-            value = value.encode(errors="surrogateescape")
-            write(pack(len(value)) + value)
+    def write_ushorts(self, array: NDArray[Any]) -> None:
+        self.write_array(array, UShortDType)
 
-        return read_string, write_string, NotImplemented, NotImplemented
+    def read_int(self) -> int:
+        return Int.unpack(self.read(4))[0]
+
+    def write_int(self, value: int) -> None:
+        self.write(Int.pack(value))
+
+    def read_ints(self, *shape: int) -> NDArray[Any]:
+        return self.read_array(shape, IntDType)
+
+    def write_ints(self, array: NDArray[Any]) -> None:
+        self.write_array(array, IntDType)
+
+    def read_uint(self) -> int:
+        return UInt.unpack(self.read(4))[0]
+
+    def write_uint(self, value: int) -> None:
+        self.write(UInt.pack(value))
+
+    def read_uints(self, *shape: int) -> NDArray[Any]:
+        return self.read_array(shape, UIntDType)
+
+    def write_uints(self, array: NDArray[Any]) -> None:
+        self.write_array(array, UIntDType)
+
+    def read_float(self) -> float:
+        return Float.unpack(self.read(4))[0]
+
+    def write_float(self, value: float) -> None:
+        self.write(Float.pack(value))
+
+    def read_floats(self, *shape: int) -> NDArray[Any]:
+        return self.read_array(shape, FloatDType)
+
+    def write_floats(self, array: NDArray[Any]) -> None:
+        self.write_array(array, FloatDType)
+
+    def read_str(self) -> str:
+        data = self.read(UInt.unpack(self.read(4))[0])
+        return data.decode(encoding="cp1252", errors="replace")
+
+    def write_str(self, value: str) -> None:
+        data = value.encode(encoding="cp1252", errors="replace")
+        self.write(UInt.pack(len(data)) + data)

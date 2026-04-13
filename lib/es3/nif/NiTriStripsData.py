@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from es3.utils.math import np
+from ..utils.math import np
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiTriBasedGeomData import NiTriBasedGeomData
 
 
 class NiTriStripsData(NiTriBasedGeomData):
     strips: list[ndarray] = []
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         stream.read_ushort()  # num_triangles
         num_strips = stream.read_ushort()
@@ -15,7 +18,7 @@ class NiTriStripsData(NiTriBasedGeomData):
             strip_lengths = stream.read_ushorts(num_strips)
             self.strips = [stream.read_ushorts(n) for n in strip_lengths]
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_ushort(0)
         stream.write_ushort(len(self.strips))
@@ -23,7 +26,3 @@ class NiTriStripsData(NiTriBasedGeomData):
         stream.write_ushorts(strip_lengths)
         for strip in self.strips:
             stream.write_ushorts(strip)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

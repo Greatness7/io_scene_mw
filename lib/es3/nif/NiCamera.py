@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO4, ZERO6
+from ..utils.math import ZERO4, ZERO6
+from ..utils.typing import *
+
 from .NiAVObject import NiAVObject
+from .NiBinaryStream import NiBinaryStream
+from .NiNode import NiNode
+from .NiScreenPolygon import NiScreenPolygon
 
 
 class NiCamera(NiAVObject):
@@ -13,7 +18,7 @@ class NiCamera(NiAVObject):
 
     _refs = (*NiAVObject._refs, "scene")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.view_frustum = stream.read_floats(6)
         self.view_port = stream.read_floats(4)
@@ -21,15 +26,10 @@ class NiCamera(NiAVObject):
         self.scene = stream.read_link()
         self.screen_polygons = stream.read_links()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_floats(self.view_frustum)
         stream.write_floats(self.view_port)
         stream.write_float(self.lod_adjust)
         stream.write_link(self.scene)
         stream.write_links(self.screen_polygons)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiNode, NiScreenPolygon
-    from es3.utils.typing import *

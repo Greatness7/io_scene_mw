@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3, ZERO4
+from ..utils.math import ZERO3, ZERO4
+from ..utils.typing import *
+
+from .NiAVObject import NiAVObject
+from .NiBinaryStream import NiBinaryStream
+from .NiEmitterModifier import NiEmitterModifier
+from .NiParticleCollider import NiParticleCollider
+from .NiParticleModifier import NiParticleModifier
 from .NiPerParticleData import NiPerParticleData
 from .NiTimeController import NiTimeController
 
@@ -42,7 +49,7 @@ class NiParticleSystemController(NiTimeController):
     _refs = (*NiTimeController._refs, "emitter_modifier", "particle_modifier", "particle_collider")
     _ptrs = (*NiTimeController._ptrs, "emitter")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.speed = stream.read_float()
         self.speed_variation = stream.read_float()
@@ -79,7 +86,7 @@ class NiParticleSystemController(NiTimeController):
         self.particle_collider = stream.read_link()
         self.compute_dynamic_bounding_volume = stream.read_ubyte()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_float(self.speed)
         stream.write_float(self.speed_variation)
@@ -126,8 +133,3 @@ class NiParticleSystemController(NiTimeController):
             particle.age *= scale
             particle.lifespan *= scale
             particle.last_update *= scale
-
-
-if __name__ == "__main__":
-    from es3.nif import NiAVObject, NiEmitterModifier, NiParticleCollider, NiParticleModifier
-    from es3.utils.typing import *

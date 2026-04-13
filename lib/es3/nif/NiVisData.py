@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from es3.utils.math import np, zeros
+from ..utils.math import np, zeros
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
+
 
 _dtype = np.dtype("<f, <B")
 
@@ -9,12 +13,12 @@ _dtype = np.dtype("<f, <B")
 class NiVisData(NiObject):
     keys: ndarray = zeros(0, dtype=_dtype)
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         num_keys = stream.read_uint()
         if num_keys:
             self.keys = stream.read_array(num_keys, _dtype)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         stream.write_uint(len(self.keys))
         stream.write_array(self.keys, _dtype)
 
@@ -44,7 +48,3 @@ class NiVisData(NiObject):
         super().apply_time_scale(scale)
         if len(self.keys):
             self.times[:] *= scale
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

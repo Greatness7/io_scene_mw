@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiTimeController import NiTimeController
+from .NiUVData import NiUVData
 
 
 class NiUVController(NiTimeController):
@@ -9,17 +13,12 @@ class NiUVController(NiTimeController):
 
     _refs = (*NiTimeController._refs, "data")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.texture_set = stream.read_ushort()
         self.data = stream.read_link()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_ushort(self.texture_set)
         stream.write_link(self.data)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiUVData
-    from es3.utils.typing import *

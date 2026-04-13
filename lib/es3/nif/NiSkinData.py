@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from es3.utils.math import compose, decompose_uniform, ID33, ZERO3
+from ..utils.math import compose, decompose_uniform, ID33, ZERO3
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
 from .NiSkinDataBoneData import NiSkinDataBoneData
+from .NiSkinPartition import NiSkinPartition
 
 
 class NiSkinData(NiObject):
@@ -14,7 +18,7 @@ class NiSkinData(NiObject):
 
     _refs = (*NiObject._refs, "skin_partition")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         self.rotation = stream.read_floats(3, 3)
         self.translation = stream.read_floats(3)
         self.scale = stream.read_float()
@@ -23,7 +27,7 @@ class NiSkinData(NiObject):
         if num_bones:
             self.bone_data = [stream.read_type(NiSkinDataBoneData) for _ in range(num_bones)]
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         stream.write_floats(self.rotation)
         stream.write_floats(self.translation)
         stream.write_float(self.scale)
@@ -32,12 +36,12 @@ class NiSkinData(NiObject):
         for item in self.bone_data:
             item.save(stream)
 
-    def apply_scale(self, scale):
+    def apply_scale(self, scale: float) -> None:
         self.translation *= scale
         for item in self.bone_data:
             item.apply_scale(scale)
 
-    def update_center_radius(self, vertices, exact=False):
+    def update_center_radius(self, vertices: ndarray, exact: bool = False) -> None:
         for item in self.bone_data:
             indices = item.vertex_weights["f0"]
             item.update_center_radius(vertices[indices], exact=exact)
@@ -49,8 +53,3 @@ class NiSkinData(NiObject):
     @matrix.setter
     def matrix(self, value: ndarray):
         self.translation, self.rotation, self.scale = decompose_uniform(value)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiSkinPartition
-    from es3.utils.typing import *

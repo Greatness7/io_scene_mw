@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
+from .NiSourceTexture import NiSourceTexture
 from .NiTimeController import NiTimeController
 
 
@@ -29,14 +33,14 @@ class NiFlipController(NiTimeController):
 
     _refs = (*NiTimeController._refs, "textures")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.affected_map = stream.read_int()
         self.flip_start_time = stream.read_float()
         self.secs_per_frame = stream.read_float()
         self.textures = stream.read_links()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_int(self.affected_map)
         stream.write_float(self.flip_start_time)
@@ -47,8 +51,3 @@ class NiFlipController(NiTimeController):
         super().apply_time_scale(scale)
         self.flip_start_time *= scale
         self.secs_per_frame *= scale
-
-
-if __name__ == "__main__":
-    from es3.nif import NiSourceTexture
-    from es3.utils.typing import *

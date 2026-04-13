@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from ..utils.typing import *
+
+from .NiAccumulator import NiAccumulator
+from .NiBinaryStream import NiBinaryStream
 from .NiNode import NiNode
 
 
@@ -21,17 +25,12 @@ class NiSortAdjustNode(NiNode):
 
     _refs = (*NiNode._refs, "sub_sorter")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.sorting_mode = SortingMode(stream.read_int())
         self.sub_sorter = stream.read_link()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_int(self.sorting_mode)
         stream.write_link(self.sub_sorter)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiAccumulator
-    from es3.utils.typing import *

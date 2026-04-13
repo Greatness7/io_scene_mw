@@ -7,11 +7,5 @@
             // "source.fixAll": "explicit",
             // "source.organizeImports": "explicit"
         }
-    },
-    "python.analysis.extraPaths": [
-        "lib"
-    ],
-    "python.analysis.diagnosticSeverityOverrides": {
-        "reportInvalidTypeForm": false
     }
 }

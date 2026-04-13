@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
+from .NiSourceTexture import NiSourceTexture
 
 
 class ClampMode(IntEnum):
@@ -35,7 +39,7 @@ class NiTexturingPropertyMap(NiObject):  # TODO Not NiObject
     ClampMode = ClampMode
     FilterMode = FilterMode
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         self.source = stream.read_link()
         self.clamp_mode = ClampMode(stream.read_int())
         self.filter_mode = FilterMode(stream.read_int())
@@ -45,7 +49,7 @@ class NiTexturingPropertyMap(NiObject):  # TODO Not NiObject
         self.unknown_byte1 = stream.read_byte()
         self.unknown_byte2 = stream.read_byte()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         stream.write_link(self.source)
         stream.write_int(self.clamp_mode)
         stream.write_int(self.filter_mode)
@@ -54,8 +58,3 @@ class NiTexturingPropertyMap(NiObject):  # TODO Not NiObject
         stream.write_short(self.ps2_k)
         stream.write_byte(self.unknown_byte1)
         stream.write_byte(self.unknown_byte2)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiSourceTexture
-    from es3.utils.typing import *

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3
+from ..utils.math import ZERO3
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiParticleCollider import NiParticleCollider
 
 
@@ -13,7 +16,7 @@ class NiPlanarCollider(NiParticleCollider):
     normal: NiPoint3 = ZERO3
     distance: float32 = 0.0
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.height = stream.read_float()
         self.width = stream.read_float()
@@ -23,7 +26,7 @@ class NiPlanarCollider(NiParticleCollider):
         self.normal = stream.read_floats(3)
         self.distance = stream.read_float()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_float(self.height)
         stream.write_float(self.width)
@@ -32,7 +35,3 @@ class NiPlanarCollider(NiParticleCollider):
         stream.write_floats(self.y_axis)
         stream.write_floats(self.normal)
         stream.write_float(self.distance)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

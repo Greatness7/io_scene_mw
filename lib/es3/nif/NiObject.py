@@ -1,43 +1,49 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+from ..utils.typing import *
+
 from .NiMeta import NiMeta
+
+if TYPE_CHECKING:
+    from .NiBinaryStream import NiBinaryStream
 
 
 class NiObject(metaclass=NiMeta):
+    _refs = ()
+    _ptrs = ()
 
-    _refs = ()  # type: tuple[str, ...]
-    _ptrs = ()  # type: tuple[str, ...]
-
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.type}<{id(self)}>"
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         if not hasattr(self.defaults, name):
             raise AttributeError(f"'{self.type}' has no attribute '{name}'")
         value = getattr(self.defaults, name)()
         setattr(self, name, value)
         return value
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         pass
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         pass
 
-    def sort(self, key=None):
+    def sort(self, key: Callable[[Any], Any] = lambda value: value) -> None:
         pass
 
-    def apply_scale(self, scale):
+    def apply_scale(self, scale: float) -> None:
         pass
 
     def apply_time_scale(self, scale: float):
         pass
 
-    def _links(self):
+    def _links(self) -> Iterator[NiObject | None]:
         for name in self._refs:
             item = getattr(self, name)
             if item is None:
@@ -47,14 +53,14 @@ class NiObject(metaclass=NiMeta):
             else:
                 yield from item
 
-    def _traverse(self, seen) -> Iterator[NiObject]:
+    def traverse(self, seen: set[NiObject]) -> Iterator[NiObject]:
         seen.add(self)
         yield self
         for link in self._links():
-            if link not in seen:
-                yield from link._traverse(seen)
+            if link is not None and link not in seen:
+                yield from link.traverse(seen)
 
-    def _resolve_links(self, objects):
+    def resolve_links(self, objects: dict[int, NiObject]) -> None:
         for name in self._refs + self._ptrs:
             item = getattr(self, name)
             if item is None:
@@ -66,16 +72,16 @@ class NiObject(metaclass=NiMeta):
                     item[index] = objects.get(value) if value != -1 else None
 
     @classmethod
-    def attributes(cls):
-        return {s for c in cls.__mro__[-2::-1] for s in c.__slots__}
+    def attributes(cls) -> set[str]:
+        return {name for base in cls.__mro__[-2::-1] for name in getattr(base, "__slots__", ())}
 
     def asdict(self) -> dict[str, object]:
         return {attr: getattr(self, attr) for attr in self.attributes()}
 
-    def _astuple(self, digits=4, ignore=()):
+    def astuple(self, digits: int = 4, ignore: Collection[str] = ()) -> tuple[tuple[str, object], ...]:
         # TODO atm this is only valid for NiProperty/NiSourceTexture/TexturingPropertyMap
         #   objects held in attributes are NOT converted to tuples... Should they be?
-        fields = [("type", self.type)]
+        fields: list[tuple[str, object]] = [("type", self.type)]
         for name in self.attributes().difference(ignore):
             value = getattr(self, name)  # TODO attrgetter?
             if value is None:
@@ -94,7 +100,3 @@ class NiObject(metaclass=NiMeta):
             fields.append((name, value))
 
         return tuple(fields)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

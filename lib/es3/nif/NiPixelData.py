@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
+from .NiPalette import NiPalette
 from .NiPixelFormat import NiPixelFormat
 
 
@@ -14,7 +18,7 @@ class NiPixelData(NiObject):
 
     _refs = (*NiObject._refs, "palette")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         self.pixel_format = stream.read_type(NiPixelFormat)
         self.palette = stream.read_link()
         mipmap_levels = stream.read_uint()
@@ -25,7 +29,7 @@ class NiPixelData(NiObject):
         if num_pixels:
             self.pixel_data = stream.read_ubytes(num_pixels)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         self.pixel_format.save(stream)
         stream.write_link(self.palette)
         stream.write_uint(len(self.mipmap_levels))
@@ -33,8 +37,3 @@ class NiPixelData(NiObject):
         stream.write_uints(self.mipmap_levels)
         stream.write_uint(len(self.pixel_data))
         stream.write_ubytes(self.pixel_data)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiPalette
-    from es3.utils.typing import *

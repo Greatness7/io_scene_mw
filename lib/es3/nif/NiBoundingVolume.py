@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
 
 
@@ -15,15 +18,17 @@ class BoundType(IntEnum):
 
 
 class NiBoundingVolume(NiObject):  # TODO Not NiObject
-    bound_type = BoundType.BOX_BV  # type: int32
+    bound_type = BoundType.BOX_BV  # type: int32  # pyright: ignore[reportTypeCommentUsage]
 
     # provide access to related enums
     BoundType = BoundType
 
-    @classmethod
-    def load(cls, stream):
-        if cls is not NiBoundingVolume:
-            return  # ignore subclasses
+    @staticmethod
+    def read(stream: NiBinaryStream) -> NiBoundingVolume:
+        from .NiBoxBV import NiBoxBV
+        from .NiSphereBV import NiSphereBV
+        from .NiUnionBV import NiUnionBV
+
         bound_type = BoundType(stream.read_int())
         if bound_type == BoundType.SPHERE_BV:
             return stream.read_type(NiSphereBV)
@@ -33,15 +38,5 @@ class NiBoundingVolume(NiObject):  # TODO Not NiObject
             return stream.read_type(NiUnionBV)
         raise NotImplementedError(bound_type)
 
-    @classmethod
-    def save(cls, stream):
-        stream.write_int(cls.bound_type)
-
-
-from .NiSphereBV import NiSphereBV
-from .NiBoxBV import NiBoxBV
-from .NiUnionBV import NiUnionBV
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *
+    def save(self, stream: NiBinaryStream) -> None:
+        stream.write_int(self.bound_type)

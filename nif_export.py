@@ -1125,10 +1125,10 @@ class Material(SceneNode):
 
             # TODO: dxt compression (does not work in OpenMW yet)
             if include_alpha:
-                pixel_format = nif.NiPixelFormat.RGBA
+                pixel_format = nif.NiPixelFormat.RGBA()
                 pixel_stride = 4
             else:
-                pixel_format = nif.NiPixelFormat.RGB
+                pixel_format = nif.NiPixelFormat.RGB()
                 pixel_stride = 3
 
             pixel_data = nif.NiPixelData(pixel_format=pixel_format, pixel_stride=pixel_stride)

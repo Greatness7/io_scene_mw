@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
 
 
@@ -30,13 +33,13 @@ class NiPixelFormat(NiObject):
     # provide access to related enums
     PixelFormat = PixelFormat
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         self.format = PixelFormat(stream.read_int())
         self.color_masks = stream.read_uints(4)
         self.bits_per_pixel = stream.read_uint()
         self.compare_bits = stream.read_uints(2)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         stream.write_int(self.format)
         stream.write_uints(self.color_masks)
         stream.write_uint(self.bits_per_pixel)
@@ -53,7 +56,6 @@ class NiPixelFormat(NiObject):
         )
 
     @classmethod
-    @property
     def RGB(cls) -> NiPixelFormat:
         pixel_format = cls()
         pixel_format.format = PixelFormat.RGB
@@ -63,7 +65,6 @@ class NiPixelFormat(NiObject):
         return pixel_format
 
     @classmethod
-    @property
     def RGBA(cls) -> NiPixelFormat:
         pixel_format = cls()
         pixel_format.format = PixelFormat.RGBA
@@ -73,7 +74,6 @@ class NiPixelFormat(NiObject):
         return pixel_format
 
     @classmethod
-    @property
     def DXT1(cls) -> NiPixelFormat:
         pixel_format = cls()
         pixel_format.format = PixelFormat.COMPRESS1
@@ -83,7 +83,6 @@ class NiPixelFormat(NiObject):
         return pixel_format
 
     @classmethod
-    @property
     def DXT5(cls) -> NiPixelFormat:
         pixel_format = cls()
         pixel_format.format = PixelFormat.COMPRESS5
@@ -91,7 +90,3 @@ class NiPixelFormat(NiObject):
         pixel_format.bits_per_pixel = 0
         pixel_format.compare_bits[:] = [0x00000008, 0x00000000]
         return pixel_format
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

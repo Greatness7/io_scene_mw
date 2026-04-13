@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from enum import IntEnum
+from typing import TYPE_CHECKING
 
-from es3.utils.flags import bool_property, enum_property
+from ..utils.flags import bool_property, enum_property
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
+
+if TYPE_CHECKING:
+    from .NiObjectNET import NiObjectNET
 
 
 class CycleType(IntEnum):
@@ -31,7 +38,7 @@ class NiTimeController(NiObject):
     _refs = (*NiObject._refs, "next")
     _ptrs = (*NiObject._ptrs, "target")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         self.next = stream.read_link()
         self.flags = stream.read_ushort()
         self.frequency = stream.read_float()
@@ -40,7 +47,7 @@ class NiTimeController(NiObject):
         self.stop_time = stream.read_float()
         self.target = stream.read_link()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         stream.write_link(self.next)
         stream.write_ushort(self.flags)
         stream.write_float(self.frequency)
@@ -60,8 +67,3 @@ class NiTimeController(NiObject):
         self.phase *= scale
         self.start_time *= scale
         self.stop_time *= scale
-
-
-if __name__ == "__main__":
-    from es3.nif import NiObjectNET
-    from es3.utils.typing import *

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiFloatData import KeyType, NiFloatData
 
 
 class NiPosData(NiFloatData):
-
     @property
     def key_size(self) -> int:
         if self.key_type == KeyType.LIN_KEY:
@@ -27,12 +28,8 @@ class NiPosData(NiFloatData):
     def out_tans(self) -> ndarray:
         return self.keys[:, 7:]
 
-    def apply_scale(self, scale):
+    def apply_scale(self, scale: float) -> None:
         if self.key_type == KeyType.BEZ_KEY:
             self.keys[:, 1:] *= scale  # scale values and tangents
         else:
             self.keys[:, 1:4] *= scale  # scale values only
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from es3.utils.math import np, zeros
+from ..utils.math import np, zeros
+from ..utils.typing import *
 
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
 from .NiTimeController import NiTimeController
 
@@ -16,7 +18,7 @@ class NiSequence(NiObject):
     unknown_object: NiObject | None = None
     name_controller_pairs: ndarray = zeros(0, dtype=_dtype)
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         self.sequence_name = stream.read_str()
 
         has_external_kf = stream.read_ubyte()
@@ -32,7 +34,7 @@ class NiSequence(NiObject):
             for i in range(num_name_controller_pairs):
                 self.name_controller_pairs[i] = stream.read_str(), stream.read_int()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         stream.write_str(self.sequence_name)
 
         stream.write_ubyte(bool(self.keyframe_file))
@@ -51,17 +53,13 @@ class NiSequence(NiObject):
 class NiKeyframeManager(NiTimeController):
     sequences: list[NiSequence] = []
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         num_sequences = stream.read_uint()
         self.sequences = [stream.read_type(NiSequence) for _ in range(num_sequences)]
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_int(len(self.sequences))
         for item in self.sequences:
             item.save(stream)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

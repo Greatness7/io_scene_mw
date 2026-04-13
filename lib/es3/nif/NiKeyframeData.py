@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .NiBinaryStream import NiBinaryStream
 from .NiFloatData import NiFloatData
 from .NiObject import NiObject
 from .NiPosData import NiPosData
@@ -11,21 +12,21 @@ class NiKeyframeData(NiObject):
     translations: NiPosData = NiPosData()
     scales: NiFloatData = NiFloatData()
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         self.rotations = stream.read_type(NiRotData)
         self.translations = stream.read_type(NiPosData)
         self.scales = stream.read_type(NiFloatData)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         self.rotations.save(stream)
         self.translations.save(stream)
         self.scales.save(stream)
 
-    def apply_scale(self, scale):
+    def apply_scale(self, scale: float) -> None:
         self.translations.apply_scale(scale)
 
     def get_start_stop_times(self) -> tuple[float, float]:
-        start_time = float('inf')
+        start_time = float("inf")
         stop_time = -start_time
 
         r = self.rotations.euler_data or (self.rotations,)

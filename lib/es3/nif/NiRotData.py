@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.math import np, quaternion_from_euler_angle, quaternion_mul, zeros
+from ..utils.math import np, quaternion_from_euler_angle, quaternion_mul, zeros
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiFloatData import KeyType, NiFloatData
 
 
@@ -25,19 +28,21 @@ class NiRotData(NiFloatData):
     # provide access to related enums
     AxisOrder = AxisOrder
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         num_keys = stream.read_uint()
         if num_keys:
             self.key_type = KeyType(stream.read_int())
             if self.key_type == KeyType.EULER_KEY:
                 self.euler_axis_order = AxisOrder(stream.read_int())
-                self.euler_data = (stream.read_type(NiFloatData),
-                                   stream.read_type(NiFloatData),
-                                   stream.read_type(NiFloatData))
+                self.euler_data = (
+                    stream.read_type(NiFloatData),
+                    stream.read_type(NiFloatData),
+                    stream.read_type(NiFloatData),
+                )
             else:
                 self.keys = stream.read_floats(num_keys, self.key_size)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         num_keys = self._num_keys()
         stream.write_uint(num_keys)
         if num_keys:
@@ -96,8 +101,8 @@ class NiRotData(NiFloatData):
         if x == y == z == 0:
             return  # no keys exist on any axis
 
-        q_keys = zeros(x+y+z, 5)
-        slices = np.s_[:x, x:x+y, x+y:x+y+z]
+        q_keys = zeros(x + y + z, 5)
+        slices = np.s_[:x, x : x + y, x + y : x + y + z]
 
         for i, keys in enumerate(e_keys):
             if len(keys) == 0:
@@ -110,7 +115,7 @@ class NiRotData(NiFloatData):
             quaternion_from_euler_angle(angle=keys[:, 1], euler_axis=i, out=q[:, 1:5])
 
         # sort and combine keys of same timings
-        u, i, v = np.unique(q_keys[:, 0], return_index=True, return_inverse=True)
+        u, i, v = np.unique(q_keys[:, 0], return_index=True, return_inverse=True)  # pyright: ignore[reportUnknownMemberType]
         if len(u) == len(q_keys):
             self.keys = q_keys[i]
         else:
@@ -126,7 +131,3 @@ class NiRotData(NiFloatData):
         super().apply_time_scale(scale)
         for euler_data in self.euler_data:
             euler_data.apply_time_scale(scale)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

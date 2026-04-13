@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3
+from ..utils.math import ZERO3
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
 
 
@@ -13,7 +16,7 @@ class NiPerParticleData(NiObject):  # TODO not NiObject
     generation: uint16 = 0
     index: uint16 = 0
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         self.velocity = stream.read_floats(3)
         self.rotation_axis = stream.read_floats(3)
         self.age = stream.read_float()
@@ -22,7 +25,7 @@ class NiPerParticleData(NiObject):  # TODO not NiObject
         self.generation = stream.read_ushort()
         self.index = stream.read_ushort()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         stream.write_floats(self.velocity)
         stream.write_floats(self.rotation_axis)
         stream.write_float(self.age)
@@ -30,7 +33,3 @@ class NiPerParticleData(NiObject):  # TODO not NiObject
         stream.write_float(self.last_update)
         stream.write_ushort(self.generation)
         stream.write_ushort(self.index)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

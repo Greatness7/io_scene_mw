@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from es3.utils.math import ID44, la, np
+from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING, Any, cast
+
+from ..utils.math import ID44, allclose, la
+from ..utils.typing import *
+
 from .NiAVObject import NiAVObject
+from .NiDynamicEffect import NiDynamicEffect
 
 
-def _sort_children_key(child):
+def _sort_children_key(child: NiAVObject | None) -> tuple[str, bool, int]:
     name = getattr(child, "name", "").lower()
     if name.startswith("tri "):
         prefix, suffix = name.rsplit(" ", 1)
@@ -13,23 +19,29 @@ def _sort_children_key(child):
     return name, False, 0
 
 
+if TYPE_CHECKING:
+    from ..utils.math import FloatArray
+    from .NiBinaryStream import NiBinaryStream
+    from .NiGeometry import NiGeometry
+
+
 class NiNode(NiAVObject):
     children: list[NiAVObject | None] = []
     effects: list[NiDynamicEffect | None] = []
 
     _refs = (*NiAVObject._refs, "children", "effects")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.children = stream.read_links()
         self.effects = stream.read_links()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_links(self.children)
         stream.write_links(self.effects)
 
-    def sort(self, key=_sort_children_key):
+    def sort(self, key: Callable[[Any], Any] = _sort_children_key) -> None:
         """Sort the NiNode's children list.
 
         If no key is provided children will be sorted by their name, with
@@ -39,22 +51,22 @@ class NiNode(NiAVObject):
         super().sort()
         self.children.sort(key=key)
 
-    def skinned_meshes(self):
+    def skinned_meshes(self) -> Iterator[NiGeometry]:
         for mesh in self.descendants():
             if getattr(mesh, "skin", None):
-                yield mesh
+                yield cast("NiGeometry", mesh)
 
-    def apply_skins(self, keep_skins=False):
+    def apply_skins(self, keep_skins: bool = False) -> None:
         for mesh in self.skinned_meshes():
             mesh.apply_skin(keep_skins)
 
-    def calc_bone_bind_poses(self):
-        """ TODO
-            handle bones without defined bind poses
-            e.g. any Bip01 stuffs unused in rigging
+    def calc_bone_bind_poses(self) -> dict[NiAVObject, FloatArray]:
+        """TODO
+        handle bones without defined bind poses
+        e.g. any Bip01 stuffs unused in rigging
         """
-        temps = {}
-        binds = {}
+        temps: dict[NiGeometry, dict[NiAVObject | None, FloatArray]] = {}
+        binds: dict[NiAVObject | None, FloatArray] = {}
 
         # collect bind positions
         for mesh in self.skinned_meshes():
@@ -62,20 +74,19 @@ class NiNode(NiAVObject):
             temps[mesh] = {bone: matrix @ la.inv(data.matrix) for bone, data in mesh.bone_influences}
 
         # bind position priority
-        def sorter(items):
+        def sorter(items: tuple[NiGeometry, dict[NiAVObject | None, FloatArray]]) -> tuple[int, int]:
             node, data = items
             # give shadow meshes preference as they tend to encompass the entire skeleton
             return int(node.is_shadow), len(data)  # else bones with more users gets prio
 
         # process bind positions
         for mesh, data in sorted(temps.items(), key=sorter, reverse=True):
-
             # compare with previously seen bones
             for bone in data.keys() & binds.keys():
                 diff = la.solve(data[bone], binds[bone])
 
                 # do the bind positions coincide
-                if not np.allclose(diff, ID44, rtol=0, atol=0.001):
+                if not allclose(diff, ID44, rtol=0, atol=0.001):
                     print(f"MISMATCHED BINDPOSES: {bone} vs {mesh}")
                     # print(diff)
                     break
@@ -85,7 +96,7 @@ class NiNode(NiAVObject):
         # use hierarchical order
         return {bone: binds[bone] for bone in self.descendants() if bone in binds}
 
-    def apply_bone_bind_poses(self, lock_children=False):
+    def apply_bone_bind_poses(self, lock_children: bool = False) -> None:
         bind_poses = self.calc_bone_bind_poses()
 
         for bone, bind in bind_poses.items():
@@ -94,8 +105,7 @@ class NiNode(NiAVObject):
             # calculate difference
             diff = la.solve(pose, bind)
 
-            if not np.allclose(diff, ID44, rtol=0, atol=1e-6):
-
+            if not allclose(diff, ID44, rtol=0, atol=1e-6):
                 # update bind pose
                 bone.matrix = bone.matrix @ diff
 
@@ -103,9 +113,5 @@ class NiNode(NiAVObject):
                 if lock_children:
                     diff_inv = la.inv(diff)
                     for child in bone.children:
-                        child.matrix = child.matrix @ diff_inv
-
-
-if __name__ == "__main__":
-    from es3.nif import NiDynamicEffect
-    from es3.utils.typing import *
+                        if child is not None:
+                            child.matrix = child.matrix @ diff_inv

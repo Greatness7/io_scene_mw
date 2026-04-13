@@ -1,10 +1,20 @@
 from __future__ import annotations
 
-from es3.utils.flags import bool_property
-from es3.utils.math import decompose_uniform, zeros
-from .NiAVObject import NiAVObject
-
 import numpy.linalg as la
+from typing import TYPE_CHECKING, cast
+
+from ..utils.flags import bool_property
+from ..utils.math import decompose_uniform, zeros
+from ..utils.typing import *
+
+from .NiAVObject import NiAVObject
+from .NiGeometryData import NiGeometryData
+from .NiMorpherController import NiMorpherController
+from .NiSkinInstance import NiSkinInstance
+
+if TYPE_CHECKING:
+    from ..utils.math import Array
+    from .NiBinaryStream import NiBinaryStream
 
 
 class NiGeometry(NiAVObject):
@@ -19,35 +29,40 @@ class NiGeometry(NiAVObject):
 
     _refs = (*NiAVObject._refs, "data", "skin")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.data = stream.read_link()
         self.skin = stream.read_link()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_link(self.data)
         stream.write_link(self.skin)
 
     @property
     def bone_influences(self):
-        try:
-            skin = self.skin.root and self.skin
-            assert len(skin.bones) == len(skin.data.bone_data)
-        except (AttributeError, AssertionError):
+        skin = self.skin
+        if skin is None or skin.root is None or skin.data is None:
+            return ()
+        if len(skin.bones) != len(skin.data.bone_data):
             return ()
         return tuple(zip(skin.bones, skin.data.bone_data))
 
     @property
     def morph_targets(self):
-        try:
-            basis, *targets = self.controller.data.targets
-            assert len(basis.vertices) == len(self.data.vertices)
-        except (AttributeError, AssertionError, ValueError):
+        # the morpher is not always the head of the controller chain
+        controller = self.controllers.find_type(NiMorpherController)
+        if controller is None or controller.data is None or self.data is None:
+            return ()
+        if len(controller.data.targets) == 0:
+            return ()
+        basis, *targets = controller.data.targets
+        if len(basis.vertices) != len(self.data.vertices):
             return ()
         return tuple(targets)
 
     def vertex_weights(self):
+        assert self.data is not None, f"{self.name}: geometry has no data"
         bone_influences = self.bone_influences
         vertex_weights = zeros(len(bone_influences), len(self.data.vertices))
 
@@ -59,6 +74,7 @@ class NiGeometry(NiAVObject):
         return vertex_weights
 
     def vertex_morphs(self):
+        assert self.data is not None, f"{self.name}: geometry has no data"
         morph_targets = self.morph_targets
         vertex_morphs = zeros(len(morph_targets), len(self.data.vertices), 3)
 
@@ -67,9 +83,14 @@ class NiGeometry(NiAVObject):
 
         return vertex_morphs
 
-    def apply_skin(self, keep_skin=False):
+    def apply_skin(self, keep_skin: bool = False) -> None:
         data = self.data
         skin = self.skin
+
+        assert data is not None
+        assert skin is not None
+        assert skin.data is not None
+        assert skin.root is not None
         if not keep_skin:
             self.skin = None
 
@@ -78,29 +99,28 @@ class NiGeometry(NiAVObject):
 
         root_to_skin = skin.data.matrix
         for bone, bone_data in zip(skin.bones, skin.data.bone_data):
+            assert bone is not None
+
             skin_to_bone = bone_data.matrix
 
             bone_matrix = bone.matrix_relative_to(skin.root)
             bind_matrix = root_to_skin @ bone_matrix @ skin_to_bone
 
             location, rotation, scale = decompose_uniform(bind_matrix)
+            rotation_t = cast("Array", rotation.T)  # pyright: ignore[reportUnknownMemberType]
+            location_t = cast("Array", location.T)  # pyright: ignore[reportUnknownMemberType]
 
             # indices and weights
             i = bone_data.vertex_weights["f0"]
             w = bone_data.vertex_weights["f1"][:, None]
 
             if len(deformed_verts):
-                deformed_verts[i] += w * (data.vertices[i] @ rotation.T * scale + location.T)
+                deformed_verts[i] += w * (data.vertices[i] @ rotation_t * scale + location_t)
             if len(deformed_norms):
-                deformed_norms[i] += w * (data.normals[i] @ rotation.T)
+                deformed_norms[i] += w * (data.normals[i] @ rotation_t)
 
         # re-unitize normals
-        deformed_norms /= la.norm(deformed_norms, axis=1, keepdims=True)
+        deformed_norms /= la.norm(deformed_norms, axis=1, keepdims=True)  # pyright: ignore[reportUnknownMemberType]
 
         data.vertices = deformed_verts
         data.normals = deformed_norms
-
-
-if __name__ == "__main__":
-    from es3.nif import NiGeometryData, NiSkinInstance
-    from es3.utils.typing import *

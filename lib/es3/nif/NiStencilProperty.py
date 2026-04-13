@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiProperty import NiProperty
 
 
@@ -47,7 +50,7 @@ class NiStencilProperty(NiProperty):
     Action = Action
     DrawMode = DrawMode
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.stencil_enabled = stream.read_ubyte()
         self.stencil_function = TestFunction(stream.read_int())
@@ -58,7 +61,7 @@ class NiStencilProperty(NiProperty):
         self.pass_action = Action(stream.read_int())
         self.draw_mode = DrawMode(stream.read_int())
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_ubyte(self.stencil_enabled)
         stream.write_int(self.stencil_function)
@@ -68,7 +71,3 @@ class NiStencilProperty(NiProperty):
         stream.write_int(self.pass_z_fail_action)
         stream.write_int(self.pass_action)
         stream.write_int(self.draw_mode)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

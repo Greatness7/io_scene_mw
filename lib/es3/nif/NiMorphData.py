@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiMorphDataMorphTarget import NiMorphDataMorphTarget
 from .NiObject import NiObject
 
@@ -8,7 +11,7 @@ class NiMorphData(NiObject):
     relative_targets: uint8 = 1
     targets: list[NiMorphDataMorphTarget] = []
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         num_targets = stream.read_uint()
         num_vertices = stream.read_uint()
         self.relative_targets = stream.read_ubyte()
@@ -16,14 +19,14 @@ class NiMorphData(NiObject):
         for item in self.targets:
             item.load(stream, num_vertices)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         stream.write_uint(len(self.targets))
         stream.write_uint(len(self.basis) if self.targets else 0)
         stream.write_ubyte(self.relative_targets)
         for item in self.targets:
             item.save(stream)
 
-    def apply_scale(self, scale):
+    def apply_scale(self, scale: float) -> None:
         for item in self.targets:
             item.vertices *= scale
 
@@ -35,7 +38,3 @@ class NiMorphData(NiObject):
         super().apply_time_scale(scale)
         for target in self.targets:
             target.apply_time_scale(scale)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

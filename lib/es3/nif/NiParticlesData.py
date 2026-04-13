@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiGeometryData import NiGeometryData
 
 
@@ -10,7 +13,7 @@ class NiParticlesData(NiGeometryData):
     num_active: uint16 = 0
     sizes: ndarray = zeros(0)
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.num_particles = stream.read_ushort()
         self.particle_radius = stream.read_float()
@@ -19,7 +22,7 @@ class NiParticlesData(NiGeometryData):
         if has_sizes:
             self.sizes = stream.read_floats(len(self.vertices))
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_ushort(self.num_particles)
         stream.write_float(self.particle_radius)
@@ -28,7 +31,3 @@ class NiParticlesData(NiGeometryData):
         stream.write_bool(num_sizes)
         if num_sizes:
             stream.write_floats(self.sizes)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

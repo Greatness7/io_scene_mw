@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiProperty import NiProperty
 
 
@@ -24,16 +27,12 @@ class NiVertexColorProperty(NiProperty):
     SourceVertexMode = SourceVertexMode
     LightingMode = LightingMode
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.source_vertex_mode = SourceVertexMode(stream.read_int())
         self.lighting_mode = LightingMode(stream.read_int())
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_int(self.source_vertex_mode)
         stream.write_int(self.lighting_mode)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

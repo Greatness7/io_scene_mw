@@ -1,35 +1,43 @@
 from __future__ import annotations
 
+from es3 import nif
+from collections.abc import Callable, Collection, Iterable
 from itertools import chain
 from math import isclose
+from typing import TypeVar, cast
 
-from es3 import nif
+from ..utils.typing import *
+
 from .NiBinaryStream import NiBinaryStream
+from .NiObject import NiObject
+
+
+NiObjectT = TypeVar("NiObjectT", bound=NiObject)
 
 
 class NiStream:
-    __slots__ = "roots",
+    __slots__ = ("roots",)
 
     HEADER = b"NetImmerse File Format, Version 4.0.0.2\n"
     VERSION = 0x4000002
     TYPES = vars(nif)
 
-    def __init__(self):
-        self.roots: list[NiObject] = []
+    def __init__(self) -> None:
+        self.roots: list[NiObject | None] = []
 
-    def load(self, filepath: PathLike):
+    def load(self, filepath: PathLike) -> None:
         with NiBinaryStream.reader(filepath) as stream:
             assert stream.readline() == self.HEADER
             assert stream.read_uint() == self.VERSION
             self.roots += stream.read_objects(self.TYPES)
 
-    def save(self, filepath: PathLike):
+    def save(self, filepath: PathLike) -> None:
         with NiBinaryStream.writer(filepath) as stream:
             stream.write(self.HEADER)
             stream.write_uint(self.VERSION)
             stream.write_objects(self.objects(), self.roots)
 
-    def sort(self):
+    def sort(self) -> None:
         for obj in self.objects():
             obj.sort()
 
@@ -48,35 +56,41 @@ class NiStream:
         return self.roots[0] if self.roots else None
 
     @root.setter
-    def root(self, node: NiObject | None):
+    def root(self, node: NiObject | None) -> None:
         self.roots = [node]
 
-    def roots_of_type(self, cls: type[T]) -> Iterator[T]:
+    def roots_of_type(self, cls: type[NiObjectT]) -> Iterator[NiObjectT]:
         yield from (root for root in self.roots if isinstance(root, cls))
 
-    def objects(self, iterator=chain.from_iterable) -> Iterator[NiObject]:
-        yield from iterator(root._traverse({None}) for root in self.roots)
+    def objects(
+        self, iterator: Callable[[Iterable[Iterable[NiObject]]], Iterable[NiObject]] = chain.from_iterable
+    ) -> Iterator[NiObject]:
+        traversals = (root.traverse(set()) for root in self.roots if root is not None)
+        yield from iterator(traversals)
 
-    def objects_of_type(self, cls: type[T]) -> Iterator[T]:
+    def objects_of_type(self, cls: type[NiObjectT] | tuple[type[NiObjectT], ...]) -> Iterator[NiObjectT]:
         return (obj for obj in self.objects() if isinstance(obj, cls))
 
-    def find_object_by_name(self, name, object_type=None, fn=str.lower):
+    def find_object_by_name(
+        self, name: str, object_type: type[nif.NiObjectNET] | None = None, fn: Callable[[str], str] = str.lower
+    ) -> nif.NiObjectNET | None:
         name = fn(name)
         for obj in self.objects_of_type(object_type or nif.NiObjectNET):
             if fn(obj.name) == name:
                 return obj
 
-    def merge_properties(self, digits=4, ignore=(), sanitize_filenames=True):
+    def merge_properties(self, digits: int = 4, ignore: Collection[str] = (), sanitize_filenames: bool = True) -> None:
         """..."""
-        cache = {}
+        cache: dict[object, NiObject] = {}
 
-        def ensure_unique(obj: NiObject):
+        def ensure_unique(obj: NiObjectT) -> NiObjectT:
             try:
-                return cache[obj]
+                return cast(NiObjectT, cache[obj])
             except KeyError:
-                key = obj._astuple(digits, ignore)
-                obj = cache[obj] = cache.setdefault(key, obj)
-                return obj
+                key = obj.astuple(digits, ignore)
+                canonical = cast(NiObjectT, cache.setdefault(key, obj))
+                cache[obj] = canonical
+                return canonical
 
         # flags on these properties do nothing and can interfere with the merging process
         for prop in self.objects_of_type((nif.NiMaterialProperty, nif.NiTexturingProperty)):
@@ -117,15 +131,15 @@ class NiStream:
             raise ValueError("extract_keyframe_data: no NiTextKeyExtraData object was found.")
 
         # extract controllers
-        kf_controllers = {}
+        kf_controllers: dict[nif.NiObjectNET, nif.NiKeyframeController] = {}
 
-        def extract_kf_controller(owner):
+        def extract_kf_controller(owner: NiObject) -> None:
             if isinstance(owner, nif.NiObjectNET):
                 if kf_controller := owner.controllers.discard_type(nif.NiKeyframeController):
                     kf_controller.target = None
                     kf_controllers[owner] = kf_controller
 
-        for root in self.roots:
+        for root in filter(None, self.roots):
             extract_kf_controller(root)
             for node in root.descendants():
                 extract_kf_controller(node)
@@ -134,23 +148,24 @@ class NiStream:
         output = nif.NiStream()
 
         # assign root object
-        output.root = nif.NiSequenceStreamHelper(extra_data=text_data)
+        output_root = nif.NiSequenceStreamHelper(extra_data=text_data)
+        output.root = output_root
 
         # assign controllers
-        extra_datas = []
-        controllers = []
+        extra_datas: list[nif.NiExtraData] = []
+        controllers: list[nif.NiTimeController] = []
 
         for target, controller in kf_controllers.items():
             extra_data = nif.NiStringExtraData(string_data=target.name)
             extra_datas.append(extra_data)
             controllers.append(controller)
 
-        output.root.extra_datas.extend(extra_datas)
-        output.root.controllers.extend(controllers)
+        output_root.extra_datas.extend(extra_datas)
+        output_root.controllers.extend(controllers)
 
         return output
 
-    def attach_keyframe_data(self, kf_data: NiStream):
+    def attach_keyframe_data(self, kf_data: NiStream) -> None:
         # TODO can a single node have multiple keyframe controllers? if so find_type() is not enough
 
         kf_root = kf_data.root
@@ -170,7 +185,7 @@ class NiStream:
         skeleton_root.extra_datas.appendleft(kf_text_data)
 
         # collect controllers/targets
-        controllers_to_attach: dict[str, nif.NiKeyframeController] = {
+        controllers_to_attach: dict[str, nif.NiTimeController] = {
             s.string_data: c for s, c in zip(kf_string_datas, kf_root.controllers)
         }
 
@@ -181,8 +196,3 @@ class NiStream:
                 obj.controllers.discard_type(nif.NiKeyframeController)
                 obj.controllers.appendleft(new_controller)
                 new_controller.target = obj
-
-
-if __name__ == "__main__":
-    from .NiObject import NiObject
-    from es3.utils.typing import *

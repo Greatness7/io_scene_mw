@@ -4,7 +4,6 @@ from .NiFloatData import KeyType, NiFloatData
 
 
 class NiColorData(NiFloatData):
-
     @property
     def key_size(self) -> int:
         if self.key_type == KeyType.LIN_KEY:

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.math import ZERO3
+from ..utils.math import ZERO3
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiParticleModifier import NiParticleModifier
 
 
@@ -21,7 +24,7 @@ class NiGravity(NiParticleModifier):
     # provide access to related enums
     ForceType = ForceType
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.decay = stream.read_float()
         self.strength = stream.read_float()
@@ -29,14 +32,10 @@ class NiGravity(NiParticleModifier):
         self.position = stream.read_floats(3)
         self.direction = stream.read_floats(3)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_float(self.decay)
         stream.write_float(self.strength)
         stream.write_int(self.force_type)
         stream.write_floats(self.position)
         stream.write_floats(self.direction)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

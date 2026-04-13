@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from enum import IntEnum
+from typing import TYPE_CHECKING, cast
 
-from es3.utils.math import np, zeros
+from ..utils.math import np, zeros
+from ..utils.typing import *
+
 from .NiObject import NiObject
+
+if TYPE_CHECKING:
+    from ..utils.math import Array
+    from .NiBinaryStream import NiBinaryStream
 
 
 class KeyType(IntEnum):
@@ -21,13 +28,13 @@ class NiFloatData(NiObject):
     # provide access to related enums
     KeyType = KeyType
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         num_keys = stream.read_uint()
         if num_keys:
             self.key_type = KeyType(stream.read_int())
             self.keys = stream.read_floats(num_keys, self.key_size)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         num_keys = len(self.keys)
         stream.write_uint(num_keys)
         if num_keys:
@@ -84,7 +91,7 @@ class NiFloatData(NiObject):
         handles = np.empty(shape, values.dtype)
 
         if len(handles):
-            dt = np.diff(times / 3.0, prepend=0, append=0)
+            dt = np.diff(times / 3.0, prepend=0, append=0)  # pyright: ignore[reportUnknownMemberType]
             dt[0], dt[-1] = dt[1], dt[-2]  # correct edges
 
             # relative horizontal coordinates
@@ -92,15 +99,15 @@ class NiFloatData(NiObject):
             out_dx = dt[1:]
 
             # relative vertical coordinates
-            in_dy = self.in_tans.T / 3.0
-            out_dy = self.out_tans.T / 3.0
+            in_dy = cast("Array", self.in_tans.T) / 3.0  # pyright: ignore[reportUnknownMemberType]
+            out_dy = cast("Array", self.out_tans.T) / 3.0  # pyright: ignore[reportUnknownMemberType]
 
             # incoming handles
             handles[0, ..., 0] = times - in_dx
-            handles[0, ..., 1] = values.T - in_dy
+            handles[0, ..., 1] = values.T - in_dy  # pyright: ignore[reportUnknownMemberType]
             # outgoing handles
             handles[1, ..., 0] = times + out_dx
-            handles[1, ..., 1] = values.T + out_dy
+            handles[1, ..., 1] = values.T + out_dy  # pyright: ignore[reportUnknownMemberType]
 
         return handles
 
@@ -113,8 +120,8 @@ class NiFloatData(NiObject):
 
         if len(handles):
             # calculate deltas
-            dx = (np.roll(times, 1, axis=0) - np.roll(times, -1, axis=0)) / 6.0
-            dy = (np.roll(values, 1, axis=0) - np.roll(values, -1, axis=0)) / 6.0
+            dx = (np.roll(times, 1, axis=0) - np.roll(times, -1, axis=0)) / 6.0  # pyright: ignore[reportUnknownMemberType]
+            dy = (np.roll(values, 1, axis=0) - np.roll(values, -1, axis=0)) / 6.0  # pyright: ignore[reportUnknownMemberType]
             # fix up start/end
             dy[0] = dy[-1] = 0
 
@@ -124,10 +131,10 @@ class NiFloatData(NiObject):
 
             # incoming handles
             handles[0, ..., 0] = times - dx
-            handles[0, ..., 1] = values.T - dy.T
+            handles[0, ..., 1] = values.T - dy.T  # pyright: ignore[reportUnknownMemberType]
             # outgoing handles
             handles[1, ..., 0] = times + dx
-            handles[1, ..., 1] = values.T + dy.T
+            handles[1, ..., 1] = values.T + dy.T  # pyright: ignore[reportUnknownMemberType]
 
         return handles
 
@@ -135,7 +142,3 @@ class NiFloatData(NiObject):
         super().apply_time_scale(scale)
         if len(self.keys):
             self.times[:] *= scale
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
+from .NiPixelData import NiPixelData
 
 
 class NiBltSource(NiObject):
     filename: str = ""
     pixel_data: NiPixelData | None = None
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         has_external_texture = stream.read_ubyte()
         if has_external_texture:
             self.filename = stream.read_str()
@@ -16,7 +20,7 @@ class NiBltSource(NiObject):
             if has_pixel_data:
                 self.pixel_data = stream.read_link()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         stream.write_ubyte(bool(self.filename))
         if self.filename:
             stream.write_str(self.filename)
@@ -24,8 +28,3 @@ class NiBltSource(NiObject):
             stream.write_ubyte(bool(self.pixel_data))
             if self.pixel_data:
                 self.pixel_data.save(stream)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiPixelData
-    from es3.utils.typing import *

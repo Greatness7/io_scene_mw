@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiParticleModifier import NiParticleModifier
 
 
@@ -7,12 +10,12 @@ class NiParticleGrowFade(NiParticleModifier):
     grow_time: float32 = 0.0
     fade_time: float32 = 0.0
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.grow_time = stream.read_float()
         self.fade_time = stream.read_float()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_float(self.grow_time)
         stream.write_float(self.fade_time)
@@ -21,7 +24,3 @@ class NiParticleGrowFade(NiParticleModifier):
         super().apply_time_scale(scale)
         self.grow_time *= scale
         self.fade_time *= scale
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

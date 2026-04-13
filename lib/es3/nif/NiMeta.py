@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from es3.utils.math import np
+from ..utils.math import np
+from ..utils.typing import *
 
 
 class NiMeta(type):
     __slots__ = ()
+    defaults: type
 
     def __new__(cls, name: str, bases: tuple[type, ...], namespace: dict[str, Any]):
 
@@ -25,15 +27,11 @@ class NiMeta(type):
 
         return super().__new__(cls, name, bases, namespace)
 
-    def __setattr__(cls, name, value):
+    def __setattr__(cls, name: str, value: object) -> None:
         if hasattr(cls.defaults, name):
             # prevent assignments that would interfere with defaults
             raise TypeError(f"can't set attribute '{name}' of {cls}")
         super().__setattr__(name, value)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *
 
 
 _hashable_types = (
@@ -52,20 +50,21 @@ _hashable_types = (
     type(Ellipsis),
     type(NotImplemented),
 )
-_defaults_cache: dict[tuple, Callable[[], Any]] = {}
 
 
-def _defaults_getter(value: T) -> Callable[[], T]:
+def _defaults_getter(value: Any) -> Callable[[], Any]:
+    # `default` and `cls` are bound before the isinstance checks, as narrowing
+    # `value` would only produce types that strict mode sees as partly unknown
+    default: Any = value
+    cls: type[Any] = default.__class__
 
     if isinstance(value, np.ndarray):
-        _hash = value.dtype, value.tobytes()
-        return _defaults_cache.setdefault(_hash, value.copy)
+        return default.copy
 
     if isinstance(value, _hashable_types):
-        _hash = type(value), value
-        return _defaults_cache.setdefault(_hash, lambda: value)
+        return lambda: default
 
-    return type(value)
+    return cls
 
 
 def _create_defaults(name: str, bases: tuple[type, ...], defaults_dict: dict[str, Any]):

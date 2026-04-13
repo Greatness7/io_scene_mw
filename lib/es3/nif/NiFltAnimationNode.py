@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from es3.utils.flags import bool_property
+from ..utils.flags import bool_property
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiSwitchNode import NiSwitchNode
 
 
@@ -10,18 +13,14 @@ class NiFltAnimationNode(NiSwitchNode):
     # flags access
     bounce = bool_property(mask=0x0040)
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.period = stream.read_float()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_float(self.period)
 
     def apply_time_scale(self, scale: float):
         super().apply_time_scale(scale)
         self.period *= scale
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

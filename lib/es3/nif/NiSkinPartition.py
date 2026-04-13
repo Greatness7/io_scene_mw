@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
 
 
@@ -13,7 +16,7 @@ class NiPartition(NiObject):  # TODO Not NiObject
     strips: ndarray = zeros(0, dtype="<H")
     bone_palette: ndarray = zeros(0, dtype="<B")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         num_vertices = stream.read_ushort()
         num_triangles = stream.read_ushort()
         num_bones = stream.read_ushort()
@@ -34,7 +37,7 @@ class NiPartition(NiObject):  # TODO Not NiObject
         if has_palette:
             self.bone_palette = stream.read_ubytes(num_bones_per_vertex, num_vertices)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         stream.write_ushort(len(self.vertex_map))
         stream.write_ushort(len(self.triangles))
         stream.write_ushort(len(self.bones))
@@ -59,18 +62,12 @@ class NiPartition(NiObject):  # TODO Not NiObject
 class NiSkinPartition(NiObject):
     partitions: list[NiPartition] = []
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         num_partitions = stream.read_uint()
-        self.partitions = [
-            stream.read_type(NiPartition) for _ in range(num_partitions)
-        ]
+        self.partitions = [stream.read_type(NiPartition) for _ in range(num_partitions)]
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         num_partitions = len(self.partitions)
         stream.write_uint(num_partitions)
         for item in self.partitions:
             item.save(stream)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

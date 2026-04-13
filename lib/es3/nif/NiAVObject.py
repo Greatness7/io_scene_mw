@@ -3,10 +3,14 @@ from __future__ import annotations
 from collections import deque
 from enum import IntEnum
 
-from es3.utils.flags import bool_property, enum_property
-from es3.utils.math import compose, decompose_uniform, dotproduct, ID33, ZERO3
+from ..utils.flags import bool_property, enum_property
+from ..utils.math import compose, decompose_uniform, dotproduct, ID33, ZERO3
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiBoundingVolume import NiBoundingVolume
 from .NiObjectNET import NiObjectNET
+from .NiProperty import NiProperty
 
 
 class PropagateMode(IntEnum):
@@ -26,7 +30,7 @@ class NiAVObject(NiObjectNET):
     bounding_volume: NiBoundingVolume | None = None
 
     # TODO: remove
-    children = []  # type: list[NiAVObject | None]
+    children = []  # type: list[NiAVObject | None]  # pyright: ignore[reportTypeCommentUsage]
 
     # provide access to related enums
     PropagateMode = PropagateMode
@@ -38,7 +42,7 @@ class NiAVObject(NiObjectNET):
 
     _refs = (*NiObjectNET._refs, "properties")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.flags = stream.read_ushort()
         self.translation = stream.read_floats(3)
@@ -48,9 +52,9 @@ class NiAVObject(NiObjectNET):
         self.properties = stream.read_links()
         has_bounding_volume = stream.read_bool()
         if has_bounding_volume:
-            self.bounding_volume = NiBoundingVolume.load(stream)
+            self.bounding_volume = NiBoundingVolume.read(stream)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_ushort(self.flags)
         stream.write_floats(self.translation)
@@ -62,7 +66,7 @@ class NiAVObject(NiObjectNET):
         if self.bounding_volume:
             self.bounding_volume.save(stream)
 
-    def sort(self, key=lambda prop: prop.type):
+    def sort(self, key: Callable[[Any], Any] = lambda prop: prop.type) -> None:
         super().sort()
         self.properties.sort(key=key)
 
@@ -71,7 +75,7 @@ class NiAVObject(NiObjectNET):
         if self.bounding_volume:
             self.bounding_volume.apply_scale(scale)
 
-    def get_property(self, property_type: type[T]) -> T:
+    def get_property(self, property_type: type[T]) -> T | None:
         for prop in self.properties:
             if isinstance(prop, property_type):
                 return prop
@@ -103,28 +107,30 @@ class NiAVObject(NiObjectNET):
     def children_of_type(self, cls: type[T]) -> Iterator[T]:
         yield from (child for child in self.children if isinstance(child, cls))
 
-    def descendants(self, breadth_first=False) -> Iterator[NiAVObject]:
-        queue = deque(filter(None, self.children))
-        extend, iterator = (queue.extendleft, iter) if breadth_first else \
-                           (queue.extend, reversed)
+    def descendants(self, breadth_first: bool = False) -> Iterator[NiAVObject]:
+        queue: deque[NiAVObject] = deque(child for child in self.children if child is not None)
         while queue:
             node = queue.pop()
             yield node
-            extend(child for child in iterator(node.children) if child)
+            if breadth_first:
+                queue.extendleft(child for child in node.children if child is not None)
+            else:
+                queue.extend(child for child in reversed(node.children) if child is not None)
 
-    def descendants_pairs(self, breadth_first=False) -> Iterator[tuple[NiAVObject, NiAVObject]]:
+    def descendants_pairs(self, breadth_first: bool = False) -> Iterator[tuple[NiAVObject, NiAVObject]]:
         """Similar to descendants, but yielding pairs of (parent, node)."""
 
-        queue = deque((self, child) for child in self.children if child)
-        extend, iterator = (queue.extendleft, iter) if breadth_first else \
-                           (queue.extend, reversed)
+        queue: deque[tuple[NiAVObject, NiAVObject]] = deque((self, child) for child in self.children if child is not None)
         while queue:
             parent, node = queue.pop()
             yield parent, node
-            extend((node, child) for child in iterator(node.children) if child)
+            if breadth_first:
+                queue.extendleft((node, child) for child in node.children if child is not None)
+            else:
+                queue.extend((node, child) for child in reversed(node.children) if child is not None)
 
-    def find_path(self, ancestor, breadth_first=True) -> Iterator[NiAVObject]:
-        parents = {}
+    def find_path(self, ancestor: NiAVObject, breadth_first: bool = True) -> Iterator[NiAVObject]:
+        parents: dict[NiAVObject, NiAVObject] = {}
         for parent, node in ancestor.descendants_pairs(breadth_first):
             parents[node] = parent
             if node is self:
@@ -135,8 +141,3 @@ class NiAVObject(NiObjectNET):
         while node is not ancestor:
             yield node
             node = parents[node]
-
-
-if __name__ == "__main__":
-    from es3.nif import NiProperty
-    from es3.utils.typing import *

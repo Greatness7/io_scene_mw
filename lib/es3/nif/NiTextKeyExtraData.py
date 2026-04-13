@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from es3.utils.math import np, zeros
+from ..utils.math import np, zeros
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiExtraData import NiExtraData
+
 
 _dtype = np.dtype("<f, O")
 
@@ -9,7 +13,7 @@ _dtype = np.dtype("<f, O")
 class NiTextKeyExtraData(NiExtraData):
     keys: ndarray = zeros(0, dtype=_dtype)
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         num_text_keys = stream.read_uint()
         if num_text_keys:
@@ -17,7 +21,7 @@ class NiTextKeyExtraData(NiExtraData):
             for i in range(num_text_keys):
                 self.keys[i] = stream.read_float(), stream.read_str()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_uint(len(self.keys))
         for time, value in self.keys.tolist():
@@ -41,7 +45,7 @@ class NiTextKeyExtraData(NiExtraData):
         self.keys["f1"] = array
 
     @staticmethod
-    def _get_stop_text(start_text_lower):
+    def _get_stop_text(start_text_lower: str) -> str:
         group_name = start_text_lower[:-6]  # trim " start"
         if group_name.endswith(("chop", "slash", "thrust")):
             return f"{group_name} small follow stop"
@@ -50,7 +54,7 @@ class NiTextKeyExtraData(NiExtraData):
         else:
             return f"{group_name} stop"
 
-    def get_animation_groups(self):
+    def get_animation_groups(self) -> Iterator[tuple[str, tuple[int, int]]]:
         group_stop = ""
         group_name = ""
         start_index = 0
@@ -72,9 +76,9 @@ class NiTextKeyExtraData(NiExtraData):
                     group_name = line[:-6]
                     start_index = i
 
-    def expand_groups(self):
-        temp = []
-        seen = {}
+    def expand_groups(self) -> None:
+        temp: list[tuple[float, str]] = []
+        seen: dict[str, float] = {}
 
         for time, text in self.keys.tolist():
             for line in filter(None, text.splitlines()):
@@ -88,8 +92,8 @@ class NiTextKeyExtraData(NiExtraData):
 
         self.keys = np.array(temp, dtype=_dtype)
 
-    def collapse_groups(self):
-        uniques, inverse = np.unique(self.times, return_inverse=True)
+    def collapse_groups(self) -> None:
+        uniques, inverse = np.unique(self.times, return_inverse=True)  # pyright: ignore[reportUnknownMemberType]
         if len(uniques) == len(self.keys):
             return
 
@@ -110,7 +114,3 @@ class NiTextKeyExtraData(NiExtraData):
         super().apply_time_scale(scale)
         if len(self.keys):
             self.times[:] *= scale
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

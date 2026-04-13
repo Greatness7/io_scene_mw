@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from es3.utils.math import la, ZERO3, zeros, get_exact_center_radius
+from ..utils.math import la, ZERO3, zeros, get_exact_center_radius
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
 
 
@@ -12,7 +15,7 @@ class NiGeometryData(NiObject):
     vertex_colors: ndarray = zeros(0, 4)
     uv_sets: ndarray = zeros(0, 0, 2)
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         num_vertices = stream.read_ushort()
         has_vertices = stream.read_bool()
         if has_vertices:
@@ -30,7 +33,7 @@ class NiGeometryData(NiObject):
         if has_uv_sets:
             self.uv_sets = stream.read_floats(num_uv_sets, num_vertices, 2)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         num_vertices = len(self.vertices)
         stream.write_ushort(num_vertices)
         stream.write_bool(num_vertices)
@@ -52,12 +55,12 @@ class NiGeometryData(NiObject):
         if num_uv_sets:
             stream.write_floats(self.uv_sets)
 
-    def apply_scale(self, scale):
+    def apply_scale(self, scale: float) -> None:
         self.vertices *= scale
         self.center *= scale
         self.radius *= scale
 
-    def update_center_radius(self, exact=False):
+    def update_center_radius(self, exact: bool = False) -> None:
         import numpy as np
 
         if len(self.vertices) == 0:
@@ -67,15 +70,9 @@ class NiGeometryData(NiObject):
 
             if not exact:
                 center = 0.5 * (vertices.min(axis=0) + vertices.max(axis=0))
-                radius = float(la.norm(center - vertices, axis=1).max())
+                radius = float(la.norm(center - vertices, axis=1).max())  # pyright: ignore[reportUnknownMemberType]
             else:
-                center, radius = get_exact_center_radius(
-                    vertices.astype(dtype=np.float64, order="C", copy=False)
-                )
+                center, radius = get_exact_center_radius(vertices.astype(dtype=np.float64, order="C", copy=False))
 
             self.center = center
             self.radius = radius
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

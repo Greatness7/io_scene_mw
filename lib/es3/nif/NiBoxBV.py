@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from es3.utils.math import compose, decompose, ID33, ZERO3
+from ..utils.math import compose, decompose, ID33, ZERO3
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiBoundingVolume import NiBoundingVolume
 
 
@@ -11,19 +14,19 @@ class NiBoxBV(NiBoundingVolume):
 
     bound_type = NiBoundingVolume.BoundType.BOX_BV
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.center = stream.read_floats(3)
         self.axes = stream.read_floats(3, 3)
         self.extents = stream.read_floats(3)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_floats(self.center)
         stream.write_floats(self.axes)
         stream.write_floats(self.extents)
 
-    def apply_scale(self, scale):
+    def apply_scale(self, scale: float) -> None:
         self.center *= scale
         self.extents *= scale
 
@@ -34,7 +37,3 @@ class NiBoxBV(NiBoundingVolume):
     @matrix.setter
     def matrix(self, value: ndarray):
         self.center, self.axes, self.extents = decompose(value)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

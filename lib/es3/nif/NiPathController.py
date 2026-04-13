@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
+from .NiFloatData import NiFloatData
+from .NiPosData import NiPosData
 from .NiTimeController import NiTimeController
 
 
@@ -30,7 +35,7 @@ class NiPathController(NiTimeController):
 
     _refs = (*NiTimeController._refs, "path_data", "percentage_data")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.bank_direction = BankDirection(stream.read_int())
         self.max_bank_angle = stream.read_float()
@@ -39,7 +44,7 @@ class NiPathController(NiTimeController):
         self.path_data = stream.read_link()
         self.percentage_data = stream.read_link()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_int(self.bank_direction)
         stream.write_float(self.max_bank_angle)
@@ -47,8 +52,3 @@ class NiPathController(NiTimeController):
         stream.write_short(self.follow_axis)
         stream.write_link(self.path_data)
         stream.write_link(self.percentage_data)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiFloatData, NiPosData
-    from es3.utils.typing import *

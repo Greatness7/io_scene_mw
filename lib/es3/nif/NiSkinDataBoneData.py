@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from es3.utils.math import compose, decompose_uniform, ID33, la, np, ZERO3, zeros, get_exact_center_radius
+from ..utils.math import compose, decompose_uniform, ID33, la, np, ZERO3, zeros, get_exact_center_radius
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiObject import NiObject
+
 
 _dtype = np.dtype("<H, <f")
 
@@ -14,7 +18,7 @@ class NiSkinDataBoneData(NiObject):  # TODO Not NiObject
     radius: float32 = 0.0
     vertex_weights: ndarray = zeros(0, dtype=_dtype)
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         self.rotation = stream.read_floats(3, 3)
         self.translation = stream.read_floats(3)
         self.scale = stream.read_float()
@@ -24,7 +28,7 @@ class NiSkinDataBoneData(NiObject):  # TODO Not NiObject
         if num_weights:
             self.vertex_weights = stream.read_array(num_weights, _dtype)
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         stream.write_floats(self.rotation)
         stream.write_floats(self.translation)
         stream.write_float(self.scale)
@@ -33,21 +37,21 @@ class NiSkinDataBoneData(NiObject):  # TODO Not NiObject
         stream.write_ushort(len(self.vertex_weights))
         stream.write_array(self.vertex_weights, _dtype)
 
-    def apply_scale(self, scale):
+    def apply_scale(self, scale: float) -> None:
         self.translation *= scale
         self.center *= scale
         self.radius *= scale
 
-    def update_center_radius(self, vertices, exact=False):
+    def update_center_radius(self, vertices: ndarray, exact: bool = False) -> None:
         if len(vertices) == 0:
             self.center[:] = self.radius = 0
         else:
             if not exact:
                 center = 0.5 * (vertices.min(axis=0) + vertices.max(axis=0))
-                radius = float(la.norm(center - vertices, axis=1).max())
+                radius = float(la.norm(center - vertices, axis=1).max())  # pyright: ignore[reportUnknownMemberType]
             else:
                 center, radius = get_exact_center_radius(
-                    vertices.astype(dtype=np.float64, order="C", copy=False)
+                    vertices.astype(dtype=np.float64, order="C", copy=False)  # pyright: ignore[reportUnknownMemberType]
                 )
 
             self.center = self.scale * (self.rotation @ center) + self.translation
@@ -60,7 +64,3 @@ class NiSkinDataBoneData(NiObject):  # TODO Not NiObject
     @matrix.setter
     def matrix(self, value: ndarray):
         self.translation, self.rotation, self.scale = decompose_uniform(value)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

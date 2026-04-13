@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.math import ID33, ZERO3, ZERO4
+from ..utils.math import ID33, ZERO3, ZERO4
+from ..utils.typing import *
+
+from .NiBinaryStream import NiBinaryStream
 from .NiDynamicEffect import NiDynamicEffect
+from .NiSourceTexture import NiSourceTexture
 from .NiTexturingPropertyMap import ClampMode, FilterMode
 
 
@@ -45,7 +49,7 @@ class NiTextureEffect(NiDynamicEffect):
 
     _refs = (*NiDynamicEffect._refs, "source_texture")
 
-    def load(self, stream):
+    def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
         self.model_projection_matrix = stream.read_floats(3, 3)
         self.model_projection_translation = stream.read_floats(3)
@@ -61,7 +65,7 @@ class NiTextureEffect(NiDynamicEffect):
         self.unknown_byte1 = stream.read_byte()
         self.unknown_byte2 = stream.read_byte()
 
-    def save(self, stream):
+    def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_floats(self.model_projection_matrix)
         stream.write_floats(self.model_projection_translation)
@@ -76,8 +80,3 @@ class NiTextureEffect(NiDynamicEffect):
         stream.write_short(self.ps2_k)
         stream.write_byte(self.unknown_byte1)
         stream.write_byte(self.unknown_byte2)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiSourceTexture
-    from es3.utils.typing import *
