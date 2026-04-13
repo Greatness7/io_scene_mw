@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from es3.utils.flags import bool_property
+from ..utils.flags import bool_property
+
 from .NiParticleSystemController import NiParticleSystemController
 
 

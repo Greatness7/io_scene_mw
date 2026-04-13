@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
 from .NiObject import NiObject
 
 
@@ -70,7 +72,3 @@ class NiSkinPartition(NiObject):
         stream.write_uint(num_partitions)
         for item in self.partitions:
             item.save(stream)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

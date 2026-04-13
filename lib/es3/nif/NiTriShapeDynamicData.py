@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiTriShapeData import NiTriShapeData
 
 
@@ -16,7 +18,3 @@ class NiTriShapeDynamicData(NiTriShapeData):
         super().save(stream)
         stream.write_ushort(self.active_vertices)
         stream.write_ushort(self.active_triangles)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from es3.utils.math import np
+from ..utils.math import np
+from ..utils.typing import *
 
 
 class NiMeta(type):
@@ -30,11 +31,6 @@ class NiMeta(type):
             # prevent assignments that would interfere with defaults
             raise TypeError(f"can't set attribute '{name}' of {cls}")
         super().__setattr__(name, value)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *
-
 
 _hashable_types = (
     int,

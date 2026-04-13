@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
 from .NiFloatData import KeyType, NiFloatData
 
 
@@ -23,7 +25,3 @@ class NiMorphDataMorphTarget(NiFloatData):  # TODO Not NiObject
             stream.write_floats(self.keys)
         if len(self.vertices):
             stream.write_floats(self.vertices)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

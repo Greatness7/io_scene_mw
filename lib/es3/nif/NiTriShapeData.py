@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
 from .NiTriBasedGeomData import NiTriBasedGeomData
 
 
@@ -29,7 +31,3 @@ class NiTriShapeData(NiTriBasedGeomData):
         for index_array in self.shared_normals:
             stream.write_ushort(len(index_array))
             stream.write_ushorts(index_array)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

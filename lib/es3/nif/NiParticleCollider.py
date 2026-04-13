@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiParticleModifier import NiParticleModifier
 
 
@@ -13,7 +15,3 @@ class NiParticleCollider(NiParticleModifier):
     def save(self, stream):
         super().save(stream)
         stream.write_float(self.bounce)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

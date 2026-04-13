@@ -3,8 +3,11 @@ from __future__ import annotations
 from contextlib import contextmanager
 from struct import pack, unpack
 
-from es3.utils.io import BinaryStream
-from es3.utils.math import np
+from ..utils.io import BinaryStream
+from ..utils.math import np
+from ..utils.typing import *
+
+from .NiObject import NiObject
 
 
 class NiBinaryStream(BinaryStream):
@@ -120,8 +123,3 @@ class NiBinaryStream(BinaryStream):
             yield stream
             with open(filepath, "wb") as f:
                 f.write(stream.getbuffer())
-
-
-if __name__ == "__main__":
-    from es3.nif import NiObject
-    from es3.utils.typing import *

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3, ZERO4
+from ..utils.math import ZERO3, ZERO4
+
 from .NiPerParticleData import NiPerParticleData
 from .NiTimeController import NiTimeController
 
@@ -130,4 +131,4 @@ class NiParticleSystemController(NiTimeController):
 
 if __name__ == "__main__":
     from es3.nif import NiAVObject, NiEmitterModifier, NiParticleCollider, NiParticleModifier
-    from es3.utils.typing import *
+    from ..utils.typing import *

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from es3.utils.math import np, zeros
+from ..utils.math import np, zeros
+from ..utils.typing import *
+
 from .NiExtraData import NiExtraData
+
 
 _dtype = np.dtype("<f, O")
 
@@ -110,7 +113,3 @@ class NiTextKeyExtraData(NiExtraData):
         super().apply_time_scale(scale)
         if len(self.keys):
             self.times[:] *= scale
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from enum import IntEnum
 import os
 import pathlib
-from enum import IntEnum
 
+from ..utils.typing import *
+
+from .NiPixelData import NiPixelData
 from .NiTexture import NiTexture
 
 
@@ -113,8 +116,3 @@ class NiSourceTexture(NiTexture):
     @file_name.setter
     def file_name(self, file_name):
         self.filename = file_name
-
-
-if __name__ == "__main__":
-    from es3.nif import NiPixelData
-    from es3.utils.typing import *

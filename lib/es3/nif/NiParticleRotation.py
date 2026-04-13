@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3
+from ..utils.math import ZERO3
+from ..utils.typing import *
+
 from .NiParticleModifier import NiParticleModifier
 
 
@@ -20,7 +22,3 @@ class NiParticleRotation(NiParticleModifier):
         stream.write_ubyte(self.random_initial_axis)
         stream.write_floats(self.initial_axis)
         stream.write_float(self.rotation_speed)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

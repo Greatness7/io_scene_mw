@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from ..utils.typing import *
+
+from .NiAccumulator import NiAccumulator
 from .NiNode import NiNode
 
 
@@ -30,8 +33,3 @@ class NiSortAdjustNode(NiNode):
         super().save(stream)
         stream.write_int(self.sorting_mode)
         stream.write_link(self.sub_sorter)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiAccumulator
-    from es3.utils.typing import *

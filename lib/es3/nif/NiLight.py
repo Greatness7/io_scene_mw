@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3
+from ..utils.math import ZERO3
+from ..utils.typing import *
+
 from .NiDynamicEffect import NiDynamicEffect
 
 
@@ -23,7 +25,3 @@ class NiLight(NiDynamicEffect):
         stream.write_floats(self.ambient_color)
         stream.write_floats(self.diffuse_color)
         stream.write_floats(self.specular_color)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

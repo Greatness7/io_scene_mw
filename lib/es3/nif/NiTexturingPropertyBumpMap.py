@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import ID22
+from ..utils.math import ID22
+from ..utils.typing import *
+
 from .NiTexturingPropertyMap import NiTexturingPropertyMap
 
 
@@ -20,7 +22,3 @@ class NiTexturingPropertyBumpMap(NiTexturingPropertyMap):  # TODO Not NiObject
         stream.write_float(self.luma_scale)
         stream.write_float(self.luma_offset)
         stream.write_floats(self.displacement)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

@@ -3,10 +3,13 @@ from __future__ import annotations
 from collections import deque
 from enum import IntEnum
 
-from es3.utils.flags import bool_property, enum_property
-from es3.utils.math import compose, decompose_uniform, dotproduct, ID33, ZERO3
+from ..utils.flags import bool_property, enum_property
+from ..utils.math import compose, decompose_uniform, dotproduct, ID33, ZERO3
+from ..utils.typing import *
+
 from .NiBoundingVolume import NiBoundingVolume
 from .NiObjectNET import NiObjectNET
+from .NiProperty import NiProperty
 
 
 class PropagateMode(IntEnum):
@@ -132,8 +135,3 @@ class NiAVObject(NiObjectNET):
         while node is not ancestor:
             yield node
             node = parents[node]
-
-
-if __name__ == "__main__":
-    from es3.nif import NiProperty
-    from es3.utils.typing import *

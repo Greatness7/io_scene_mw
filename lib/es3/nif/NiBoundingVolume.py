@@ -41,7 +41,4 @@ class NiBoundingVolume(NiObject):  # TODO Not NiObject
 from .NiSphereBV import NiSphereBV
 from .NiBoxBV import NiBoxBV
 from .NiUnionBV import NiUnionBV
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *
+from ..utils.typing import *

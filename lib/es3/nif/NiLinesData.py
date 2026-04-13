@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
 from .NiGeometryData import NiGeometryData
 
 
@@ -18,7 +20,3 @@ class NiLinesData(NiGeometryData):
         num_vertices = len(self.vertices)
         if num_vertices:
             stream.write_ubytes(self.vertex_connectivity_flags)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

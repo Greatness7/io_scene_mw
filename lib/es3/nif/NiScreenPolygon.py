@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
 from .NiObject import NiObject
 
 
@@ -38,7 +40,3 @@ class NiScreenPolygon(NiObject):
         stream.write_uint(num_property_states)
         if num_property_states:
             stream.write_ints(self.property_states)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

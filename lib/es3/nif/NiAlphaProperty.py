@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.flags import bool_property, enum_property
+from ..utils.flags import bool_property, enum_property
+from ..utils.typing import *
+
 from .NiProperty import NiProperty
 
 
@@ -55,7 +57,3 @@ class NiAlphaProperty(NiProperty):
     def save(self, stream):
         super().save(stream)
         stream.write_ubyte(self.test_ref)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

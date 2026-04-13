@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import np
+from ..utils.math import np
+from ..utils.typing import *
+
 from .NiTriBasedGeomData import NiTriBasedGeomData
 
 
@@ -23,7 +25,3 @@ class NiTriStripsData(NiTriBasedGeomData):
         stream.write_ushorts(strip_lengths)
         for strip in self.strips:
             stream.write_ushorts(strip)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

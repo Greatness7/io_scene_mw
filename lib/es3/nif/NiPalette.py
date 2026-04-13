@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
 from .NiObject import NiObject
 
 
@@ -18,7 +20,3 @@ class NiPalette(NiObject):
         stream.write_ubyte(self.has_alpha)
         stream.write_uint(len(self.palettes))
         stream.write_ubytes(self.palettes)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

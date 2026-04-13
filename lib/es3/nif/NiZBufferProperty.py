@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.flags import bool_property, enum_property
+from ..utils.flags import bool_property, enum_property
+
 from .NiProperty import NiProperty
 
 

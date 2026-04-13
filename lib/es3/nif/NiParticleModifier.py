@@ -21,4 +21,4 @@ class NiParticleModifier(NiObject):
 
 if __name__ == "__main__":
     from es3.nif import NiParticleSystemController
-    from es3.utils.typing import *
+    from ..utils.typing import *

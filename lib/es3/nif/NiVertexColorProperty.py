@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from ..utils.typing import *
+
 from .NiProperty import NiProperty
 
 
@@ -33,7 +35,3 @@ class NiVertexColorProperty(NiProperty):
         super().save(stream)
         stream.write_int(self.source_vertex_mode)
         stream.write_int(self.lighting_mode)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

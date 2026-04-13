@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.math import np, quaternion_from_euler_angle, quaternion_mul, zeros
+from ..utils.math import np, quaternion_from_euler_angle, quaternion_mul, zeros
+from ..utils.typing import *
+
 from .NiFloatData import KeyType, NiFloatData
 
 
@@ -126,7 +128,3 @@ class NiRotData(NiFloatData):
         super().apply_time_scale(scale)
         for euler_data in self.euler_data:
             euler_data.apply_time_scale(scale)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiTimeController import NiTimeController
+from .NiUVData import NiUVData
 
 
 class NiUVController(NiTimeController):
@@ -18,8 +21,3 @@ class NiUVController(NiTimeController):
         super().save(stream)
         stream.write_ushort(self.texture_set)
         stream.write_link(self.data)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiUVData
-    from es3.utils.typing import *

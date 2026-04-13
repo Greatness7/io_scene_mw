@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from es3 import nif
 from itertools import chain
 from math import isclose
 
-from es3 import nif
+from ..utils.typing import *
+
 from .NiBinaryStream import NiBinaryStream
+from .NiObject import NiObject
 
 
 class NiStream:
@@ -178,8 +181,3 @@ class NiStream:
                 obj.controllers.discard_type(nif.NiKeyframeController)
                 obj.controllers.appendleft(new_controller)
                 new_controller.target = obj
-
-
-if __name__ == "__main__":
-    from .NiObject import NiObject
-    from es3.utils.typing import *

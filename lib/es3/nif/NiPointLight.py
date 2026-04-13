@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiLight import NiLight
 
 
@@ -19,7 +21,3 @@ class NiPointLight(NiLight):
         stream.write_float(self.constant_attenuation)
         stream.write_float(self.linear_attenuation)
         stream.write_float(self.quadratic_attenuation)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

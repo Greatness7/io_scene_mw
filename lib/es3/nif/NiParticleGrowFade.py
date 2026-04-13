@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiParticleModifier import NiParticleModifier
 
 
@@ -21,7 +23,3 @@ class NiParticleGrowFade(NiParticleModifier):
         super().apply_time_scale(scale)
         self.grow_time *= scale
         self.fade_time *= scale
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

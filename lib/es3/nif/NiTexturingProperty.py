@@ -3,6 +3,8 @@ from __future__ import annotations
 from enum import IntEnum
 from operator import attrgetter
 
+from ..utils.typing import *
+
 from .NiProperty import NiProperty
 from .NiTexturingPropertyBumpMap import NiTexturingPropertyBumpMap
 from .NiTexturingPropertyMap import NiTexturingPropertyMap
@@ -103,7 +105,3 @@ class NiTexturingProperty(NiProperty):
         maps = self.texture_maps
         required, optional = maps[:7], maps[7:]
         return (*required, *filter(None, optional))
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

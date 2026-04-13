@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from es3.utils.linked_list import LinkedListHelper
+from ..utils.linked_list import LinkedListHelper
+
 from .NiObject import NiObject
 
 
@@ -30,4 +31,4 @@ class NiObjectNET(NiObject):
 
 if __name__ == "__main__":
     from es3.nif import NiExtraData, NiTimeController
-    from es3.utils.typing import *
+    from ..utils.typing import *

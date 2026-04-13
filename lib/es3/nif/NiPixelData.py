@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
 from .NiObject import NiObject
+from .NiPalette import NiPalette
 from .NiPixelFormat import NiPixelFormat
 
 
@@ -33,8 +36,3 @@ class NiPixelData(NiObject):
         stream.write_uints(self.mipmap_levels)
         stream.write_uint(len(self.pixel_data))
         stream.write_ubytes(self.pixel_data)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiPalette
-    from es3.utils.typing import *

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import compose, decompose, ID33, ZERO3
+from ..utils.math import compose, decompose, ID33, ZERO3
+from ..utils.typing import *
+
 from .NiBoundingVolume import NiBoundingVolume
 
 
@@ -34,7 +36,3 @@ class NiBoxBV(NiBoundingVolume):
     @matrix.setter
     def matrix(self, value: ndarray):
         self.center, self.axes, self.extents = decompose(value)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

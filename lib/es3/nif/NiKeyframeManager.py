@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from es3.utils.math import np, zeros
+from ..utils.math import np, zeros
+from ..utils.typing import *
 
 from .NiObject import NiObject
 from .NiTimeController import NiTimeController
@@ -61,7 +62,3 @@ class NiKeyframeManager(NiTimeController):
         stream.write_int(len(self.sequences))
         for item in self.sequences:
             item.save(stream)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

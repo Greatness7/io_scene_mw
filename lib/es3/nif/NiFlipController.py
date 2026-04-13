@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from ..utils.typing import *
+
+from .NiSourceTexture import NiSourceTexture
 from .NiTimeController import NiTimeController
 
 
@@ -47,8 +50,3 @@ class NiFlipController(NiTimeController):
         super().apply_time_scale(scale)
         self.flip_start_time *= scale
         self.secs_per_frame *= scale
-
-
-if __name__ == "__main__":
-    from es3.nif import NiSourceTexture
-    from es3.utils.typing import *

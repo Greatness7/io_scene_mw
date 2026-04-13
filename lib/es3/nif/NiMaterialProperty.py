@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3
+from ..utils.math import ZERO3
+from ..utils.typing import *
+
 from .NiProperty import NiProperty
 
 
@@ -29,7 +31,3 @@ class NiMaterialProperty(NiProperty):
         stream.write_floats(self.emissive_color)
         stream.write_float(self.shine)
         stream.write_float(self.alpha)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

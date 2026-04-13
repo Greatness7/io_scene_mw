@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from es3.utils.math import compose, decompose_uniform, ID33, la, np, ZERO3, zeros, get_exact_center_radius
+from ..utils.math import compose, decompose_uniform, ID33, la, np, ZERO3, zeros, get_exact_center_radius
+from ..utils.typing import *
+
 from .NiObject import NiObject
+
 
 _dtype = np.dtype("<H, <f")
 
@@ -60,7 +63,3 @@ class NiSkinDataBoneData(NiObject):  # TODO Not NiObject
     @matrix.setter
     def matrix(self, value: ndarray):
         self.translation, self.rotation, self.scale = decompose_uniform(value)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *
