@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3
+from ..utils.math import ZERO3
+from ..utils.typing import *
+
 from .NiParticleCollider import NiParticleCollider
 
 
@@ -17,7 +19,3 @@ class NiSphericalCollider(NiParticleCollider):
         super().save(stream)
         stream.write_float(self.radius)
         stream.write_floats(self.position)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

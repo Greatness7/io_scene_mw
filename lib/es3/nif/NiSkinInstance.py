@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
+from .NiAVObject import NiAVObject
 from .NiObject import NiObject
+from .NiSkinData import NiSkinData
 
 
 class NiSkinInstance(NiObject):
@@ -20,8 +24,3 @@ class NiSkinInstance(NiObject):
         stream.write_link(self.data)
         stream.write_link(self.root)
         stream.write_links(self.bones)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiAVObject, NiSkinData
-    from es3.utils.typing import *

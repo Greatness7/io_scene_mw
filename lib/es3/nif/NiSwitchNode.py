@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.flags import bool_property
+from ..utils.flags import bool_property
+from ..utils.typing import *
+
 from .NiNode import NiNode
 
 
@@ -17,7 +19,3 @@ class NiSwitchNode(NiNode):
     def save(self, stream):
         super().save(stream)
         stream.write_uint(self.active_index)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

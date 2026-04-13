@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
 from .NiAVObject import NiAVObject
 
 
@@ -17,7 +19,3 @@ class NiDynamicEffect(NiAVObject):
         super().save(stream)
         stream.write_uint(len(self.affected_nodes))
         stream.write_ints(self.affected_nodes)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

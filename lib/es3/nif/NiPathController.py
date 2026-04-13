@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from ..utils.typing import *
+
+from .NiFloatData import NiFloatData
+from .NiPosData import NiPosData
 from .NiTimeController import NiTimeController
 
 
@@ -47,8 +51,3 @@ class NiPathController(NiTimeController):
         stream.write_short(self.follow_axis)
         stream.write_link(self.path_data)
         stream.write_link(self.percentage_data)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiFloatData, NiPosData
-    from es3.utils.typing import *

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3
+from ..utils.math import ZERO3
+from ..utils.typing import *
+
 from .NiProperty import NiProperty
 
 
@@ -17,7 +19,3 @@ class NiFogProperty(NiProperty):
         super().save(stream)
         stream.write_float(self.fog_depth)
         stream.write_floats(self.fog_color)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

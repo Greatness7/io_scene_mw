@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.math import ZERO3
+from ..utils.math import ZERO3
+from ..utils.typing import *
+
 from .NiParticleModifier import NiParticleModifier
 
 
@@ -36,7 +38,3 @@ class NiGravity(NiParticleModifier):
         stream.write_int(self.force_type)
         stream.write_floats(self.position)
         stream.write_floats(self.direction)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

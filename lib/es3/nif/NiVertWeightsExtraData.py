@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
 from .NiExtraData import NiExtraData
 
 
@@ -17,7 +19,3 @@ class NiVertWeightsExtraData(NiExtraData):
         super().save(stream)
         stream.write_ushort(len(self.weights))
         stream.write_floats(self.weights)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

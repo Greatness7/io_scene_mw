@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from es3.utils.flags import bool_property
-from es3.utils.math import decompose_uniform, zeros
-from .NiAVObject import NiAVObject
-
 import numpy.linalg as la
+
+from ..utils.flags import bool_property
+from ..utils.math import decompose_uniform, zeros
+from ..utils.typing import *
+
+from .NiAVObject import NiAVObject
+from .NiGeometryData import NiGeometryData
+from .NiSkinInstance import NiSkinInstance
 
 
 class NiGeometry(NiAVObject):
@@ -99,8 +103,3 @@ class NiGeometry(NiAVObject):
 
         data.vertices = deformed_verts
         data.normals = deformed_norms
-
-
-if __name__ == "__main__":
-    from es3.nif import NiGeometryData, NiSkinInstance
-    from es3.utils.typing import *

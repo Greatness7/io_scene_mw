@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
 from .NiGeometryData import NiGeometryData
 
 
@@ -28,7 +30,3 @@ class NiParticlesData(NiGeometryData):
         stream.write_bool(num_sizes)
         if num_sizes:
             stream.write_floats(self.sizes)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

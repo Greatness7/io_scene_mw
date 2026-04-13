@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3
+from ..utils.math import ZERO3
+from ..utils.typing import *
+
 from .NiObject import NiObject
 
 
@@ -30,7 +32,3 @@ class NiPerParticleData(NiObject):  # TODO not NiObject
         stream.write_float(self.last_update)
         stream.write_ushort(self.generation)
         stream.write_ushort(self.index)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

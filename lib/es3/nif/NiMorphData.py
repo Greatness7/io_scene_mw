@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiMorphDataMorphTarget import NiMorphDataMorphTarget
 from .NiObject import NiObject
 
@@ -35,7 +37,3 @@ class NiMorphData(NiObject):
         super().apply_time_scale(scale)
         for target in self.targets:
             target.apply_time_scale(scale)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

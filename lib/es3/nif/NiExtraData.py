@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiObject import NiObject
 
 
@@ -16,7 +18,3 @@ class NiExtraData(NiObject):
     def save(self, stream):
         stream.write_link(self.next)
         stream.write_uint(self.bytes_remaining)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

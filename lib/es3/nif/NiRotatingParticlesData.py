@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
 from .NiParticlesData import NiParticlesData
 
 
@@ -19,7 +21,3 @@ class NiRotatingParticlesData(NiParticlesData):
         stream.write_bool(len(self.rotations))
         if len(self.rotations):
             stream.write_floats(self.rotations)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

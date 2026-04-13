@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.math import ID33, ZERO3, ZERO4
+from ..utils.math import ID33, ZERO3, ZERO4
+from ..utils.typing import *
+
 from .NiDynamicEffect import NiDynamicEffect
+from .NiSourceTexture import NiSourceTexture
 from .NiTexturingPropertyMap import ClampMode, FilterMode
 
 
@@ -76,8 +79,3 @@ class NiTextureEffect(NiDynamicEffect):
         stream.write_short(self.ps2_k)
         stream.write_byte(self.unknown_byte1)
         stream.write_byte(self.unknown_byte2)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiSourceTexture
-    from es3.utils.typing import *

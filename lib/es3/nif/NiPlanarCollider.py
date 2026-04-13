@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3
+from ..utils.math import ZERO3
+from ..utils.typing import *
+
 from .NiParticleCollider import NiParticleCollider
 
 
@@ -32,7 +34,3 @@ class NiPlanarCollider(NiParticleCollider):
         stream.write_floats(self.y_axis)
         stream.write_floats(self.normal)
         stream.write_float(self.distance)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

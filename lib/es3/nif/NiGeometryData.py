@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import la, ZERO3, zeros, get_exact_center_radius
+from ..utils.math import la, ZERO3, zeros, get_exact_center_radius
+from ..utils.typing import *
+
 from .NiObject import NiObject
 
 
@@ -75,7 +77,3 @@ class NiGeometryData(NiObject):
 
             self.center = center
             self.radius = radius
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

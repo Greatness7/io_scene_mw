@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.flags import bool_property, enum_property
+from ..utils.flags import bool_property, enum_property
+from ..utils.typing import *
+
+from .NiAVObject import NiAVObject
 from .NiTimeController import NiTimeController
 
 
@@ -31,8 +34,3 @@ class NiLookAtController(NiTimeController):
     def save(self, stream):
         super().save(stream)
         stream.write_link(self.look_at)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiAVObject
-    from es3.utils.typing import *

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiMorpherController import NiMorpherController
 
 
@@ -13,7 +15,3 @@ class NiGeomMorpherController(NiMorpherController):
     def save(self, stream):
         super().save(stream)
         stream.write_ubyte(self.always_update)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

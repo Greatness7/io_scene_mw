@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.flags import bool_property
+from ..utils.flags import bool_property
+from ..utils.typing import *
+
 from .NiSwitchNode import NiSwitchNode
 
 
@@ -21,7 +23,3 @@ class NiFltAnimationNode(NiSwitchNode):
     def apply_time_scale(self, scale: float):
         super().apply_time_scale(scale)
         self.period *= scale
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

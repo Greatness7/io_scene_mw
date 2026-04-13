@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.math import zeros
+from ..utils.math import zeros
+from ..utils.typing import *
+
 from .NiObject import NiObject
 
 
@@ -91,7 +93,3 @@ class NiPixelFormat(NiObject):
         pixel_format.bits_per_pixel = 0
         pixel_format.compare_bits[:] = [0x00000008, 0x00000000]
         return pixel_format
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

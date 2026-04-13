@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from es3.utils.math import np, zeros
+from ..utils.math import np, zeros
+from ..utils.typing import *
+
 from .NiObject import NiObject
+
 
 _dtype = np.dtype("<f, <B")
 
@@ -44,7 +47,3 @@ class NiVisData(NiObject):
         super().apply_time_scale(scale)
         if len(self.keys):
             self.times[:] *= scale
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

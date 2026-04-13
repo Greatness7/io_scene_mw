@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from es3.utils.math import ZERO3, zeros
+from ..utils.math import ZERO3, zeros
+from ..utils.typing import *
+
 from .NiSwitchNode import NiSwitchNode
 
 
@@ -20,7 +22,3 @@ class NiLODNode(NiSwitchNode):
         stream.write_floats(self.lod_center)
         stream.write_uint(len(self.lod_levels))
         stream.write_floats(self.lod_levels)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

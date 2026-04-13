@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.flags import bool_property, enum_property
+from ..utils.flags import bool_property, enum_property
+
 from .NiObject import NiObject
 
 
@@ -64,4 +65,4 @@ class NiTimeController(NiObject):
 
 if __name__ == "__main__":
     from es3.nif import NiObjectNET
-    from es3.utils.typing import *
+    from ..utils.typing import *

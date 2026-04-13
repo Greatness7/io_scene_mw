@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+from ..utils.typing import *
+
 from .NiProperty import NiProperty
 
 
@@ -68,7 +70,3 @@ class NiStencilProperty(NiProperty):
         stream.write_int(self.pass_z_fail_action)
         stream.write_int(self.pass_action)
         stream.write_int(self.draw_mode)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

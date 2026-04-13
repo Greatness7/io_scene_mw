@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
+from .NiColorData import NiColorData
 from .NiParticleModifier import NiParticleModifier
 
 
@@ -15,8 +18,3 @@ class NiParticleColorModifier(NiParticleModifier):
     def save(self, stream):
         super().save(stream)
         stream.write_link(self.color_data)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiColorData
-    from es3.utils.typing import *

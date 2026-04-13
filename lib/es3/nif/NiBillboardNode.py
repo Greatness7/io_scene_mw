@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from es3.utils.flags import enum_property
+from ..utils.flags import enum_property
+
 from .NiNode import NiNode
 
 
@@ -20,4 +21,3 @@ class NiBillboardNode(NiNode):
 
     # flags access
     billboard_mode = enum_property(BillboardMode, mask=0x0060, pos=5)
-

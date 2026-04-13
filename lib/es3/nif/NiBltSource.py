@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiObject import NiObject
+from .NiPixelData import NiPixelData
 
 
 class NiBltSource(NiObject):
@@ -24,8 +27,3 @@ class NiBltSource(NiObject):
             stream.write_ubyte(bool(self.pixel_data))
             if self.pixel_data:
                 self.pixel_data.save(stream)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiPixelData
-    from es3.utils.typing import *

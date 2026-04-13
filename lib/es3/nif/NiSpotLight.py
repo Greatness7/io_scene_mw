@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiPointLight import NiPointLight
 
 
@@ -16,7 +18,3 @@ class NiSpotLight(NiPointLight):
         super().save(stream)
         stream.write_float(self.outer_spot_angle)
         stream.write_float(self.exponent)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

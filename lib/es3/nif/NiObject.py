@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiMeta import NiMeta
 
 
@@ -94,7 +96,3 @@ class NiObject(metaclass=NiMeta):
             fields.append((name, value))
 
         return tuple(fields)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

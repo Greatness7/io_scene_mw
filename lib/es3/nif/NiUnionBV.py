@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..utils.typing import *
+
 from .NiBoundingVolume import NiBoundingVolume
 
 
@@ -24,7 +26,3 @@ class NiUnionBV(NiBoundingVolume):
     def apply_scale(self, scale):
         for item in self.bounding_volumes:
             item.apply_scale(scale)
-
-
-if __name__ == "__main__":
-    from es3.utils.typing import *

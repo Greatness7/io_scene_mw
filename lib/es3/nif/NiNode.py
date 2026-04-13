@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from es3.utils.math import ID44, la, np
+from ..utils.math import ID44, la, np
+from ..utils.typing import *
+
 from .NiAVObject import NiAVObject
+from .NiDynamicEffect import NiDynamicEffect
 
 
 def _sort_children_key(child):
@@ -104,8 +107,3 @@ class NiNode(NiAVObject):
                     diff_inv = la.inv(diff)
                     for child in bone.children:
                         child.matrix = child.matrix @ diff_inv
-
-
-if __name__ == "__main__":
-    from es3.nif import NiDynamicEffect
-    from es3.utils.typing import *

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from es3.utils.math import compose, decompose_uniform, ID33, ZERO3
+from ..utils.math import compose, decompose_uniform, ID33, ZERO3
+from ..utils.typing import *
+
 from .NiObject import NiObject
 from .NiSkinDataBoneData import NiSkinDataBoneData
+from .NiSkinPartition import NiSkinPartition
 
 
 class NiSkinData(NiObject):
@@ -49,8 +52,3 @@ class NiSkinData(NiObject):
     @matrix.setter
     def matrix(self, value: ndarray):
         self.translation, self.rotation, self.scale = decompose_uniform(value)
-
-
-if __name__ == "__main__":
-    from es3.nif import NiSkinPartition
-    from es3.utils.typing import *
