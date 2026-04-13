@@ -132,10 +132,10 @@ class BinaryStream(BytesIO):
 
         def read_string():
             value = read(unpack(read(4))[0])
-            return value.decode(errors="surrogateescape")
+            return value.decode(encoding="cp1252", errors="replace")
 
         def write_string(value):
-            value = value.encode(errors="surrogateescape")
+            value = value.encode(encoding="cp1252", errors="replace")
             write(pack(len(value)) + value)
 
         return read_string, write_string, NotImplemented, NotImplemented
