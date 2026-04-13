@@ -74,7 +74,7 @@ class NiAVObject(NiObjectNET):
         if self.bounding_volume:
             self.bounding_volume.apply_scale(scale)
 
-    def get_property(self, property_type: type[T]) -> T:
+    def get_property(self, property_type: type[T]) -> T | None:
         for prop in self.properties:
             if isinstance(prop, property_type):
                 return prop
@@ -115,7 +115,7 @@ class NiAVObject(NiObjectNET):
     def descendants_pairs(self, breadth_first=False) -> Iterator[tuple[NiAVObject, NiAVObject]]:
         """Similar to descendants, but yielding pairs of (parent, node)."""
 
-        queue = deque((self, child) for child in self.children if child)
+        queue = deque((self, child) for child in self.children if child) # type: deque[tuple[NiAVObject, NiAVObject]]
         extend, iterator = (queue.extendleft, iter) if breadth_first else \
                            (queue.extend, reversed)
         while queue:
@@ -123,7 +123,7 @@ class NiAVObject(NiObjectNET):
             yield parent, node
             extend((node, child) for child in iterator(node.children) if child)
 
-    def find_path(self, ancestor, breadth_first=True) -> Iterator[NiAVObject]:
+    def find_path(self, ancestor: NiAVObject, breadth_first=True) -> Iterator[NiAVObject]:
         parents = {}
         for parent, node in ancestor.descendants_pairs(breadth_first):
             parents[node] = parent

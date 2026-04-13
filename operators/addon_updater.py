@@ -18,7 +18,7 @@ class UpdateCheck(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.space_data.type == "PREFERENCES"
+        return context.space_data.type == "PREFERENCES" if context.space_data else False
 
     def execute(self, context):
         version, zipball_url = self.get_latest_version_info()
@@ -75,7 +75,7 @@ class UpdateApply(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.space_data.type == "PREFERENCES"
+        return context.space_data.type == "PREFERENCES" if context.space_data else False
 
     def execute(self, context):
         self.create_backup()

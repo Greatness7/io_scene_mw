@@ -18,7 +18,7 @@ class NiStream:
     TYPES = vars(nif)
 
     def __init__(self):
-        self.roots: list[NiObject] = []
+        self.roots: list[NiObject | None] = []
 
     def load(self, filepath: PathLike):
         with NiBinaryStream.reader(filepath) as stream:
@@ -55,7 +55,7 @@ class NiStream:
         self.roots = [node]
 
     def objects(self, iterator=chain.from_iterable) -> Iterator[NiObject]:
-        yield from iterator(root._traverse({None}) for root in self.roots)
+        yield from iterator(root._traverse({None}) for root in filter(None, self.roots))
 
     def objects_of_type(self, cls: type[T]) -> Iterator[T]:
         return (obj for obj in self.objects() if isinstance(obj, cls))
@@ -79,7 +79,7 @@ class NiStream:
                 return obj
 
         # flags on these properties do nothing and can interfere with the merging process
-        for prop in self.objects_of_type((nif.NiMaterialProperty, nif.NiTexturingProperty)):
+        for prop in self.objects_of_type((nif.NiMaterialProperty, nif.NiTexturingProperty)): # type: ignore
             prop.flags = 0
 
         for obj in self.objects_of_type(nif.NiAVObject):
@@ -103,7 +103,7 @@ class NiStream:
                         setattr(prop, name, ensure_unique(slot))
 
                 # merge duplicate properties
-                obj.properties[i] = ensure_unique(prop)
+                obj.properties[i] = ensure_unique(prop) # type: ignore
 
     def extract_keyframe_data(self) -> NiStream:
         """Extract animation data. Useful for generating 'x.nif' and 'x.kf' files."""
@@ -125,7 +125,7 @@ class NiStream:
                     kf_controller.target = None
                     kf_controllers[owner] = kf_controller
 
-        for root in self.roots:
+        for root in filter(None, self.roots):
             extract_kf_controller(root)
             for node in root.descendants():
                 extract_kf_controller(node)

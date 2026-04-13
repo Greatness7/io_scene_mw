@@ -29,7 +29,7 @@ ID33.setflags(write=False)
 ID44 = np.eye(4, dtype=np.float32)
 ID44.setflags(write=False)
 
-det = la._umath_linalg.det
+det = la.det
 
 if __name__ == "__main__":
     from es3.utils.typing import *
@@ -102,7 +102,7 @@ def quaternion_mul(a, b, out=None):
 
 def get_exact_center_radius(vertices) -> tuple[ndarray, float]:
     if len(vertices) == 0:
-        return 0.0, 0.0
+        return ZERO3, 0.0
 
     from .miniball import compute
 

@@ -51,7 +51,8 @@ class LinkedList:
         if self.head is None:
             self.head = item
         else:
-            self.tail.next = item
+            # `head` is valid, so `tail` is too.
+            self.tail.next = item # type: ignore
 
     def appendleft(self, item):
         item.next = self.head
@@ -73,6 +74,8 @@ class LinkedList:
     def pop(self):
         if self.head is None:
             raise ValueError("pop: called on empty linked list.")
+        owner = self.owner
+        item = self.head
         for owner, item in self.iter_owners():
             pass
         if owner is self.owner:
@@ -135,7 +138,7 @@ class LinkedList:
             if isinstance(item, item_type):
                 return owner, item
 
-    def find_type(self, item_type: type[T]) -> T:
+    def find_type(self, item_type: type[T]) -> T | None:
         result = self.find_type_with_owner(item_type)
         if result is not None:
             _, item = result

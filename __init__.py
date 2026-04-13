@@ -20,11 +20,11 @@ lib = os.path.join(os.path.dirname(__file__), "lib")
 if lib not in sys.path:
     sys.path.append(lib)
 
-submodules = (
+submodules = [
     "preferences",
     "properties",
     "operators",
     "panels",
-)
+]
 
 register, unregister = bpy.utils.register_submodule_factory(__name__, submodules)
