@@ -890,16 +890,29 @@ class Mesh(SceneNode):
         if len(data.vertices) == 0:
             return
 
-        # clear duplicates
-        indices, inverse = nif_utils.unique_rows(
+        arrays = [
             data.vertices,
             data.normals,
             data.vertex_colors,
             *data.uv_sets,
             # *skin_data.weights,
             # *morph_data.targets,
-            precision=self.exporter.vertex_precision
-        )
+        ]
+
+        if len(data.uv_sets):
+            # Calculate the handedness (winding direction) of the UVs for each triangle.
+            # We pass this into `unique_rows` to prevent vertices from being merged if their
+            # parent triangles have mirrored UV layouts, which causes tangent/bitangent
+            # generation to break in OpenMW.
+            uvs = data.uv_sets[0].reshape(-1, 3, 2)
+            d_uv_1 = uvs[:, 1] - uvs[:, 0]
+            d_uv_2 = uvs[:, 2] - uvs[:, 0]
+            cross_z = (d_uv_1[:, 0] * d_uv_2[:, 1]) - (d_uv_1[:, 1] * d_uv_2[:, 0])
+            cross_z[np.abs(cross_z) < 1e-6] = 0
+            arrays.append(np.sign(cross_z).repeat(3))
+
+        # clear duplicates
+        indices, inverse = nif_utils.unique_rows(*arrays, precision=self.exporter.vertex_precision)
 
         # update face data
         try:
