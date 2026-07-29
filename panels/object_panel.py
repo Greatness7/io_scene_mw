@@ -10,4 +10,14 @@ class ObjectPanel(bpy.types.Panel):
 
     def draw(self, context):
         ob = context.active_object
-        self.layout.prop(ob.mw, "object_flags")
+        layout = self.layout
+
+        layout.prop(ob.mw, "object_flags")
+
+        layout.separator()
+        layout.prop(ob.mw, "block_type")
+        if ob.mw.block_type == "NiLODNode":
+            layout.prop(ob.mw, "lod_center")
+
+        if (ob.parent is not None) and (ob.parent.mw.block_type == "NiLODNode"):
+            layout.prop(ob.mw, "lod_far_extent")

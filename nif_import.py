@@ -103,6 +103,11 @@ class Importer:
             if node.output is None:
                 cls(node).create()
 
+        # finalize lod levels
+        for node in self.nodes:
+            if isinstance(node.source, nif.NiLODNode):
+                self.finalize_lod_node(node)
+
         # unmute animations
         for node in map(self.get, self.armatures):
             node.animation.set_mute(False)
@@ -129,6 +134,20 @@ class Importer:
                     queue.extend(SceneNode(self, child, node) for child in node.source.children_of_type(nif.NiAVObject))
 
         return root_nodes
+
+    def finalize_lod_node(self, node):
+        """Restore LOD properties from a NiLODNode onto its Blender objects.
+
+        Children are used as LOD levels in order, from highest to lowest detail. Only
+        each level's far extent is preserved; the near extent is expected to equal the
+        previous level's far extent (0 for the first), and is recomputed on export.
+        """
+        node.output.mw.block_type = "NiLODNode"
+        node.output.mw.lod_center = tuple(node.source.lod_center)
+
+        for child, (near, far) in zip(node.children, node.source.lod_levels):
+            if child.output is not None:
+                child.output.mw.lod_far_extent = float(far)
 
     def resolve_armatures(self):
         """ TODO

@@ -85,6 +85,11 @@ class Exporter:
                 cls(node).create()
                 node.animation.create()
 
+        # finalize lod levels
+        for node in self.nodes:
+            if isinstance(node.output, nif.NiLODNode):
+                self.finalize_lod_node(node)
+
         data = nif.NiStream()
         data.root = self.get_root_output(roots)
         data.apply_scale(self.scale_correction)
@@ -201,6 +206,23 @@ class Exporter:
                 s.modifiers.remove(m)
             for k in temp_mute_keys:
                 k.mute = False
+
+    def finalize_lod_node(self, node):
+        """Build the LOD levels array from each child's 'Far Extent' property.
+
+        Children are used as LOD levels in order, from highest to lowest detail. Each
+        level's near extent is set to the previous level's far extent (0 for the first).
+        """
+        near = 0.0
+        lod_levels = []
+        for child in node.children:
+            if child.output is None:
+                continue
+            far = child.source.mw.lod_far_extent
+            lod_levels.append((near, far))
+            near = far
+
+        node.output.lod_levels = np.array(lod_levels, dtype="<f").reshape(-1, 2)
 
     def export_keyframe_data(self, data):
         nif_path = self.filepath
@@ -503,6 +525,8 @@ class Empty(SceneNode):
                 self.output = nif.RootCollisionNode(app_culled=True)
             elif self.name == "PickProxy":
                 self.output = nif.NiCollisionSwitch(propagate=True)
+            elif self.source.mw.block_type == "NiLODNode":
+                self.output = nif.NiLODNode(lod_center=np.array(self.source.mw.lod_center, dtype="<f"))
             elif self.exporter.create_switch_nodes and self.name.startswith("SWITCH_"):
                 self.output = nif.NiSwitchNode()
             else:
@@ -518,6 +542,10 @@ class Empty(SceneNode):
 
         # set flags
         self.output.flags |= self.source.mw.object_flags
+
+        # LOD nodes only need to update whichever level is actively visible
+        if isinstance(self.output, nif.NiLODNode):
+            self.output.update_only_active = True
 
         # set hidden
         if self.output.is_shadow:
