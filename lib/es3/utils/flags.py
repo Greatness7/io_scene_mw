@@ -11,6 +11,14 @@ class _FlagOwner(Protocol):
 EnumT = TypeVar("EnumT", bound=IntEnum)
 
 
+def get_bit_field(flags: int, mask: int, pos: int) -> int:
+    return (flags & mask) >> pos
+
+
+def set_bit_field(flags: int, value: int, mask: int, pos: int) -> int:
+    return (flags & ~mask) | ((value << pos) & mask)
+
+
 class bool_property:
     __slots__ = ("mask",)
 

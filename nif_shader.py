@@ -34,7 +34,7 @@ def create_material(name=""):
     material.show_transparent_back = False
     material.mw.material = material
     material.mw.reset_nodes()
-    material.mw.apply_render_method()
+    material.mw.sync_alpha_state()
     return material
 
 
@@ -104,11 +104,11 @@ def tree_has_input(tree, name):
 
 def get_current_mw_shader_tree():
     """Returns the shared 'MW Shader' tree, transparently rebuilding it if a stale
-    (pre-alpha-clip-rework) copy is cached under that name -- e.g. from an older
+    (pre-alpha-property-rendering) copy is cached under that name -- e.g. from an older
     saved file. The stale tree is kept around (renamed aside) so materials still
     pointing at it can be migrated lazily via MaterialProperties.upgrade()."""
     tree = bpy.data.node_groups.get("MW Shader")
-    if tree and not tree_has_input(tree, "Alpha Clip Threshold"):
+    if tree and not tree_has_input(tree, "Alpha Test Function"):
         tree.name = "MW Shader.legacy"
         tree = None
     return tree or build_mw_shader_tree()
@@ -138,11 +138,16 @@ def build_mw_shader_tree():
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Specular Color", default=(0, 0, 0, 1))
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Emissive Color", default=(0, 0, 0, 1))
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Glow Texture", default=(0, 0, 0, 1))
-    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Alpha Factor")
+    # Keep this socket at the old Alpha Factor index. Blender preserves group-node
+    # links/defaults by interface index when a material migrates to a new node tree.
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Alpha Blend Enabled")
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Base Alpha", default=1.0)
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Dark Alpha", default=1.0)
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Alpha Clip Enabled")
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Alpha Clip Threshold", default=133 / 255)
+    # New sockets must remain after the legacy interface prefix; see the index note above.
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Additive Blend Enabled")
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Alpha Test Function", default=4.0)
 
     group_input = nodes.new('NodeGroupInput')
 
@@ -227,42 +232,112 @@ def build_mw_shader_tree():
     links.new(base_dark_alpha.outputs[2], opacity.inputs[6])
     links.new(gi("Diffuse Alpha"), opacity.inputs[7])
 
-    # Alpha Clip: opacity_out = opacity * mix(1, opacity > threshold, clip_enabled)
-    clip_test = nodes.new('ShaderNodeMath')
-    clip_test.operation = 'GREATER_THAN'
-    clip_test.location = 1400, -300
-    links.new(opacity.outputs[2], clip_test.inputs[0])
-    links.new(gi("Alpha Clip Threshold"), clip_test.inputs[1])
+    # Alpha test predicates, in AlphaTestFunction enum order.
+    always = nodes.new('ShaderNodeValue')
+    always.outputs[0].default_value = 1.0
+    never = nodes.new('ShaderNodeValue')
+    never.outputs[0].default_value = 0.0
 
-    clip_gate = nodes.new('ShaderNodeMix')
-    clip_gate.data_type = 'FLOAT'
-    clip_gate.clamp_factor = True
-    clip_gate.location = 1600, -300
-    links.new(gi("Alpha Clip Enabled"), clip_gate.inputs[0])  # Factor
-    clip_gate.inputs[2].default_value = 1.0  # A
-    links.new(clip_test.outputs[0], clip_gate.inputs[3])  # B
+    less = nodes.new('ShaderNodeMath')
+    less.operation = 'LESS_THAN'
+    links.new(opacity.outputs[2], less.inputs[0])
+    links.new(gi("Alpha Clip Threshold"), less.inputs[1])
 
-    opacity_clipped = nodes.new('ShaderNodeMath')
-    opacity_clipped.operation = 'MULTIPLY'
-    opacity_clipped.location = 1800, -200
-    links.new(opacity.outputs[2], opacity_clipped.inputs[0])
-    links.new(clip_gate.outputs[0], opacity_clipped.inputs[1])
+    equal = nodes.new('ShaderNodeMath')
+    equal.operation = 'COMPARE'
+    equal.inputs[2].default_value = 0.5 / 255
+    links.new(opacity.outputs[2], equal.inputs[0])
+    links.new(gi("Alpha Clip Threshold"), equal.inputs[1])
 
-    coverage = nodes.new('ShaderNodeMath')
-    coverage.operation = 'SUBTRACT'
-    coverage.use_clamp = True
-    coverage.location = 2000, -100
-    links.new(gi("Alpha Factor"), coverage.inputs[0])
-    links.new(opacity_clipped.outputs[0], coverage.inputs[1])
+    greater = nodes.new('ShaderNodeMath')
+    greater.operation = 'GREATER_THAN'
+    links.new(opacity.outputs[2], greater.inputs[0])
+    links.new(gi("Alpha Clip Threshold"), greater.inputs[1])
+
+    def invert(value):
+        node = nodes.new('ShaderNodeMath')
+        node.operation = 'SUBTRACT'
+        node.inputs[0].default_value = 1.0
+        links.new(value, node.inputs[1])
+        return node.outputs[0]
+
+    predicates = (
+        always.outputs[0],
+        less.outputs[0],
+        equal.outputs[0],
+        invert(greater.outputs[0]),
+        greater.outputs[0],
+        invert(equal.outputs[0]),
+        invert(less.outputs[0]),
+        never.outputs[0],
+    )
+
+    # Select predicate N by successively replacing the result when mode >= N.
+    selected_test = predicates[0]
+    for mode, predicate in enumerate(predicates[1:], 1):
+        select_mode = nodes.new('ShaderNodeMath')
+        select_mode.operation = 'GREATER_THAN'
+        select_mode.inputs[1].default_value = mode - 0.5
+        links.new(gi("Alpha Test Function"), select_mode.inputs[0])
+
+        select_predicate = nodes.new('ShaderNodeMix')
+        select_predicate.data_type = 'FLOAT'
+        select_predicate.clamp_factor = True
+        links.new(select_mode.outputs[0], select_predicate.inputs[0])
+        links.new(selected_test, select_predicate.inputs[2])
+        links.new(predicate, select_predicate.inputs[3])
+        selected_test = select_predicate.outputs[0]
+
+    test_pass = nodes.new('ShaderNodeMix')
+    test_pass.data_type = 'FLOAT'
+    test_pass.clamp_factor = True
+    test_pass.inputs[2].default_value = 1.0
+    links.new(gi("Alpha Clip Enabled"), test_pass.inputs[0])
+    links.new(selected_test, test_pass.inputs[3])
 
     transparent = nodes.new('ShaderNodeBsdfTransparent')
-    transparent.location = 1600, -500
+    transparent.inputs["Color"].default_value = (1, 1, 1, 1)
+    transparent.location = 1800, -500
+
+    zero = nodes.new('ShaderNodeBsdfTransparent')
+    zero.inputs["Color"].default_value = (0, 0, 0, 1)
+    zero.location = 1800, -700
+
+    transparency_weight = nodes.new('ShaderNodeMath')
+    transparency_weight.operation = 'SUBTRACT'
+    transparency_weight.use_clamp = True
+    transparency_weight.inputs[0].default_value = 1.0
+    links.new(opacity.outputs[2], transparency_weight.inputs[1])
+
+    standard = nodes.new('ShaderNodeMixShader')
+    links.new(transparency_weight.outputs[0], standard.inputs[0])
+    links.new(surface.outputs[0], standard.inputs[1])
+    links.new(transparent.outputs[0], standard.inputs[2])
+
+    scaled_source = nodes.new('ShaderNodeMixShader')
+    links.new(opacity.outputs[2], scaled_source.inputs[0])
+    links.new(zero.outputs[0], scaled_source.inputs[1])
+    links.new(surface.outputs[0], scaled_source.inputs[2])
+
+    additive = nodes.new('ShaderNodeAddShader')
+    links.new(transparent.outputs[0], additive.inputs[0])
+    links.new(scaled_source.outputs[0], additive.inputs[1])
+
+    blend_mode = nodes.new('ShaderNodeMixShader')
+    links.new(gi("Additive Blend Enabled"), blend_mode.inputs[0])
+    links.new(standard.outputs[0], blend_mode.inputs[1])
+    links.new(additive.outputs[0], blend_mode.inputs[2])
+
+    blend_or_opaque = nodes.new('ShaderNodeMixShader')
+    links.new(gi("Alpha Blend Enabled"), blend_or_opaque.inputs[0])
+    links.new(surface.outputs[0], blend_or_opaque.inputs[1])
+    links.new(blend_mode.outputs[0], blend_or_opaque.inputs[2])
 
     mix_shader = nodes.new('ShaderNodeMixShader')
     mix_shader.location = 2200, 100
-    links.new(coverage.outputs[0], mix_shader.inputs[0])  # Factor
-    links.new(surface.outputs[0], mix_shader.inputs[1])  # opaque
-    links.new(transparent.outputs[0], mix_shader.inputs[2])  # transparent
+    links.new(test_pass.outputs[0], mix_shader.inputs[0])
+    links.new(transparent.outputs[0], mix_shader.inputs[1])
+    links.new(blend_or_opaque.outputs[0], mix_shader.inputs[2])
 
     material_output = nodes.new('ShaderNodeOutputMaterial')
     material_output.location = 2400, 100
@@ -292,9 +367,11 @@ class NodeTreeWrapper:
 
     alpha_input = property(lambda self: self.inputs["Base Alpha"])
     opacity_input = property(lambda self: self.inputs["Diffuse Alpha"])
-    alpha_factor_input = property(lambda self: self.inputs["Alpha Factor"])
+    alpha_blend_enabled_input = property(lambda self: self.inputs["Alpha Blend Enabled"])
+    additive_blend_enabled_input = property(lambda self: self.inputs["Additive Blend Enabled"])
     alpha_clip_enabled_input = property(lambda self: self.inputs["Alpha Clip Enabled"])
     alpha_threshold_input = property(lambda self: self.inputs["Alpha Clip Threshold"])
+    alpha_test_function_input = property(lambda self: self.inputs["Alpha Test Function"])
 
     # COLORS
     ambient_color = property(lambda self: self.ambient_input.default_value)
@@ -325,12 +402,20 @@ class NodeTreeWrapper:
         self.opacity_input.default_value = value
 
     @property
-    def alpha_factor(self):
-        return self.alpha_factor_input.default_value
+    def alpha_blend_enabled(self):
+        return self.alpha_blend_enabled_input.default_value
 
-    @alpha_factor.setter
-    def alpha_factor(self, value):
-        self.alpha_factor_input.default_value = value
+    @alpha_blend_enabled.setter
+    def alpha_blend_enabled(self, value):
+        self.alpha_blend_enabled_input.default_value = value
+
+    @property
+    def additive_blend_enabled(self):
+        return self.additive_blend_enabled_input.default_value
+
+    @additive_blend_enabled.setter
+    def additive_blend_enabled(self, value):
+        self.additive_blend_enabled_input.default_value = value
 
     @property
     def alpha_threshold(self):

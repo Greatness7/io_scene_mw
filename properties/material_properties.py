@@ -1,6 +1,29 @@
 import bpy
 
+from es3.nif.NiAlphaProperty import AlphaBlendFunction, AlphaTestFunction
+from es3.utils.flags import get_bit_field, set_bit_field
+
 from ..nif_shader import NodeTreeWrapper, get_current_mw_shader_tree
+
+# the blend, test and no-sort fields of NiAlphaProperty.flags, and the modes a new material starts with:
+# SRC_ALPHA / INV_SRC_ALPHA blending and GREATER testing, both disabled
+ALPHA_MODE_MASK = 0x1DFE
+ALPHA_FLAGS_DEFAULT = 0x10EC
+
+
+def enum_items(enum):
+    return tuple(
+        (item.name, item.name.replace("_", " ").title(), "", item.value)
+        for item in enum
+    )
+
+
+# the blend fields are 4 bits wide but only 0-10 are defined; files do use the rest, so they get items too
+ALPHA_BLEND_ITEMS = enum_items(AlphaBlendFunction) + tuple(
+    (f"INVALID_{value}", f"Invalid ({value})", "Not a defined blend function; kept as imported", value)
+    for value in range(len(AlphaBlendFunction), 16)
+)
+ALPHA_TEST_ITEMS = enum_items(AlphaTestFunction)
 
 
 def upgrade_materials():
@@ -196,7 +219,12 @@ class TextureProperties(bpy.types.PropertyGroup):
 class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
     material: bpy.props.PointerProperty(type=bpy.types.Material)
     texture_slots: bpy.props.CollectionProperty(type=TextureProperties)
-    alpha_flags: bpy.props.IntProperty()
+    alpha_flags: bpy.props.IntProperty(
+        name="Alpha Flags",
+        min=0,
+        max=0xFFFF,
+        default=ALPHA_FLAGS_DEFAULT,
+    )
     shine: bpy.props.FloatProperty()
 
     @staticmethod
@@ -212,17 +240,26 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
 
     @property
     def needs_upgrade(self):
-        return "Alpha Clip Threshold" not in self.inputs
+        return "Alpha Test Function" not in self.inputs
 
     def upgrade(self):
-        """One-time migration for materials saved before the alpha-clip node rework."""
+        """One-time migration for materials using an older generated MW Shader node group."""
         if not self.needs_upgrade:
             return
 
-        self.shader.node_tree = get_current_mw_shader_tree()
+        try:
+            alpha_threshold = self.alpha_threshold
+        except KeyError:
+            alpha_threshold = getattr(self.material, "alpha_threshold", 133 / 255)
 
-        self.alpha_threshold = getattr(self.material, "alpha_threshold", 133 / 255)
-        self.alpha_clip_enabled_input.default_value = 1.0 if (self.alpha_flags & 0x0200) else 0.0
+        # older versions ignored the mode fields, so a material authored in Blender stored them as zero,
+        # which reads as ONE / ONE / ALWAYS; none of 8037 alpha properties in a 2026-09-23 install scan use it
+        if (self.alpha_flags & ALPHA_MODE_MASK) == 0:
+            self.alpha_flags |= ALPHA_FLAGS_DEFAULT
+
+        self.shader.node_tree = get_current_mw_shader_tree()
+        self.alpha_threshold = alpha_threshold
+        self.sync_alpha_state()
 
     # -------------
     # Vertex Colors
@@ -269,9 +306,21 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
     def sync_alpha_state(self):
         blending = bool(self.alpha_flags & 0x0001)
         testing = bool(self.alpha_flags & 0x0200)
-        self.alpha_factor = 1.0 if (blending or testing) else 0.0
+        self.alpha_blend_enabled = 1.0 if blending else 0.0
+        self.additive_blend_enabled = 1.0 if self.alpha_blend_preview_mode == "ADDITIVE" else 0.0
         self.alpha_clip_enabled_input.default_value = 1.0 if testing else 0.0
+        self.alpha_test_function_input.default_value = self.get_test_mode()
         self.apply_render_method()
+
+    @property
+    def alpha_blend_preview_mode(self):
+        src = self.get_src_blend_mode()
+        dst = self.get_dst_blend_mode()
+        if src == AlphaBlendFunction.SRC_ALPHA and dst == AlphaBlendFunction.INV_SRC_ALPHA:
+            return "STANDARD"
+        if src == AlphaBlendFunction.SRC_ALPHA and dst == AlphaBlendFunction.ONE:
+            return "ADDITIVE"
+        return "UNSUPPORTED"
 
     # -----------
     # Alpha Blend
@@ -287,10 +336,43 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         self.sync_alpha_state()
 
     use_alpha_blend: bpy.props.BoolProperty(
-        name="Alpha Blend",
-        description="Enable Alpha Blend",
+        name="Enable Blending",
+        description="Enable alpha blending",
         get=get_use_alpha_blend,
         set=set_use_alpha_blend,
+        options=set(),
+    )
+
+    # -----------------
+    # Alpha Blend Modes
+    # -----------------
+    def get_src_blend_mode(self):
+        return get_bit_field(self.alpha_flags, 0x001E, 1)
+
+    def set_src_blend_mode(self, value):
+        self.alpha_flags = set_bit_field(self.alpha_flags, value, 0x001E, 1)
+        self.sync_alpha_state()
+
+    src_blend_mode: bpy.props.EnumProperty(
+        name="Source Blend Mode",
+        items=ALPHA_BLEND_ITEMS,
+        get=get_src_blend_mode,
+        set=set_src_blend_mode,
+        options=set(),
+    )
+
+    def get_dst_blend_mode(self):
+        return get_bit_field(self.alpha_flags, 0x01E0, 5)
+
+    def set_dst_blend_mode(self, value):
+        self.alpha_flags = set_bit_field(self.alpha_flags, value, 0x01E0, 5)
+        self.sync_alpha_state()
+
+    dst_blend_mode: bpy.props.EnumProperty(
+        name="Destination Blend Mode",
+        items=ALPHA_BLEND_ITEMS,
+        get=get_dst_blend_mode,
+        set=set_dst_blend_mode,
         options=set(),
     )
 
@@ -308,9 +390,47 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         self.sync_alpha_state()
 
     use_alpha_clip: bpy.props.BoolProperty(
-        name="Alpha Clip",
-        description="Enable Alpha Clip",
+        name="Enable Testing",
+        description="Enable alpha testing",
         get=get_use_alpha_clip,
         set=set_use_alpha_clip,
+        options=set(),
+    )
+
+    # -------------------
+    # Alpha Test Function
+    # -------------------
+    def get_test_mode(self):
+        return get_bit_field(self.alpha_flags, 0x1C00, 10)
+
+    def set_test_mode(self, value):
+        self.alpha_flags = set_bit_field(self.alpha_flags, value, 0x1C00, 10)
+        self.sync_alpha_state()
+
+    test_mode: bpy.props.EnumProperty(
+        name="Alpha Test Function",
+        items=ALPHA_TEST_ITEMS,
+        get=get_test_mode,
+        set=set_test_mode,
+        options=set(),
+    )
+
+    # -------
+    # No Sort
+    # -------
+    def get_no_sort(self):
+        return (self.alpha_flags & 0x2000) != 0
+
+    def set_no_sort(self, value):
+        if value:
+            self.alpha_flags |= 0x2000
+        else:
+            self.alpha_flags &= ~0x2000
+
+    no_sort: bpy.props.BoolProperty(
+        name="No Sort",
+        description="Disable sorting for this alpha property",
+        get=get_no_sort,
+        set=set_no_sort,
         options=set(),
     )

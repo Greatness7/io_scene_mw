@@ -72,15 +72,10 @@ def create_alpha_property(target_shape, bl_prop) -> None:
         raise nif_switch.SwitchError(
             f"Material '{bl_prop.material.name}' is from an older addon version; run Upgrade Morrowind Materials"
         )
-    if not (bl_prop.use_alpha_blend or bl_prop.use_alpha_clip):
+    if not (bl_prop.use_alpha_blend or bl_prop.use_alpha_clip or bl_prop.no_sort):
         return
-    ni_prop = nif.NiAlphaProperty()
-    ni_prop.alpha_blending = bl_prop.use_alpha_blend
-    ni_prop.src_blend_mode = "SRC_ALPHA"
-    ni_prop.dst_blend_mode = "INV_SRC_ALPHA"
-    ni_prop.alpha_testing = bl_prop.use_alpha_clip
+    ni_prop = nif.NiAlphaProperty(flags=bl_prop.alpha_flags)
     ni_prop.test_ref = int(bl_prop.alpha_threshold * 255)
-    ni_prop.test_mode = "GREATER"
     target_shape.properties.append(ni_prop)
 
 

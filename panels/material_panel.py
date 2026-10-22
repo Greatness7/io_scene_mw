@@ -80,6 +80,16 @@ class MaterialPanelSettings(bpy.types.Panel, MaterialSubPanelBase):
         # Alpha Blend
         self.layout.prop(this, "use_alpha_blend")
 
+        # Blend Modes
+        column = self.layout.column(align=True)
+        column.enabled = this.use_alpha_blend
+        column.prop(this, "src_blend_mode")
+        column.prop(this, "dst_blend_mode")
+        if this.use_alpha_blend and this.alpha_blend_preview_mode == "UNSUPPORTED":
+            notice = self.layout.column(align=True)
+            notice.label(text="Custom factors export correctly.", icon="INFO")
+            notice.label(text="Viewport uses standard alpha blending.")
+
         # Opacity
         column = self.layout.column(align=True)
         column.enabled = this.use_alpha_blend and not this.use_vertex_colors
@@ -89,14 +99,26 @@ class MaterialPanelSettings(bpy.types.Panel, MaterialSubPanelBase):
         else:
             column.prop(this.opacity_input, "default_value", text="Opacity", slider=True)
 
-        # Alpha Clip
+        # Alpha Testing
         self.layout.prop(this, "use_alpha_clip")
 
-        # Threshold
+        # Test Function and Threshold
         column = self.layout.column(align=True)
         column.enabled = this.use_alpha_clip
-        #
-        column.prop(this.alpha_threshold_input, "default_value", text="Threshold", slider=True)
+        column.prop(this, "test_mode")
+        column.prop(
+            this.alpha_threshold_input,
+            "default_value",
+            text="Alpha Test Threshold",
+            slider=True,
+        )
+
+        # No Sort
+        self.layout.prop(this, "no_sort")
+        if this.no_sort:
+            notice = self.layout.column(align=True)
+            notice.label(text="No Sort exports correctly.", icon="INFO")
+            notice.label(text="No Blender viewport equivalent.")
 
 
 class MaterialPanelTemplate(bpy.types.Panel, MaterialSubPanelBase):

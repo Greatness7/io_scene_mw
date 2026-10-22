@@ -68,10 +68,7 @@ def import_material(source_shape, properties, target_object, ctx: ImportMaterial
 def create_alpha_property(bl_prop, ni_prop) -> None:
     bl_prop.alpha_flags = ni_prop.flags
     bl_prop.alpha_threshold = float(ni_prop.test_ref / 255)
-    if ni_prop.alpha_blending:
-        bl_prop.use_alpha_blend = True
-    if ni_prop.alpha_testing:
-        bl_prop.use_alpha_clip = True
+    bl_prop.sync_alpha_state()
 
 
 def create_material_property(bl_prop, ni_prop, ctx: ImportMaterialContext) -> None:
@@ -155,8 +152,6 @@ def apply_existing_material(name, ni_alpha, source_shape, target_object, options
     if not options.use_existing_materials:
         return
     use_vertex_colors = bool(len(source_shape.data.vertex_colors))
-    use_alpha_blend = getattr(ni_alpha, "alpha_blending", False)
-    use_alpha_clip = getattr(ni_alpha, "alpha_testing", False)
     base_name, index = name, 0
     while True:
         try:
@@ -164,15 +159,22 @@ def apply_existing_material(name, ni_alpha, source_shape, target_object, options
             bl_prop = material.mw.validate()
         except (LookupError, TypeError):
             break
-        if (
-            bl_prop.use_vertex_colors == use_vertex_colors
-            and bl_prop.use_alpha_blend == use_alpha_blend
-            and bl_prop.use_alpha_clip == use_alpha_clip
-        ):
+        if bl_prop.use_vertex_colors == use_vertex_colors and alpha_matches(bl_prop, ni_alpha):
             link_object_material(target_object, bl_prop.material)
             return True
         index += 1
         name = f"{base_name}.{index:03}"
+
+
+def alpha_matches(bl_prop, ni_alpha) -> bool:
+    """Whether the material exports `ni_alpha`: the same flags and threshold, or no alpha property at all."""
+    if not (bl_prop.use_alpha_blend or bl_prop.use_alpha_clip or bl_prop.no_sort):
+        return ni_alpha is None
+    return (
+        ni_alpha is not None
+        and bl_prop.alpha_flags == ni_alpha.flags
+        and int(bl_prop.alpha_threshold * 255) == ni_alpha.test_ref
+    )
 
 
 def link_object_material(bl_object, bl_material) -> None:
