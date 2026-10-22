@@ -3,36 +3,31 @@ import bpy
 import timeit
 import pathlib
 import collections
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 import numpy.linalg as la
 
 from es3 import nif
-from es3.utils import meshoptimizer
+from es3.utils.geometry import GeometryError
 from es3.utils.math import ID44, compose, decompose
 
 from dataclasses import replace
 from functools import cached_property
 
-from . import nif_utils
 from . import nif_switch
-from .conversion import export_animation, export_materials, export_skeletons
-from .conversion.blender_compat import get_fcurves
+from .conversion import export_animation, export_geometry, export_materials, export_skeletons
 from .conversion.bone_axes import export_axis_correction, import_axis_correction
 from .conversion.options import ExportOptions, export_options_from_mapping
 from .conversion.records import (
     ExportCreationJob,
-    ExportMorphBuffers,
     ExportNode,
     ExportNullSlot,
     ExportRole,
     ExportScope,
-    ExportSkinBuffers,
     ExportSwitchPlan,
-    MaterialPartition,
 )
-from .conversion.runtime import ExportRuntime
+from .conversion.runtime import ExportRuntime, evaluated_mesh, export_evaluation_scope
 
 def save(context, filepath, report=None, **config):
     """save the scene to a nif file"""
@@ -43,7 +38,11 @@ def save(context, filepath, report=None, **config):
     options = export_options_from_mapping(config)
     runtime = ExportRuntime.from_context(context)
     exporter = Exporter(filepath, options, runtime)
-    exporter.execute()
+    try:
+        exporter.execute()
+    except GeometryError as error:
+        # malformed geometry cancels the export like any other failed precondition
+        raise nif_switch.SwitchError(str(error)) from error
 
     for warning in exporter.warnings:
         if report:
@@ -79,8 +78,8 @@ class Exporter:
         self.errors = []
         self.warnings = []
         self.scene_objects = []
-        self.depsgraph = None
         self.world_matrices = {}
+        self.mesh_buffers = {}
 
     def execute(self):
         bl_objects = self.get_source_objects()
@@ -101,15 +100,15 @@ class Exporter:
             )
             self.world_matrices = export_skeletons.apply_axis_corrections(self.skeletons, self.nodes)
 
-        # resolve depsgraph
-        self.resolve_depsgraph()
-
         # uniform scale fix
         for root in roots:
             root.ensure_uniform_scale()
         self.world_matrices = export_skeletons.evaluate_node_worlds(self.nodes)
         for skeleton in self.skeletons:
             skeleton.world_matrices = self.world_matrices
+
+        # copy every mesh occurrence out of Blender before anything is created
+        self.extract_mesh_buffers()
 
         # create ni objects
         creation_schedule = self.build_creation_schedule()
@@ -208,57 +207,37 @@ class Exporter:
     def apply_axis_correction(self, skeleton):
         self.world_matrices = export_skeletons.apply_axis_corrections([skeleton], self.nodes)
 
-    def resolve_depsgraph(self):
-        temp_modifiers = []
-        temp_hide_view = []
-        temp_mute_keys = []
-        temp_unhidden = []
-        try:
-            meshes = [node.source for node in self.nodes if node.role is ExportRole.MESH]
-            for source in meshes:
-                # hidden switch variants still export; disabled objects are not evaluated
-                if source.hide_viewport:
-                    source.hide_viewport = False
-                    temp_unhidden.append(source)
+    def extract_mesh_buffers(self):
+        mesh_nodes = [node for node in self.nodes if node.role is ExportRole.MESH]
 
-                visible_modifiers = [m for m in source.modifiers if m.show_viewport]
-                is_triangulated = False
+        # author state the evaluation scope changes, read while it is untouched
+        metadata = {}
+        for node in mesh_nodes:
+            if node.source not in metadata:
+                metadata[node.source] = export_geometry.capture_metadata(node.source, self.options)
+        skins = {node: self.get_skin_binding(node) for node in mesh_nodes}
 
-                # ensure meshes are in rest pose
-                for m in visible_modifiers:
-                    if m.type == "TRIANGULATE":
-                        is_triangulated = True
-                    elif m.type == "ARMATURE":
-                        m.show_viewport = False
-                        temp_hide_view.append(m)
+        with export_evaluation_scope(self.runtime, [node.source for node in mesh_nodes]) as depsgraph:
+            for node in mesh_nodes:
+                with evaluated_mesh(node.source, depsgraph) as (evaluated, mesh):
+                    self.mesh_buffers[node] = export_geometry.extract_mesh_buffers(
+                        evaluated,
+                        mesh,
+                        metadata[node.source],
+                        skins[node],
+                        name=node.source.name,
+                        is_collider=node.is_collider,
+                        baked_vertex_scale=node.baked_vertex_scale,
+                    )
 
-                # ensure meshes are triangulated
-                if not is_triangulated:
-                    m = source.modifiers.new("", "TRIANGULATE")
-                    m.quad_method = "FIXED"
-                    m.ngon_method = "CLIP"
-                    if bpy.app.version < (4, 2, 0):
-                        m.keep_custom_normals = True
-                    temp_modifiers.append((source, m))
-
-                # ensure all shape keys are mute
-                if source.data.shape_keys:
-                    for k in source.data.shape_keys.key_blocks:
-                        if not k.mute:
-                            k.mute = True
-                            temp_mute_keys.append(k)
-
-            # get evaluated dependency graph
-            self.depsgraph = self.runtime.context.evaluated_depsgraph_get()
-        finally:
-            for m in temp_hide_view:
-                m.show_viewport = True
-            for s, m in temp_modifiers:
-                s.modifiers.remove(m)
-            for k in temp_mute_keys:
-                k.mute = False
-            for source in temp_unhidden:
-                source.hide_viewport = True
+    def get_skin_binding(self, node):
+        if node.is_collider:
+            return None
+        armature = node.source.find_armature()
+        if not armature:
+            return None
+        skeleton = self.get_skeleton(armature, node.scope, node.name)
+        return export_geometry.skin_binding(node.source, armature, skeleton)
 
     def export_keyframe_data(self, data):
         nif_path = self.filepath
@@ -391,7 +370,10 @@ class Exporter:
         if job.role is ExportRole.EMPTY:
             Empty(target).create()
         elif job.role is ExportRole.MESH:
-            Mesh(target).create()
+            buffers = self.mesh_buffers.get(target)
+            if buffers is None:
+                raise RuntimeError(f"Mesh '{target.name}' was scheduled without extracted geometry")
+            Mesh(target).create(buffers)
         elif job.role is ExportRole.ARMATURE:
             Armature(target).create(job.owned_bones)
         else:
@@ -806,38 +788,29 @@ class Mesh(SceneNode):
     def __init__(self, node):
         self.__dict__ = node.__dict__
 
-    def create(self):
-        bl_object, bl_data = self.get_mesh_data()
-
-        ni_data = nif.NiTriShapeData()
-
-        self.create_triangles(ni_data, bl_data)
-        self.create_vertices(ni_data, bl_data)
-
-        self.create_normals(ni_data, bl_data)
-        self.create_vertex_colors(ni_data, bl_data)
-        self.create_uv_sets(ni_data, bl_data)
-
-        skin_data = self.get_skin_data(bl_data, ni_data)
-        morph_data = self.get_morph_data(bl_data, ni_data)
-        material_data = self.get_material_data(bl_object, bl_data)
-        bl_object.to_mesh_clear()  # bl_data is freed here
-
-        if len(material_data) == 1:
-            outputs = [Empty(self).create(ni_data)]
+    def create(self, buffers):
+        if len(buffers.partitions) == 1:
+            outputs = [Empty(self).create(nif.NiTriShapeData())]
         else:
             # Create a trishape for each material.
             parent_output = Empty(self).create()
-            outputs = [nif.NiTriShape() for _ in material_data]
+            outputs = [nif.NiTriShape() for _ in buffers.partitions]
             parent_output.replace_children(outputs)
 
-        for i, tri in enumerate(outputs):
+        # root to skin offset
+        skin_offset = None
+        if buffers.skin is not None:
+            placement = self.exporter.get(self.source, self.scope)
+            world_matrices = self.exporter.world_matrices
+            skin_offset = la.solve(world_matrices[buffers.skin.root], world_matrices[placement])
+
+        for i, (tri, partition) in enumerate(zip(outputs, buffers.partitions)):
             tri.name = tri.name or f"Tri {self.name} {i}"
             tri.data = tri.data or nif.NiTriShapeData()
-            tri_skin = replace(skin_data) if skin_data is not None else None
-            tri_morphs = replace(morph_data) if morph_data is not None else None
+            part = export_geometry.select_partition(buffers, partition, tri.name)
 
-            partition = material_data[i]
+            # the material decides whether vertex colors are kept, by deleting them from the shape data
+            tri.data.vertex_colors = part.vertex_colors
             export_materials.export_material(
                 partition.material,
                 tri,
@@ -845,390 +818,15 @@ class Mesh(SceneNode):
                 self.exporter.material_context,
                 is_collider=self.is_collider,
             )
+            if len(tri.data.vertex_colors) == 0:
+                part = replace(part, vertex_colors=tri.data.vertex_colors)
 
-            self.extract_vertex_data(
-                partition.corner_indices,
-                ni_data,
-                tri.data,
-                skin_data,
-                tri_skin,
-                morph_data,
-                tri_morphs,
-            )
-            self.optimize_geometry(tri.data, tri_skin, tri_morphs)
-            self.create_vertex_groups(tri, tri_skin)
-            self.create_vertex_morphs(tri, tri_morphs)
+            part = export_geometry.weld(part, self.exporter.options.vertex_precision, tri.name)
+            export_geometry.write_shape_data(tri.data, part)
+            if skin_offset is not None:
+                export_geometry.create_skin(tri, part, skin_offset)
+            export_geometry.create_morphs(tri, part.morphs, self.exporter.cycle_type)
 
             tri.data.update_center_radius(exact=True)
 
         return self.output
-
-    def create_vertices(self, ni, bl):
-        ni.vertices.resize(len(bl.vertices), 3)
-        bl.vertices.foreach_get("co", ni.vertices.ravel())
-
-        # Ensure vertex transforms.
-        # TODO refactor this!
-        if self.baked_vertex_scale is not None:
-            ni.vertices *= self.baked_vertex_scale
-
-        if len(ni.triangles):
-            ni.vertices = ni.vertices[ni.triangles].reshape(-1, 3)
-
-    def create_triangles(self, ni, bl):
-        ni.triangles.resize(len(bl.polygons), 3)
-        bl.polygons.foreach_get("vertices", ni.triangles.ravel())
-
-    def create_normals(self, ni, bl):
-        if self.is_collider:
-            return
-        if bl["ignore_normals"]:
-            return
-
-        ni.normals.resize(len(ni.vertices), 3)
-        if bpy.app.version >= (4, 1, 0):
-            bl.corner_normals.foreach_get("vector", ni.normals.ravel())
-        else:
-            bl.calc_normals_split()
-            bl.loops.foreach_get("normal", ni.normals.ravel())
-            bl.free_normals_split()
-
-        if self.baked_vertex_scale is not None:
-            ni.normals /= self.baked_vertex_scale
-        ni.normals /= la.norm(ni.normals, axis=1, keepdims=True)
-
-    def create_uv_sets(self, ni, bl):
-        if self.is_collider:
-            return
-        if not any(uv.data for uv in bl.uv_layers):
-            return
-
-        ni.uv_sets.resize(len(bl.uv_layers), len(ni.vertices), 2)
-        for ni_uv, bl_uv in zip(ni.uv_sets, bl.uv_layers):
-            bl_uv.data.foreach_get("uv", ni_uv.ravel())
-            # convert Blender into OpenGL format
-            ni_uv[..., 1] = 1 - ni_uv[..., 1]
-
-    def create_vertex_colors(self, ni, bl):
-        if self.is_collider:
-            return
-        if not any(self.source.material_slots):
-            return
-
-        if len(bl.vertex_colors):
-            ni.vertex_colors.resize(len(ni.vertices), 4)
-            bl.vertex_colors[0].data.foreach_get("color", ni.vertex_colors.ravel())
-
-    def create_vertex_groups(self, trishape, skin_data):
-        if skin_data is None:
-            return
-
-        missing = [node.name for node in (skin_data.root, *skin_data.bones) if node.output is None]
-        if missing:
-            raise RuntimeError(f"Skin references skeleton outputs that have not been created: {', '.join(missing)}")
-
-        skin = trishape.skin = nif.NiSkinInstance()
-        skin.root, *skin.bones = [node.output for node in (skin_data.root, *skin_data.bones)]
-
-        skin.data = nif.NiSkinData()
-        skin.data.bone_data = [nif.NiSkinDataBoneData() for _ in skin_data.bones]
-
-        # root to skin offset
-        placement = self.exporter.get(self.source, self.scope)
-        offset = la.solve(self.exporter.world_matrices[skin_data.root], self.exporter.world_matrices[placement])
-        skin.data.matrix = la.inv(offset)
-
-        # calculate bone data
-        for i, bone_data in enumerate(skin.data.bone_data):
-            j, = np.nonzero(skin_data.weights[i])
-
-            # skip empty weights
-            if len(j) == 0:
-                cast(Any, skin.bones)[i] = None
-                cast(Any, skin.data.bone_data)[i] = None
-                continue
-
-            # set vertex weights
-            bone_data.vertex_weights.resize(len(j))
-            bone_data.vertex_weights["f0"] = j
-            bone_data.vertex_weights["f1"] = skin_data.weights[i, j]
-
-            # skin to bone offset
-            matrix_bind = skin_data.bind_relative_to_root[skin_data.bones[i]]
-            bone_data.matrix = la.solve(matrix_bind, offset)
-
-            # apply center/radius
-            bone_data.update_center_radius(trishape.data.vertices[j], exact=True)
-
-        # filter unused bones
-        skin.bones = [*filter(None, skin.bones)]
-        skin.data.bone_data = [*filter(None, skin.data.bone_data)]
-
-    def create_vertex_morphs(self, trishape, morph_data):
-        if morph_data is None:
-            return
-
-        # create controller
-        controller = nif.NiGeomMorpherController(
-            cycle_type=self.exporter.cycle_type,
-            target=trishape,
-        )
-        controller.stop_time = max(keys[-1, 0] for keys in morph_data.keys if len(keys))
-
-        # create morph data
-        controller.data = nif.NiMorphData(relative_targets=1)
-        controller.data.targets = [nif.NiMorphDataMorphTarget() for _ in morph_data.targets]
-
-        # assign morph data
-        for i, target in enumerate(controller.data.targets):
-            target.key_type = morph_data.interpolations[i]
-            target.keys = morph_data.keys[i]
-            target.vertices = morph_data.targets[i]
-
-        trishape.controllers.appendleft(controller)
-
-    # -- get blender data --
-
-    def get_mesh_data(self):
-        # Resolve dependency graph.
-        dg = self.exporter.depsgraph
-
-        # Evaluate final mesh data.
-        bl_object = self.source.evaluated_get(dg)
-        bl_data = bl_object.to_mesh(preserve_all_data_layers=True, depsgraph=dg)
-
-        # Validate mesh + material.
-        bl_data.validate(clean_customdata=False)
-        bl_data.validate_material_indices()
-
-        # Preserve our custom data.
-        bl_data["ignore_normals"] = self.source.data.get("ignore_normals")
-
-        return bl_object, bl_data
-
-    def get_skin_data(self, bl_data, ni_data):
-        # ignore collider meshes
-        if self.is_collider:
-            return None
-
-        # find the armature root
-        armature = self.source.find_armature()
-        if not armature:
-            return None
-        skeleton = self.exporter.get_skeleton(armature, self.scope, self.name)
-        bone_nodes = {node.source: node for node in skeleton.bones}
-
-        # find valid bone groups
-        bones = {}
-        for i, vg in enumerate(self.source.vertex_groups):
-            try:
-                bones[i] = armature.pose.bones[vg.name]
-            except KeyError:
-                pass
-
-        # allocate weights array
-        weights = np.zeros([len(bones), len(bl_data.vertices)])
-        if weights.size == 0:
-            return None
-
-        # populate weights array
-        index_remap = {j: i for i, j in enumerate(bones)}
-        for i, vertex in enumerate(bl_data.vertices):
-            for vg in vertex.groups:
-                try:
-                    j = index_remap[vg.group]
-                    weights[j, i] = vg.weight
-                except KeyError:
-                    pass
-
-        # limit bones per vertex
-        if len(bones) > 4:
-            # indices of all but the 4 highest weights
-            indices = np.argpartition(weights, -4, axis=0)[:-4]
-            # set the values at target indices to zero
-            np.put_along_axis(weights, indices, 0, axis=0)
-
-        # normalize bone weights
-        sums = weights.sum(axis=0)
-        mask = sums == 0
-        # assign unweighted vertices to the first bone
-        weights[0, mask] = sums[mask] = 1.0
-        weights /= sums
-
-        # view as per-face-loops
-        weights = weights[:, ni_data.triangles].reshape(len(bones), -1)
-
-        return ExportSkinBuffers(
-            root=skeleton.armature,
-            bones=tuple(bone_nodes[bone] for bone in bones.values()),
-            weights=weights,
-            bind_relative_to_root=skeleton.bind_relative_to_root,
-        )
-
-    def get_morph_data(self, bl_data, ni_data):
-        # respect export setting
-        if not self.exporter.options.export_animations:
-            return None
-
-        # ignore collider meshes
-        if self.is_collider:
-            return None
-
-        # collect shape key data
-        try:
-            shape_keys = self.source.data.shape_keys
-            basis = shape_keys.key_blocks[0]
-        except (AttributeError, IndexError):
-            return None
-
-        fcurves = get_fcurves(shape_keys.animation_data)
-
-        data_paths = {fc.data_path: fc for fc in fcurves}
-
-        # isolate unmuted layers (a target without keys never contributes in the engine)
-        fcurves_dict = {None: basis}
-        for sk in shape_keys.key_blocks:
-            fc = data_paths.get(sk.path_from_id('value'))
-            if fc and len(fc.keyframe_points) and not (fc.mute or sk.mute):
-                fcurves_dict[fc] = sk
-                assert sk.relative_key == basis, "Shape keys must be relative to basis."
-
-        # bail if all were muted or empty
-        if not len(fcurves_dict) > 1:
-            return None
-
-        # allocate keyframe data
-        keyframes = []
-        interpolations = []
-
-        # allocate morph targets
-        targets = np.empty((len(fcurves_dict), len(bl_data.vertices), 3))
-
-        for i, (fc, sk) in enumerate(fcurves_dict.items()):
-            if i == 0:
-                # is basis layer
-                key_type = nif.NiFloatData.KeyType.LIN_KEY
-                key_data = np.empty(0)
-            else:
-                key_type = export_animation.get_interpolation_type([fc])
-                key_data = export_animation.collect_keyframe_points([fc], key_type)
-
-            # populate keyframe data
-            keyframes.append(key_data)
-            interpolations.append(key_type)
-
-            # populate morph targets
-            sk.data.foreach_get("co", targets[i].ravel())
-
-        # make relative to basis
-        targets[1:] -= targets[0]
-
-        if self.baked_vertex_scale is not None:
-            targets *= self.baked_vertex_scale
-
-        # view as per-face-loops
-        targets = targets[:, ni_data.triangles].reshape(-1, len(ni_data.vertices), 3)
-
-        return ExportMorphBuffers(
-            targets=targets,
-            keys=tuple(keyframes),
-            interpolations=tuple(interpolations),
-        )
-
-    def get_material_data(self, bl_object, bl_data):
-        # get each polygon's material index
-        material_indices = np.empty(len(bl_data.polygons), dtype=int)
-        bl_data.polygons.foreach_get("material_index", material_indices)
-
-        # reduce to only the active indices
-        active_material_indices = np.unique(material_indices)
-
-        # simple case for a single material
-        if len(active_material_indices) <= 1:
-            return [MaterialPartition(bl_object.active_material, None)]
-
-        # get each polygon's vertex indices
-        loops = np.arange(len(bl_data.loops), dtype=int).reshape(-1, 3)
-
-        material_data = []
-        for i in active_material_indices:
-            material = bl_object.material_slots[i].material
-            indices = loops[material_indices == i].ravel()
-            if len(indices):
-                material_data.append(MaterialPartition(material, indices))
-
-        return material_data
-
-    # -- optimizer functions --
-
-    def optimize_geometry(self, data, skin_data, morph_data):
-        if len(data.vertices) == 0:
-            return
-
-        arrays = [
-            data.vertices,
-            data.normals,
-            data.vertex_colors,
-            *data.uv_sets,
-            # *(skin_data.weights if skin_data is not None else ()),
-            # *(morph_data.targets if morph_data is not None else ()),
-        ]
-
-        if len(data.uv_sets):
-            # Calculate the handedness (winding direction) of the UVs for each triangle.
-            # We pass this into `unique_rows` to prevent vertices from being merged if their
-            # parent triangles have mirrored UV layouts, which causes tangent/bitangent
-            # generation to break in OpenMW.
-            uvs = data.uv_sets[0].reshape(-1, 3, 2)
-            d_uv_1 = uvs[:, 1] - uvs[:, 0]
-            d_uv_2 = uvs[:, 2] - uvs[:, 0]
-            cross_z = (d_uv_1[:, 0] * d_uv_2[:, 1]) - (d_uv_1[:, 1] * d_uv_2[:, 0])
-            cross_z[np.abs(cross_z) < 1e-6] = 0
-            arrays.append(np.sign(cross_z).repeat(3))
-
-        # clear duplicates
-        indices, inverse = nif_utils.unique_rows(*arrays, precision=self.exporter.options.vertex_precision)
-
-        # update face data
-        try:
-            data.triangles = inverse[np.arange(inverse.size, dtype=int).reshape(-1, 3)]
-        except ValueError:
-            raise ValueError(f"Invalid geometry data (no faces?): {self}")
-
-        # update vert data
-        self.extract_vertex_data(indices, data, data, skin_data, skin_data, morph_data, morph_data)
-        self.optimize_vertex_cache(data, skin_data, morph_data)
-
-    @staticmethod
-    def extract_vertex_data(indices, src_data, dst_data, src_skin, dst_skin, src_morphs, dst_morphs):
-        indices = ... if indices is None else indices
-        if len(src_data.vertices):
-            dst_data.vertices = src_data.vertices[indices]
-        if len(src_data.normals):
-            dst_data.normals = src_data.normals[indices]
-        if len(src_data.vertex_colors):
-            dst_data.vertex_colors = src_data.vertex_colors[indices]
-        if len(src_data.uv_sets):
-            dst_data.uv_sets = src_data.uv_sets[:, indices]
-        if src_skin is not None and dst_skin is not None:
-            dst_skin.weights = src_skin.weights[:, indices]
-        if src_morphs is not None and dst_morphs is not None:
-            dst_morphs.targets = src_morphs.targets[:, indices]
-
-    @staticmethod
-    def optimize_vertex_cache(data, skin, morphs):
-        vertex_remap, triangles = meshoptimizer.optimize(data.vertices, data.triangles.astype(np.uint32))
-        if len(data.triangles):
-            data.triangles = triangles.astype(np.uint16)
-        if len(data.vertices):
-            data.vertices[vertex_remap] = data.vertices.copy()
-        if len(data.normals):
-            data.normals[vertex_remap] = data.normals.copy()
-        if len(data.vertex_colors):
-            data.vertex_colors[vertex_remap] = data.vertex_colors.copy()
-        if len(data.uv_sets):
-            data.uv_sets[:, vertex_remap] = data.uv_sets.copy()
-        if skin is not None:
-            skin.weights[:, vertex_remap] = skin.weights.copy()
-        if morphs is not None:
-            morphs.targets[:, vertex_remap] = morphs.targets.copy()

@@ -152,6 +152,56 @@ class ExportMorphBuffers:
 
 
 @dataclass(frozen=True, slots=True)
+class ExportMorphCapture:
+    """Shape-key state read before export evaluation mutes any key.
+
+    `coordinates` holds absolute source-vertex positions `(M, V, 3)`, the basis first, followed by every target
+    that is unmuted, keyed, and has an unmuted F-curve. `keys` and `interpolations` align with it.
+    """
+
+    coordinates: Array
+    keys: tuple[Array, ...]
+    interpolations: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ExportMeshMetadata:
+    """Author state of one mesh source, captured before the evaluation scope changes it."""
+
+    ignore_normals: bool
+    morphs: ExportMorphCapture | None
+
+
+@dataclass(frozen=True, slots=True)
+class ExportSkinBinding(Generic[NodeT]):
+    """The skeleton an exported mesh occurrence binds to; `groups[i]` is the vertex-group index of `bones[i]`."""
+
+    root: NodeT
+    groups: tuple[int, ...]
+    bones: tuple[NodeT, ...]
+    bind_relative_to_root: dict[NodeT, Array]
+
+
+@dataclass(frozen=True, slots=True)
 class MaterialPartition(Generic[MaterialT]):
     material: MaterialT | None
     corner_indices: Array | None
+
+
+@dataclass(frozen=True, slots=True)
+class ExportMeshBuffers(Generic[NodeT, MaterialT]):
+    """Owned geometry of one exported mesh occurrence.
+
+    Vertex-aligned fields share one axis of length N (see `es3.utils.geometry.VertexPayload`): positions
+    `(N, 3)`, normals and colors `(N, 3)`/`(N, 4)` or empty, UVs `(S, N, 2)`, skin weights `(B, N)`, and morph
+    rows `(M, N, 3)`. Before welding N counts triangle corners and `triangles` is `arange(N).reshape(-1, 3)`.
+    """
+
+    vertices: Array
+    normals: Array
+    vertex_colors: Array
+    uv_sets: Array
+    triangles: Array
+    partitions: tuple[MaterialPartition[MaterialT], ...]
+    skin: ExportSkinBuffers[NodeT] | None
+    morphs: ExportMorphBuffers | None

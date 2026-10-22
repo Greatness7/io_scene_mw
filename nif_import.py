@@ -11,22 +11,17 @@ import numpy.linalg as la
 from es3 import nif
 from es3.utils.math import ID44, decompose
 
-from . import nif_utils
 from . import nif_switch
-from .conversion import import_animation, import_materials, import_skeletons
-from .conversion.blender_compat import ensure_action, ensure_fcurve
+from .conversion import import_animation, import_geometry, import_materials, import_skeletons
 from .conversion.options import ImportOptions, import_options_from_mapping
 from .conversion.records import (
     ImportCreationJob,
-    ImportMeshBuffers,
-    ImportMorphBuffers,
     ImportNode,
     ImportNullSlot,
     ImportRole,
-    ImportSkinBuffers,
     ImportSwitchPlan,
 )
-from .conversion.runtime import ImportRuntime
+from .conversion.runtime import ImportRuntime, object_edit_scope, require_object_mode, scene_frame_scope
 
 def load(context, filepath, report=None, **config):
     """load a scene from a nif file"""
@@ -75,6 +70,8 @@ class Importer:
         self.world_matrices = {}
 
     def execute(self):
+        require_object_mode(self.runtime.context)
+
         data = nif.NiStream()
         data.load(self.filepath)
         data.merge_properties()
@@ -134,23 +131,18 @@ class Importer:
 
         creation_schedule = self.build_creation_schedule()
 
-        # discard frame pos
-        frame_current = self.runtime.scene.frame_current
-        self.runtime.scene.frame_set(0)
+        # create at frame zero, then return to the current frame
+        with scene_frame_scope(self.runtime.scene, 0):
+            # create bl objects
+            for job in creation_schedule:
+                self.create_job(job)
 
-        # create bl objects
-        for job in creation_schedule:
-            self.create_job(job)
+            # switch types and selections
+            self.resolve_switches()
 
-        # switch types and selections
-        self.resolve_switches()
-
-        # unmute animations
-        for skeleton in self.skeletons:
-            import_animation.set_mute(skeleton.root.output, False, self.animation_context)
-
-        # restore frame pos
-        self.runtime.scene.frame_current = frame_current
+            # unmute animations
+            for skeleton in self.skeletons:
+                import_animation.set_mute(skeleton.root.output, False, self.animation_context)
 
         # set active object
         self.runtime.view_layer.objects.active = self.get_root_output(roots)
@@ -591,16 +583,38 @@ class Armature(SceneNode):
         bl_data.display_type = "STICK"
         bl_object.show_in_front = True
 
-        # swap to edit mode to allow creation of bones
-        self.importer.runtime.view_layer.objects.active = bl_object
-        bpy.ops.object.mode_set(mode="EDIT")
-
         # used for calculating armature space matrices
         placement = self.importer.get(self.source)
         skeleton = self.importer.skeletons_by_source[self.source]
-        rest_world = skeleton.rest_world
         posed_world = skeleton.posed_world
         root_inverse = la.inv(self.importer.world_matrices[placement])
+
+        # bones can only be created in edit mode
+        with object_edit_scope(self.importer.runtime, bl_object):
+            bones = self.create_edit_bones(bl_data, bone_nodes, root_inverse, skeleton)
+
+        # assign node.output and apply pose transforms
+        for node, name in bones.items():
+            pose_bone = node.output = bl_object.pose.bones[name]
+            # compute the armature-space matrix
+            pose_bone.matrix = (root_inverse @ posed_world[node]).T
+            # TODO try not to call scene update
+            self.importer.runtime.view_layer.depsgraph.update()
+            # create animations, preserve poses
+            import_animation.import_object_animation(
+                node.source,
+                node.output,
+                node.bone_name,
+                self.importer.animation_context,
+            )
+            import_animation.set_mute(node.output, True, self.importer.animation_context)
+
+        return bl_object
+
+    def create_edit_bones(self, bl_data, bone_nodes, root_inverse, skeleton):
+        """Create and place the edit bone of every node; returns each node's bone name."""
+        rest_world = skeleton.rest_world
+        posed_world = skeleton.posed_world
 
         # bone mappings cache
         bones = {}
@@ -637,26 +651,7 @@ class Armature(SceneNode):
                 # TODO figure out a proper fix for zero length bones
                 bone.tail.z += 1e-5
 
-        # back to object mode now that all bones exist
-        bpy.ops.object.mode_set(mode="OBJECT")
-
-        # assign node.output and apply pose transforms
-        for node, name in bones.items():
-            pose_bone = node.output = bl_object.pose.bones[name]
-            # compute the armature-space matrix
-            pose_bone.matrix = (root_inverse @ posed_world[node]).T
-            # TODO try not to call scene update
-            self.importer.runtime.view_layer.depsgraph.update()
-            # create animations, preserve poses
-            import_animation.import_object_animation(
-                node.source,
-                node.output,
-                node.bone_name,
-                self.importer.animation_context,
-            )
-            import_animation.set_mute(node.output, True, self.importer.animation_context)
-
-        return bl_object
+        return bones
 
 
 class Mesh(SceneNode):
@@ -674,18 +669,7 @@ class Mesh(SceneNode):
 
         # We only need to calculate the geometry once per mesh instance.
         if bl_data.users == 1:
-            ni_data = self.calc_geometry_data()
-
-            self.create_vertices(bl_object, ni_data.vertices)
-            self.create_triangles(bl_object, ni_data.triangles)
-
-            self.create_vertex_colors(bl_object, ni_data.vertex_colors)
-            self.create_uv_sets(bl_object, ni_data.uv_sets)
-
-            self.create_vertex_weights(bl_object, ni_data.skin)
-            self.create_vertex_morphs(bl_object, ni_data.morphs)
-
-            self.create_normals(bl_object, ni_data.normals)
+            self.create_geometry(bl_object)
 
         if self.parent is not None:
             try:
@@ -703,186 +687,28 @@ class Mesh(SceneNode):
 
         return bl_object
 
-    def create_vertices(self, ob, vertices):
-        ob.data.vertices.add(len(vertices))
-        ob.data.vertices.foreach_set("co", vertices.ravel())
-
-    def create_triangles(self, ob, triangles):
-        n = len(triangles)
-        ob.data.loops.add(3 * n)
-        ob.data.loops.foreach_set("vertex_index", triangles.ravel())
-
-        ob.data.polygons.add(n)
-        ob.data.polygons.foreach_set("loop_total", [3] * n)
-        ob.data.polygons.foreach_set("loop_start", range(0, 3 * n, 3))
-        ob.data.polygons.foreach_set("use_smooth", [True] * n)
-
-        ob.data.update()
-
-    def create_normals(self, ob, normals):
-        if len(normals) == 0:
-            ob.data["ignore_normals"] = True
-        else:
-            # Each polygon has a "use_smooth" flag that controls whether it
-            # should use flat shading or smoooth shading. Our custom normals
-            # will override this behavior, but the user may decide to remove
-            # custom data layers at some point after importing, which would
-            # make the renderer fall back to using said flags. We calculate
-            # these flags as best we can by checking if the polygon's normals
-            # are all equivalent, which would mean it is NOT smooth shaded.
-            n0, n1, n2 = np.swapaxes(normals.reshape(-1, 3, 3), 0, 1)
-            n0__eq__n1 = np.isclose(n0, n1, rtol=0, atol=1e-04)
-            n1__eq__n2 = np.isclose(n1, n2, rtol=0, atol=1e-04)
-            use_smooth = ~(n0__eq__n1 & n1__eq__n2).all(axis=1)
-            ob.data.polygons.foreach_set("use_smooth", use_smooth)
-
-            # apply custom normals
-            if not self.importer.options.ignore_custom_normals:
-                if ob.data.validate(verbose=False, clean_customdata=False):
-                    print(f"Warning: Invalid mesh data, custom normals will be skipped: ({ob.name})")
-                else:
-                    ob.data.normals_split_custom_set(normals)
-                    if bpy.app.version < (4, 1, 0):
-                        ob.data.use_auto_smooth = True
-
-    def create_uv_sets(self, ob, uv_sets):
-        for uv_set in uv_sets[:8]:  # max 8 uv sets (blender limitation)
-            uv = ob.data.uv_layers.new()
-            uv.data.foreach_set("uv", uv_set.ravel())
-
-    def create_vertex_colors(self, ob, vertex_colors):
-        if len(vertex_colors):
-            vc = ob.data.vertex_colors.new()
-            vc.data.foreach_set("color", vertex_colors.ravel())
-
-    def create_vertex_weights(self, ob, skin_data):
-        if skin_data is None:
-            return
-
-        vertex_weights = skin_data.weights
-
-        root = self.importer.get(self.source.skin.root)
-        bones = map(self.importer.get, self.source.skin.bones)
-
-        # Make Armature
-        armature = ob.modifiers.new("", "ARMATURE")
-        armature.object = root.output.id_data
-
-        # Vertex Weights
-        for i, node in enumerate(bones):
-            vg = ob.vertex_groups.new(name=node.output.name)
-
-            weights = vertex_weights[i]
-            for j in np.flatnonzero(weights).tolist():
-                vg.add((j,), weights[j], "ADD")
-
-    def create_vertex_morphs(self, ob, morph_data):
-        if morph_data is None:
-            return
-
-        vertex_morphs = morph_data.targets
-
-        # add basis key
-        ob.shape_key_add(name="Basis")
-
-        # add anim data
-        action = ensure_action(ob.data.shape_keys)
-
-        # add morph keys
-        for i, target in enumerate(self.source.morph_targets):
-            # create morph targets
-            shape_key = ob.shape_key_add(name="")
-            shape_key.data.foreach_set("co", vertex_morphs[i].ravel())
-
-            # create morph fcurves
-            data_path = shape_key.path_from_id("value")
-            fc = ensure_fcurve(action, data_path)
-
-            # add fcurve keyframes
-            fc.keyframe_points.add(len(target.keys))
-            fc.keyframe_points.foreach_set("co", target.keys[:, :2].ravel())
-            import_animation.create_interpolation_data(target, fc)
-            fc.update()
-
-        # update frame range
-        import_animation.update_frame_range(self.importer.runtime.scene, self.source.controller)
-
-    def calc_geometry_data(self):
-        vertices = self.source.data.vertices
-        normals = self.source.data.normals
-        uv_sets = self.source.data.uv_sets.copy()
-        vertex_colors = self.source.data.vertex_colors
-        vertex_weights = self.source.vertex_weights()
-        vertex_morphs = self.source.vertex_morphs()
-        triangles = self.source.data.triangles
-
-        if len(normals):
-            # re-unitize, fixes landscape meshes
-            normals /= la.norm(normals, axis=1, keepdims=True)
-            # reconstruct as per-triangle layout
-            normals = normals[triangles].reshape(-1, 3)
-
-        if len(uv_sets):
-            # convert OpenGL into Blender format
-            uv_sets[..., 1] = 1 - uv_sets[..., 1]
-            # reconstruct as per-triangle layout
-            uv_sets = uv_sets[:, triangles].reshape(-1, triangles.size, 2)
-
-        if len(vertex_colors):
-            # reconstruct as per-triangle layout
-            vertex_colors = vertex_colors[triangles].reshape(-1, 4)
-
-        # remove doubles
+    def create_geometry(self, ob):
+        # the placement's world scale sizes the welding tolerance
         placement = self.importer.get(self.source)
         scale = decompose(self.importer.world_matrices[placement])[-1]
-        indices, inverse = nif_utils.unique_rows(
-            vertices * scale,
-            *vertex_weights,
-            *vertex_morphs,
-            precision=self.importer.options.vertex_precision,
+        buffers = import_geometry.prepare_buffers(self.source, scale, self.importer.options.vertex_precision, self.name)
+
+        import_geometry.create_vertices(ob, buffers.vertices)
+        import_geometry.create_triangles(ob, buffers.triangles)
+
+        import_geometry.create_vertex_colors(ob, buffers.vertex_colors)
+        import_geometry.create_uv_sets(ob, buffers.uv_sets)
+
+        if buffers.skin is not None:
+            root = self.importer.get(self.source.skin.root)
+            bone_names = [self.importer.get(bone).output.name for bone in self.source.skin.bones]
+            import_geometry.create_vertex_weights(ob, buffers.skin, root.output.id_data, bone_names)
+        import_geometry.create_vertex_morphs(
+            ob,
+            buffers.morphs,
+            self.source.morph_targets,
+            self.importer.runtime.scene,
+            self.source.controller,
         )
-        if len(vertices) > len(indices) > 3:
-            vertices = vertices[indices]
-            vertex_weights = vertex_weights[:, indices]
-            vertex_morphs = vertex_morphs[:, indices]
-            triangles = inverse[triangles]
 
-        # '''
-        # Blender does not allow two faces to use identical vertex indices, regardless of order.
-        # This is problematic as such occurances are commonly found throughout most nif data sets.
-        # The usual case is "double-sided" faces, which share vertex indices but differ in winding.
-        # Identify the problematic faces and duplicate their vertices to ensure the indices are unique.
-        uniques, indices = np.unique(np.sort(triangles, axis=1), axis=0, return_index=True)
-        if len(triangles) > len(uniques):
-            # boolean mask of the triangles to be updated
-            target_faces = np.full(len(triangles), True)
-            target_faces[indices] = False
-
-            # indices of the vertices that must be copied
-            target_verts = triangles[target_faces].ravel()
-
-            # find the vertices used in problematic faces
-            new_vertices = vertices[target_verts]
-            new_vertex_weights = vertex_weights[:, target_verts]
-            new_vertex_morphs = vertex_morphs[:, target_verts]
-            new_vertex_indices = np.arange(len(new_vertices)) + len(vertices)
-
-            # update our final mesh data with new geometry
-            vertices = np.vstack((vertices, new_vertices))
-            vertex_weights = np.hstack((vertex_weights, new_vertex_weights))
-            vertex_morphs = np.hstack((vertex_morphs, new_vertex_morphs))
-
-            # copy is needed since shapes could share data
-            triangles = triangles.copy()
-            triangles[target_faces] = new_vertex_indices.reshape(-1, 3)
-        # '''
-
-        return ImportMeshBuffers(
-            triangles=triangles,
-            vertices=vertices,
-            normals=normals,
-            uv_sets=uv_sets,
-            vertex_colors=vertex_colors,
-            skin=ImportSkinBuffers(vertex_weights) if len(vertex_weights) else None,
-            morphs=ImportMorphBuffers(vertex_morphs) if len(vertex_morphs) else None,
-        )
+        import_geometry.create_normals(ob, buffers.normals, self.importer.options.ignore_custom_normals)
