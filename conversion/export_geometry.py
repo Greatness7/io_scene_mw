@@ -102,7 +102,7 @@ def capture_morphs(source: Any, options: ExportOptions) -> ExportMorphCapture | 
     basis = shape_keys.key_blocks[0]
 
     # a target exports only when it and its F-curve are unmuted and keyed; the engine skips keyless targets
-    fcurves = {fc.data_path: fc for fc in get_fcurves(shape_keys.animation_data)} if shape_keys.animation_data else {}
+    fcurves = {fc.data_path: fc for fc in get_fcurves(shape_keys.animation_data)}
     targets: list[tuple[Any, Any]] = []
     for block in shape_keys.key_blocks:
         fc = fcurves.get(block.path_from_id("value"))

@@ -7,23 +7,20 @@ import bpy
 
 
 def get_fcurves(anim_data):
+    """The F-curves of the assigned action, or none without animation data or an action (drivers alone)."""
     if bpy.app.version >= (5, 0, 0):
         from bpy_extras import anim_utils
 
         channelbag = cast(Any, anim_utils).animdata_get_channelbag_for_assigned_slot(anim_data)
-        return channelbag.fcurves
-    return anim_data.action.fcurves
+        return () if channelbag is None else channelbag.fcurves
+    action = anim_data and anim_data.action
+    return () if action is None else action.fcurves
 
 
 def fcurves_by_data_path(id_data):
     fcurves = collections.defaultdict(list)
-    try:
-        source_fcurves = get_fcurves(id_data.animation_data)
-    except AttributeError:
-        pass
-    else:
-        for fcurve in source_fcurves:
-            fcurves[fcurve.data_path].append(fcurve)
+    for fcurve in get_fcurves(id_data.animation_data):
+        fcurves[fcurve.data_path].append(fcurve)
     return fcurves
 
 

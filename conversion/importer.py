@@ -468,13 +468,22 @@ class Importer:
         with object_edit_scope(self.runtime, bl_object):
             bones = self.create_edit_bones(bl_data, bone_nodes, root_inverse, skeleton)
 
+        # armature-space pose matrices
+        posed = {bone: (root_inverse @ posed_world[bone]).T for bone in bones}
+
         # record each bone's output and apply pose transforms
         for bone, name in bones.items():
             pose_bone = self.outputs[bone] = bl_object.pose.bones[name]
-            # compute the armature-space matrix
-            pose_bone.matrix = (root_inverse @ posed_world[bone]).T
-            # TODO try not to call scene update
-            cast(Any, self.runtime.view_layer.depsgraph).update()
+            cast(Any, pose_bone).mw.object_flags = bone.source.flags
+            # the pose_bone.matrix setter reads the parent's evaluated pose, which would need a depsgraph
+            # update per bone, so convert from the parent's known pose instead
+            data_bone = pose_bone.bone
+            parent = {}
+            if data_bone.parent:
+                parent = {"parent_matrix": posed[bone.parent], "parent_matrix_local": data_bone.parent.matrix_local}
+            pose_bone.matrix_basis = data_bone.convert_local_to_pose(
+                posed[bone], data_bone.matrix_local, invert=True, **parent
+            )
             # create animations, preserve poses
             import_animation.import_object_animation(
                 bone.source,
