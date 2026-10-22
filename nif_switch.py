@@ -1,5 +1,6 @@
-"""NiSwitchNode and NiLODNode authoring rules shared by the object panel and both translators.
+"""Node type authoring rules shared by the object panel and both translators.
 
+`mw.node_type` names the NIF class an Empty exports as. Only the switch family has rules beyond the type test.
 A switch-family node is an Empty whose `mw.node_type` is NiSwitchNode or NiLODNode. Its variants are its direct children, ordered by
 the scene's collection-link sequence (never `Object.children`, which is alphabetical). An Empty child
 flagged `mw.is_switch_null` stands for an intentional null link. The selection is an object reference,
@@ -9,7 +10,7 @@ A LOD's distance ranges are rows on the LOD Empty, each owned by its child throu
 
 import bpy
 
-NODE, SWITCH_NODE, LOD = "NiNode", "NiSwitchNode", "NiLODNode"
+NODE, SWITCH_NODE, LOD, COLLISION = "NiNode", "NiSwitchNode", "NiLODNode", "RootCollisionNode"
 
 NULL_SLOT_NAME = "Empty Slot"
 
@@ -39,6 +40,11 @@ def is_lod(ob):
 def is_switch(ob):
     """A switch in the NIF sense: NiSwitchNode or its subclass NiLODNode."""
     return _node_type(ob) in (SWITCH_NODE, LOD)
+
+
+def is_collision(ob):
+    """An author-selected RootCollisionNode."""
+    return _node_type(ob) == COLLISION
 
 
 def is_null_slot(ob):

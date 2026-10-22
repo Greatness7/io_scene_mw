@@ -611,6 +611,8 @@ class Empty(SceneNode):
         if self.source in self.importer.colliders:
             self.output.name = "Collision"
             self.output.display_type = "WIRE"
+            if getattr(self.output, "type", None) == "EMPTY":
+                self.output.mw.node_type = nif_switch.COLLISION
 
         if self.source.is_bounding_box:
             self.convert_to_bounding_box()

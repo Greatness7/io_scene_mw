@@ -71,6 +71,7 @@ class ObjectProperties(bpy.types.PropertyGroup):
             ("NiNode", "NiNode", "An ordinary node", 0),
             ("NiSwitchNode", "NiSwitchNode", "At most one direct child is active; the author picks it", 1),
             ("NiLODNode", "NiLODNode", "At most one direct child is active, chosen by camera distance", 2),
+            ("RootCollisionNode", "RootCollisionNode", "Its subtree is the collision shape and is never rendered", 3),
         ],
         default="NiNode",
         update=update_node_type,

@@ -110,6 +110,7 @@ class Exporter:
         data.sort()
         for node, children in child_orders:
             node.children = children
+        self.setup_collision(data)
         self.setup_markers(data)
         data.save(self.filepath)
 
@@ -282,7 +283,9 @@ class Exporter:
         if nif_switch.is_switch(node.source):
             return True  # an explicit type outranks name conventions
 
-        if (not self.colliders) and node.name.lower().startswith("collision"):
+        if nif_switch.is_collision(node.source):
+            self.colliders[node.source].update(nif.NiAVObject.descendants(node.source))
+        elif (not self.colliders) and node.name.lower().startswith("collision"):
             self.colliders[node.source].update(nif.NiAVObject.descendants(node.source))
 
         return True
@@ -441,6 +444,13 @@ class Exporter:
         pose_bones = root.source.pose.bones
         for bone in edit_bones:
             yield self.get(pose_bones[bone.name])
+
+    def setup_collision(self, data):
+        # without "RCN" the engine only looks for a RootCollisionNode among the root's direct children
+        colliders = list(data.objects_of_type(nif.RootCollisionNode))
+        if colliders and not any(c in data.root.children for c in colliders):
+            # must precede "MRK": the engine stops scanning the root's extra data at "MRK"
+            data.root.extra_datas.append(nif.NiStringExtraData(string_data="RCN"))
 
     def setup_markers(self, data):
         markers = [
