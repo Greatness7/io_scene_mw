@@ -13,23 +13,15 @@ from .records import Array, ExportNode, ResolvedExportSkeleton
 
 
 def evaluate_node_worlds(nodes: Iterable[ExportNode]) -> dict[ExportNode, Array]:
-    return evaluate_world_matrices((node, node._parent, node.matrix_local) for node in nodes)
+    return evaluate_world_matrices((node, node.parent, node.matrix_local) for node in nodes)
 
 
 def set_world_matrix(node: ExportNode, matrix: Array, worlds: dict[ExportNode, Array]) -> None:
-    if node._parent is None:
+    if node.parent is None:
         node.matrix_local = matrix
     else:
-        node.matrix_local = la.solve(worlds[node._parent], matrix)
+        node.matrix_local = la.solve(worlds[node.parent], matrix)
     worlds[node] = np.array(matrix, copy=True)
-
-
-def reparent(node: ExportNode, parent: ExportNode | None) -> None:
-    if node._parent is not None:
-        node._parent.children.remove(node)
-    node._parent = parent
-    if parent is not None:
-        parent.children.append(node)
 
 
 def resolve_armatures(
@@ -73,7 +65,7 @@ def resolve_armature(
             pose_bone = root.pose.bones[node.source.parent_bone]
             parent = get_node(pose_bone, root_node.scope)
             matrix_world = np.array(node.source.matrix_world)
-            reparent(node, parent)
+            node.reparent(parent)
             set_world_matrix(node, matrix_world, worlds)
 
     skeleton.world_matrices = worlds

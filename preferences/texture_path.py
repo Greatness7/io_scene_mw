@@ -1,17 +1,6 @@
 import bpy
 
-
-def addon_preferences(context):
-    return context.preferences.addons["io_scene_mw"].preferences
-
-
-class TexturePath(bpy.types.PropertyGroup):
-    name: bpy.props.StringProperty(
-        subtype="DIR_PATH",
-        name="",
-        description="Texture Path",
-        default="C:\\Morrowind\\Data Files\\Textures\\",
-    )
+from .addon_prefs import Preferences
 
 
 class TexturePathList(bpy.types.UIList):
@@ -33,7 +22,7 @@ class TexturePathAdd(bpy.types.Operator):
         return context.space_data.type == "PREFERENCES"
 
     def execute(self, context):
-        p = addon_preferences(context)
+        p = Preferences.from_context(context)
         p.texture_paths.add()
         p.texture_paths_active_index += 1
         p.texture_paths.move(len(p.texture_paths) - 1, p.texture_paths_active_index)
@@ -52,7 +41,7 @@ class TexturePathRemove(bpy.types.Operator):
         return context.space_data.type == "PREFERENCES"
 
     def execute(self, context):
-        p = addon_preferences(context)
+        p = Preferences.from_context(context)
         p.texture_paths.remove(p.texture_paths_active_index)
         p.texture_paths_active_index = min(p.texture_paths_active_index, len(p.texture_paths) - 1)
         return {"FINISHED"}
@@ -72,7 +61,7 @@ class TexturePathMove(bpy.types.Operator):
         return context.space_data.type == "PREFERENCES"
 
     def execute(self, context):
-        p = addon_preferences(context)
+        p = Preferences.from_context(context)
         old_index = p.texture_paths_active_index
         new_index = old_index + self.direction
         if len(p.texture_paths) > new_index > -1:

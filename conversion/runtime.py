@@ -4,12 +4,9 @@ import contextlib
 import pathlib
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 import bpy
-
-
-ADDON_ID = "io_scene_mw"
 
 
 class _TexturePath(Protocol):
@@ -32,16 +29,14 @@ class ImportRuntime:
     texture_paths: tuple[pathlib.Path, ...]
 
     @classmethod
-    def from_context(cls, context: bpy.types.Context) -> ImportRuntime:
+    def from_context(cls, context: bpy.types.Context, preferences: _Preferences) -> ImportRuntime:
         scene = context.scene
         view_layer = context.view_layer
-        preferences_root = context.preferences
-        if scene is None or view_layer is None or preferences_root is None:
-            raise RuntimeError("NIF import requires an active scene, view layer, and preferences")
+        if scene is None or view_layer is None:
+            raise RuntimeError("NIF import requires an active scene and view layer")
         active_layer_collection = view_layer.active_layer_collection
         if active_layer_collection is None:
             raise RuntimeError("NIF import requires an active collection")
-        preferences = cast(_Preferences, preferences_root.addons[ADDON_ID].preferences)
         return cls(
             context=context,
             scene=scene,
@@ -64,13 +59,11 @@ class ExportRuntime:
     frame_end: float
 
     @classmethod
-    def from_context(cls, context: bpy.types.Context) -> ExportRuntime:
+    def from_context(cls, context: bpy.types.Context, preferences: _Preferences) -> ExportRuntime:
         scene = context.scene
         view_layer = context.view_layer
-        preferences_root = context.preferences
-        if scene is None or view_layer is None or preferences_root is None:
-            raise RuntimeError("NIF export requires an active scene, view layer, and preferences")
-        preferences = cast(_Preferences, preferences_root.addons[ADDON_ID].preferences)
+        if scene is None or view_layer is None:
+            raise RuntimeError("NIF export requires an active scene and view layer")
         return cls(
             context=context,
             scene=scene,

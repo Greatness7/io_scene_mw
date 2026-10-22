@@ -23,21 +23,33 @@ class ImportRole(Enum):
 
 @dataclass(eq=False)
 class ImportNode:
-    importer: Any
     source: Any
     matrix_local: Array
     role: ImportRole = ImportRole.EMPTY
-    output: Any = None
-    _parent: ImportNode | None = None
-    children: list[ImportNode] = field(default_factory=list)
+    _parent: ImportNode | None = field(default=None, init=False, repr=False)
+    children: list[ImportNode] = field(default_factory=list, init=False, repr=False)
     switch_plan: ImportSwitchPlan | None = None
+
+    @property
+    def parent(self) -> ImportNode | None:
+        return self._parent
+
+    def reparent(self, parent: ImportNode | None) -> None:
+        """Move this node under `parent`, keeping both `children` lists in step; the local matrix is kept."""
+        if self._parent is not None:
+            self._parent.children.remove(self)
+        self._parent = parent
+        if parent is not None:
+            parent.children.append(self)
+
+    @property
+    def name(self) -> str:
+        return self.source.name
 
 
 @dataclass(eq=False)
 class ImportNullSlot:
-    importer: Any
     parent: ImportNode
-    output: Any = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,16 +89,27 @@ class ExportScope:
 
 @dataclass(eq=False)
 class ExportNode:
-    exporter: Any
     source: Any
     matrix_local: Array
+    name: str
     scope: ExportScope | None = None
     role: ExportRole = ExportRole.UNSUPPORTED
-    output: Any = None
-    _parent: ExportNode | None = None
-    children: list[ExportNode] = field(default_factory=list)
+    _parent: ExportNode | None = field(default=None, init=False, repr=False)
+    children: list[ExportNode] = field(default_factory=list, init=False, repr=False)
     baked_vertex_scale: Array | None = None
     switch_plan: ExportSwitchPlan | None = None
+
+    @property
+    def parent(self) -> ExportNode | None:
+        return self._parent
+
+    def reparent(self, parent: ExportNode | None) -> None:
+        """Move this node under `parent`, keeping both `children` lists in step; the local matrix is kept."""
+        if self._parent is not None:
+            self._parent.children.remove(self)
+        self._parent = parent
+        if parent is not None:
+            parent.children.append(self)
 
 
 @dataclass(frozen=True, slots=True)

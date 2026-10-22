@@ -21,7 +21,7 @@ line-length = 125
 [tool.ruff.lint]
 ignore = ["F403", "F405", "E402"]
 
-# The formatter is currently scoped to lib/ only
+# Formatted: lib/, conversion/ and the other files not excluded below
 [tool.ruff.format]
 exclude = [
     "assets/**",
@@ -35,7 +35,6 @@ exclude = [
     "nif_export.py",
     "nif_import.py",
     "nif_shader.py",
-    "nif_utils.py",
 ]
 
 # https://github.com/microsoft/pyright/blob/main/docs/configuration.md

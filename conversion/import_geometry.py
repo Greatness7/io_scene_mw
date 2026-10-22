@@ -177,7 +177,9 @@ def create_vertex_weights(ob: Any, skin: ImportSkinBuffers | None, armature: Any
             vg.add((j,), weights[j], "ADD")
 
 
-def create_vertex_morphs(ob: Any, morphs: ImportMorphBuffers | None, targets: Sequence[Any], scene: Any, controller: Any) -> None:
+def create_vertex_morphs(
+    ob: Any, morphs: ImportMorphBuffers | None, targets: Sequence[Any], scene: Any, controller: Any
+) -> None:
     """Add a basis and one keyed shape key per morph target, then widen the scene frame range."""
     if morphs is None:
         return

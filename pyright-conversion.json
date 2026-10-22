@@ -2,8 +2,7 @@
   "include": [
     "conversion",
     "nif_import.py",
-    "nif_export.py",
-    "nif_utils.py"
+    "nif_export.py"
   ],
   "extraPaths": [
     "lib"

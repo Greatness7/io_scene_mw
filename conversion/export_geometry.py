@@ -16,6 +16,7 @@ Nothing here keeps an evaluated object, evaluated mesh, or dependency graph.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any
 
@@ -394,18 +395,21 @@ def write_shape_data(data: nif.NiGeometryData, buffers: ExportMeshBuffers) -> No
             setattr(data, field, array)
 
 
-def create_skin(shape: nif.NiTriShape, buffers: ExportMeshBuffers, offset: Array) -> None:
-    """Skin `shape` from welded weights; `offset` is the shape's transform relative to the skin root."""
+def create_skin(shape: nif.NiTriShape, buffers: ExportMeshBuffers, offset: Array, outputs: Mapping[Any, Any]) -> None:
+    """Skin `shape` from welded weights; `offset` is the shape's transform relative to the skin root.
+
+    `outputs` maps each skeleton node to the NIF node already created for it.
+    """
     skin_data = buffers.skin
     if skin_data is None:
         return
 
-    missing = [node.name for node in (skin_data.root, *skin_data.bones) if node.output is None]
+    missing = [node.name for node in (skin_data.root, *skin_data.bones) if node not in outputs]
     if missing:
         raise RuntimeError(f"Skin references skeleton outputs that have not been created: {', '.join(missing)}")
 
     skin = shape.skin = nif.NiSkinInstance()
-    skin.root, *bones = [node.output for node in (skin_data.root, *skin_data.bones)]
+    skin.root, *bones = [outputs[node] for node in (skin_data.root, *skin_data.bones)]
     skin.data = nif.NiSkinData()
     skin.data.matrix = la.inv(offset)
 

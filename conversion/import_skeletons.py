@@ -11,35 +11,39 @@ from es3 import nif
 from es3.utils.math import ID44, compose, decompose, quaternion_from_matrix, quaternion_mul
 from es3.utils.transforms import evaluate_world_matrices
 
-from .. import nif_utils
 from .bone_axes import export_axis_correction, import_axis_correction
 from .records import Array, ImportNode, ImportRole, ResolvedImportSkeleton
 
 
 def evaluate_node_worlds(nodes: Iterable[ImportNode]) -> dict[ImportNode, Array]:
-    return evaluate_world_matrices((node, node._parent, node.matrix_local) for node in nodes)
+    return evaluate_world_matrices((node, node.parent, node.matrix_local) for node in nodes)
 
 
 def iter_parents(node: ImportNode) -> Iterator[ImportNode]:
-    parent = node._parent
+    parent = node.parent
     while parent is not None:
         yield parent
-        parent = parent._parent
+        parent = parent.parent
 
 
 def set_world_matrix(node: ImportNode, matrix: Array, worlds: dict[ImportNode, Array]) -> None:
-    if node._parent is None:
+    if node.parent is None:
         node.matrix_local = matrix
     else:
-        node.matrix_local = la.solve(worlds[node._parent], matrix)
+        node.matrix_local = la.solve(worlds[node.parent], matrix)
 
 
-def reparent(node: ImportNode, parent: ImportNode | None) -> None:
-    if node._parent is not None:
-        node._parent.children.remove(node)
-    node._parent = parent
-    if parent is not None:
-        parent.children.append(node)
+def snap_rotation(m: Array) -> Array:
+    """Snap a rotation matrix to the nearest signed axis permutation."""
+    m_abs = np.abs(m)
+    m_out = np.zeros_like(m)
+
+    for _ in m:
+        x, y = np.unravel_index(m_abs.argmax(), m.shape)
+        m_out[x, y] = -1 if m[x, y] < 0 else 1
+        m_abs[x, :] = m_abs[:, y] = 0
+
+    return m_out
 
 
 def get_armature_node(
@@ -149,7 +153,7 @@ def correct_rest_positions(
         worlds = evaluate_node_worlds(nodes)
         root_bone = skeleton.root_bone
         t, rotation, scale = decompose(skeleton.posed_world[root_bone])
-        corrected_matrix = compose(t, nif_utils.snap_rotation(rotation), scale)
+        corrected_matrix = compose(t, snap_rotation(rotation), scale)
         root_bone_world = worlds[root_bone]
         if np.allclose(root_bone_world, corrected_matrix, rtol=0, atol=1e-6):
             continue
@@ -185,7 +189,7 @@ def apply_axis_corrections(skeletons: list[ResolvedImportSkeleton], nodes: list[
             if not (kf_controller and kf_controller.data):
                 continue
 
-            parent = node._parent
+            parent = node.parent
             if parent in bone_set:
                 parent_matrix = skeleton.posed_world[parent]
                 parent_matrix_uncorrected = parent_matrix @ export_axis_correction(parent.source.name)
@@ -227,9 +231,9 @@ def correct_bone_parenting(
     for skeleton in skeletons:
         worlds = evaluate_node_worlds(nodes)
         for node in get_skinned_meshes(skeleton.root, nodes, get_node, skeletons_by_source):
-            if node._parent is not skeleton.root:
+            if node.parent is not skeleton.root:
                 matrix_world = worlds[node]
-                reparent(node, skeleton.root)
+                node.reparent(skeleton.root)
                 set_world_matrix(node, matrix_world, worlds)
 
     worlds = evaluate_node_worlds(nodes)

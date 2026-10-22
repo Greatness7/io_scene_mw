@@ -14,7 +14,15 @@ jobs:
 
       - name: copy contents
         shell: bash
-        run: sudo rsync -r --exclude="*.git*" . io_scene_mw
+        run: >
+          sudo rsync -r
+          --exclude="*.git*"
+          --exclude="tests"
+          --exclude="ignore"
+          --exclude=".vscode"
+          --exclude="pyproject.toml"
+          --exclude="pyright-conversion.json"
+          . io_scene_mw
 
       - name: build archive
         run: zip -r io_scene_mw.zip io_scene_mw

@@ -39,7 +39,9 @@ def export_material(material, target_shape, source_object, ctx: ExportMaterialCo
         target_shape.properties = list(ctx.materials[material])
         if bl_prop is not None:
             for slot in bl_prop.texture_slots:
-                export_animation.create_uv_controller(bl_prop, slot, source_object, target_shape, ctx.options, ctx.cycle_type)
+                export_animation.create_uv_controller(
+                    bl_prop, slot, source_object, target_shape, ctx.options, ctx.cycle_type
+                )
         return
     if bl_prop is None:
         create_fallback_property(target_shape, material)

@@ -1,6 +1,13 @@
 import bpy
 
-from .texture_path import TexturePath
+
+class TexturePath(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty(
+        subtype="DIR_PATH",
+        name="",
+        description="Texture Path",
+        default="C:\\Morrowind\\Data Files\\Textures\\",
+    )
 
 
 class Preferences(bpy.types.AddonPreferences):

@@ -1,8 +1,7 @@
 import bpy
 
-from .addon_prefs import Preferences
+from .addon_prefs import Preferences, TexturePath
 from .texture_path import (
-    TexturePath,
     TexturePathAdd,
     TexturePathList,
     TexturePathMove,
