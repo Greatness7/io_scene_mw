@@ -366,10 +366,11 @@ class Exporter:
         else:
             base_objects = list(self.runtime.view_layer.objects)
 
+        # viewport visibility is not a filter: a hidden object can still carry a visibility animation
         if self.options.use_selection:
             allowed = set(self.runtime.context.selected_objects)
         else:
-            allowed = set(self.runtime.context.visible_objects)
+            allowed = set(base_objects)
 
         # Preserve Blender's sequence, while ensuring every included object has a
         # deterministic, top-down path to the scene root.

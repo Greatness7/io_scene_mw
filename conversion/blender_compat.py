@@ -64,4 +64,7 @@ def action_fcurves(action):
 
 
 def set_fcurves_mute(fcurves, state):
-    fcurves.foreach_set("mute", [state] * len(fcurves))
+    # Not foreach_set: it skips the per-curve RNA update, and Blender 3.6 then keeps ignoring curves after
+    # they are unmuted, until the file is reopened (NOTES.md §6).
+    for fcurve in fcurves:
+        fcurve.mute = state
