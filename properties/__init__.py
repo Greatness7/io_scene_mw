@@ -1,11 +1,12 @@
 import bpy
 
 from .material_properties import MaterialProperties, TextureProperties
-from .object_properties import ObjectProperties
+from .object_properties import LODRange, ObjectProperties
 
 classes = (
     TextureProperties,
     MaterialProperties,
+    LODRange,
     ObjectProperties,
 )
 

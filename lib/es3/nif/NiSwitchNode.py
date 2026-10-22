@@ -12,18 +12,18 @@ from .NiNode import NiNode
 
 
 class NiSwitchNode(NiNode):
-    active_index: uint32 = 0
+    active_index: int32 = 0  # signed: -1 selects no child
 
     # flags access
     update_only_active = bool_property(mask=0x0020)
 
     def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
-        self.active_index = stream.read_uint()
+        self.active_index = stream.read_int()
 
     def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
-        stream.write_uint(self.active_index)
+        stream.write_int(self.active_index)
 
     def sort(self, key: Callable[[Any], Any] = lambda value: value) -> None:
         """Canonicalize non-positional fields without reordering children.

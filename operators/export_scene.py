@@ -63,9 +63,9 @@ class ExportScene(bpy.types.Operator, ExportHelper):
     preserve_root_tranforms: bpy.props.BoolProperty(
         name="Preserve Root Transforms",
         description=(
-            "Preserve the root object's transformations by inserting an additional parent node above it."
-            " This setting is only applicable if there is a single root object with modified transforms."
-            " (Recommended: False)"
+            "Keep a single root object's transformations on the file's root node, instead of inserting an"
+            " untransformed parent node above it. This setting is only applicable if there is a single"
+            " root object with modified transforms. (Recommended: False)"
         ),
         default=False,
     )
@@ -88,24 +88,19 @@ class ExportScene(bpy.types.Operator, ExportHelper):
         default=False,
     )
 
-    create_switch_nodes: bpy.props.BoolProperty(
-        name="Create Switch Nodes",
-        description=(
-            "Automatically convert objects with 'SWITCH_' prefix to NiSwitchNode."
-            " Disable this to export them as regular NiNode objects"
-        ),
-        default=False,
-    )
-
     @classmethod
     def poll(cls, context):
         return context.mode == "OBJECT"
 
     def execute(self, context):
-        from .. import nif_export
+        from .. import nif_export, nif_switch
 
         kwargs = self.as_keywords(ignore=("filename_ext", "filter_glob", "check_existing"))
-        return nif_export.save(context, **kwargs)
+        try:
+            return nif_export.save(context, report=self.report, **kwargs)
+        except nif_switch.SwitchError as error:
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
 
     @staticmethod
     def menu_func_export(menu, context) -> None:

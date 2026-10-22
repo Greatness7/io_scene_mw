@@ -65,7 +65,7 @@ class ImportScene(bpy.types.Operator, ImportHelper):
         from .. import nif_import
 
         kwargs = self.as_keywords(ignore=("filename_ext", "filter_glob", "check_existing"))
-        return nif_import.load(context, **kwargs)
+        return nif_import.load(context, report=self.report, **kwargs)
 
     @staticmethod
     def menu_func_import(menu, context) -> None:

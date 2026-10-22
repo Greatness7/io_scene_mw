@@ -25,6 +25,7 @@ submodules = [
     "properties",
     "operators",
     "panels",
+    "nif_node_preview",
 ]
 
 # bpy.utils is absent when the package is imported outside Blender (e.g. under pytest)

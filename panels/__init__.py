@@ -20,7 +20,17 @@ from .material_panel import (
     MaterialPanel,
     MaterialPanelSettings,
 )
-from .object_panel import ObjectPanel
+from .object_panel import (
+    LODAddRange,
+    LODRemoveRange,
+    LODToggleNoLimit,
+    LODSortByDistance,
+    OBJECT_MT_mw_lod_range,
+    ObjectPanel,
+    SwitchAddNullSlot,
+    SwitchRemoveNullSlot,
+    SwitchNodeSetActive,
+)
 
 classes = (
     MarkersListCopy,
@@ -39,6 +49,14 @@ classes = (
     Decal1TexturePanel,
     Decal2TexturePanel,
     Decal3TexturePanel,
+    SwitchNodeSetActive,
+    SwitchAddNullSlot,
+    SwitchRemoveNullSlot,
+    LODAddRange,
+    LODRemoveRange,
+    LODToggleNoLimit,
+    LODSortByDistance,
+    OBJECT_MT_mw_lod_range,
     ObjectPanel,
 )
 

@@ -12,6 +12,7 @@ from es3.utils.math import ID44, compose, decompose
 
 from . import nif_utils
 from . import nif_shader
+from . import nif_switch
 
 from bpy_extras.io_utils import axis_conversion
 
@@ -22,7 +23,7 @@ other_axis_correction = np.array(axis_conversion('Y', 'Z', '-Z', '-Y').to_4x4(),
 other_axis_correction_inverse = la.inv(other_axis_correction)
 
 
-def load(context, filepath, **config):
+def load(context, filepath, report=None, **config):
     """load a scene from a nif file"""
 
     print(f"Import File: {filepath}")
@@ -30,6 +31,10 @@ def load(context, filepath, **config):
 
     importer = Importer(filepath, config)
     importer.execute()
+
+    for warning in importer.warnings:
+        if report:
+            report({"WARNING"}, warning)
 
     time = timeit.default_timer() - time
     print(f"Import Done: {time:.4f} seconds")
@@ -54,6 +59,8 @@ class Importer:
         self.history = collections.defaultdict(list)
         self.armatures = collections.defaultdict(set)
         self.colliders = collections.defaultdict(set)
+        self.switches = []
+        self.warnings = []
         self.active_collection = bpy.context.view_layer.active_layer_collection.collection
         self.filepath = pathlib.Path(filepath)
 
@@ -103,6 +110,9 @@ class Importer:
             if node.output is None:
                 cls(node).create()
 
+        # switch types and selections
+        self.resolve_switches()
+
         # unmute animations
         for node in map(self.get, self.armatures):
             node.animation.set_mute(False)
@@ -123,12 +133,72 @@ class Importer:
         queue = collections.deque(root_nodes)
         while queue:
             node = queue.popleft()
-            if self.process(node):
+            if isinstance(node, SwitchNull):
+                self.nodes[node] = SwitchNull
+            elif self.process(node):
                 self.history[node.source].append(node)
-                if hasattr(node.source, "children"):
+                # exact types: NiFltAnimationNode stays an ordinary node
+                if type(node.source) in (nif.NiSwitchNode, nif.NiLODNode):
+                    # null links are slots too: queue them in place so markers link in source order
+                    node.switch_slots = [
+                        SceneNode(self, child, node) if isinstance(child, nif.NiAVObject) else SwitchNull(self, node)
+                        for child in node.source.children
+                    ]
+                    self.switches.append(node)
+                    queue.extend(node.switch_slots)
+                elif hasattr(node.source, "children"):
                     queue.extend(SceneNode(self, child, node) for child in node.source.children_of_type(nif.NiAVObject))
 
         return root_nodes
+
+    def resolve_switches(self):
+        """Mark imported switch-family nodes and resolve their selections or ranges, once every child object exists."""
+        for node in self.switches:
+            name = node.source.name
+            node_type = type(node.source).__name__
+            if not (isinstance(node.output, bpy.types.Object) and node.output.type == "EMPTY"):
+                self.warn(f"{node_type} '{name}' was imported as part of a skeleton; its {node_type} semantics were dropped")
+                continue
+
+            node.output.mw.node_type = node_type
+            slots = [
+                slot.output if slot.parent is node and isinstance(slot.output, bpy.types.Object) else None
+                for slot in node.switch_slots
+            ]
+            if None in slots:
+                self.warn(f"{node_type} '{name}' lost a child to skeleton or collision handling; its indices shifted")
+
+            if node_type == nif_switch.LOD:
+                self.resolve_lod(node, slots)
+                continue
+
+            index = node.source.active_index
+            if index == -1:
+                continue
+            if 0 <= index < len(slots) and slots[index] is not None:
+                node.output.mw.switch_active_child = slots[index]
+            else:
+                node.output.mw.switch_invalid_index = index
+                self.warn(f"{node_type} '{name}' selects child {index} of {len(slots)}; pick a valid child before export")
+
+    def resolve_lod(self, node, slots):
+        # the stored active index is ignored: the engine recomputes it every frame
+        name = node.source.name
+        lod = node.output.mw
+        lod.lod_center = tuple(map(float, node.source.lod_center))
+        levels = node.source.lod_levels
+        # every child gets a row; one without a level keeps the default range
+        rows = nif_switch.ensure_lod_rows(node.output, [slot for slot in slots if slot is not None])
+        # rows are filled with sync off: filling one row must not rewrite its neighbors
+        lod.lod_sync = False
+        for slot, (near, far) in zip(slots, levels):
+            if slot is not None:
+                rows[slot].near, rows[slot].far = float(near), float(far)
+        lod.lod_sync = len(levels) >= len(slots) and nif_switch.levels_chained(levels[: len(slots)])
+        if len(levels) > len(slots):
+            self.warn(f"NiLODNode '{name}' has {len(levels)} ranges for {len(slots)} children; the extra ranges were dropped")
+        elif len(levels) < len(slots):
+            self.warn(f"NiLODNode '{name}' has {len(levels)} ranges for {len(slots)} children; the rest use the default range")
 
     def resolve_armatures(self):
         """ TODO
@@ -364,6 +434,10 @@ class Importer:
     def get(self, source):
         return self.history[source][0]
 
+    def warn(self, message):
+        print(f"Warning: {message}")
+        self.warnings.append(message)
+
     def iter_bones(self, root):
         yield from map(self.get, self.armatures[root.source])
 
@@ -548,6 +622,38 @@ class Empty(SceneNode):
         self.output.empty_display_size = 1.0
         self.output.empty_display_type = 'CUBE'
         self.output.matrix_world = self.source.bounding_volume.matrix.T
+
+
+class SwitchNull(SceneNode):
+    """A null link in a switch's children, realized as a marked Empty so the slot keeps its index."""
+
+    def __init__(self, importer, parent=None):
+        if isinstance(importer, SwitchNull):  # the creation pass wraps nodes, like Empty(node)
+            self.__dict__ = importer.__dict__
+            return
+        self.importer = importer
+        self.source = None
+        self.output = None
+        self.parent = parent
+        self.children = list()
+        self.matrix_local = ID44.copy()
+
+    @property
+    def name(self):
+        return nif_switch.NULL_SLOT_NAME
+
+    def create(self):
+        bl_parent = self.parent.output
+        if not (isinstance(bl_parent, bpy.types.Object) and bl_parent.type == "EMPTY"):
+            return None  # skeletal switch, diagnosed by resolve_switches
+
+        self.output = bpy.data.objects.new(self.name, None)
+        self.importer.active_collection.objects.link(self.output)
+        self.output.select_set(True)
+        self.output.empty_display_size = bl_parent.empty_display_size * 0.5
+        self.output.mw.is_switch_null = True
+        self.output.parent = bl_parent
+        return self.output
 
 
 class Armature(SceneNode):

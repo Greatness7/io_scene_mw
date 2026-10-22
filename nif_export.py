@@ -15,6 +15,7 @@ from functools import cached_property
 
 from . import nif_utils
 from . import nif_shader
+from . import nif_switch
 
 from bpy_extras.io_utils import axis_conversion
 
@@ -25,7 +26,7 @@ other_axis_correction = np.array(axis_conversion('-Z', '-Y', 'Y', 'Z').to_4x4(),
 other_axis_correction_inverse = la.inv(other_axis_correction)
 
 
-def save(context, filepath, **config):
+def save(context, filepath, report=None, **config):
     """save the scene to a nif file"""
 
     print(f"Export File: {filepath}")
@@ -33,6 +34,10 @@ def save(context, filepath, **config):
 
     exporter = Exporter(filepath, config)
     exporter.execute()
+
+    for warning in exporter.warnings:
+        if report:
+            report({"WARNING"}, warning)
 
     time = timeit.default_timer() - time
     print(f"Export Done: {time:.4f} seconds")
@@ -47,7 +52,6 @@ class Exporter:
     preserve_root_tranforms = False
     preserve_material_names = True
     strip_numeric_suffixes = True
-    create_switch_nodes = True
     randomize_animations = False
 
     def __init__(self, filepath, config):
@@ -59,13 +63,21 @@ class Exporter:
         self.history = collections.defaultdict(list)
         self.armatures = collections.defaultdict(set)
         self.colliders = collections.defaultdict(set)
+        self.switches = []
+        self.errors = []
+        self.warnings = []
+        self.scene_objects = []
         self.depsgraph = None
 
     def execute(self):
         bl_objects = self.get_source_objects()
 
         # resolve heirarchy
-        roots = self.resolve_nodes(bl_objects)
+        roots = self.resolve_nodes(bl_objects, sequence=self.scene_objects)
+
+        # nothing is written unless every switch can be exported as authored
+        if self.errors:
+            raise nif_switch.SwitchError("\n".join(dict.fromkeys(self.errors)))
 
         # resolve armatures
         if any(self.armatures):
@@ -84,6 +96,9 @@ class Exporter:
             if node.output is None:
                 cls(node).create()
                 node.animation.create()
+
+        # switch children and selections, once every real output exists
+        self.finalize_switches()
 
         data = nif.NiStream()
         data.root = self.get_root_output(roots)
@@ -105,18 +120,45 @@ class Exporter:
     # RESOLVE
     # -------
 
-    def resolve_nodes(self, bl_objects, parent=None):
+    def resolve_nodes(self, bl_objects, parent=None, sequence=None):
         roots = [SceneNode(self, obj, parent) for obj in bl_objects if not obj.parent]
+        included = set(bl_objects)
 
         queue = collections.deque(roots)
         while queue:
             node = queue.popleft()
             if self.process(node):
                 self.history[node.source].append(node)
-                if hasattr(node.source, "children"):
+                if nif_switch.is_switch(node.source):
+                    # slots follow the scene sequence; null-slot markers stay out of node creation
+                    children = nif_switch.ordered_children(node.source, sequence or bl_objects)
+                    node.switch_slots = [
+                        child if nif_switch.is_null_slot(child) else SceneNode(self, child, node)
+                        for child in children
+                        if child in included
+                    ]
+                    self.switches.append(node)
+                    queue.extend(slot for slot in node.switch_slots if isinstance(slot, SceneNode))
+                elif hasattr(node.source, "children"):
                     queue.extend(SceneNode(self, child, node) for child in bl_objects if child.parent == node.source)
+            elif any(nif_switch.is_switch(p.source) for p in node.parents):
+                self.errors.append(f"'{node.source.name}' is inside a switch-family node but its type ({node.source.type}) cannot be exported")
 
         return roots
+
+    def finalize_switches(self):
+        for node in self.switches:
+            slots = node.switch_slots
+            node.output.children = [slot.output if isinstance(slot, SceneNode) else None for slot in slots]
+            targets = [slot.source if isinstance(slot, SceneNode) else slot for slot in slots]
+            if nif_switch.is_lod(node.source):
+                # data.apply_scale converts these to game units later and leaves no-limit untouched
+                node.output.active_index = 0
+                node.output.lod_center = np.array(node.source.mw.lod_center, dtype="<f")
+                ranges = nif_switch.lod_ranges(node.source, targets)
+                node.output.lod_levels = np.array(ranges, dtype="<f").reshape(-1, 2)
+            else:
+                node.output.active_index = nif_switch.active_index(node.source, targets)
 
     def resolve_armatures(self):
         """ TODO
@@ -161,9 +203,15 @@ class Exporter:
         temp_modifiers = []
         temp_hide_view = []
         temp_mute_keys = []
+        temp_unhidden = []
         try:
             meshes = [node.source for node, cls in self.nodes.items() if cls is Mesh]
             for source in meshes:
+                # hidden switch variants still export; disabled objects are not evaluated
+                if source.hide_viewport:
+                    source.hide_viewport = False
+                    temp_unhidden.append(source)
+
                 visible_modifiers = [m for m in source.modifiers if m.show_viewport]
                 is_triangulated = False
 
@@ -200,6 +248,8 @@ class Exporter:
                 s.modifiers.remove(m)
             for k in temp_mute_keys:
                 k.mute = False
+            for source in temp_unhidden:
+                source.hide_viewport = True
 
     def export_keyframe_data(self, data):
         nif_path = self.filepath
@@ -225,6 +275,9 @@ class Exporter:
             collection = node.source.instance_collection
             self.resolve_nodes(list(collection.objects), parent=node)
 
+        if nif_switch.is_switch(node.source):
+            return True  # an explicit type outranks name conventions
+
         if (not self.colliders) and node.name.lower().startswith("collision"):
             self.colliders[node.source].update(nif.NiAVObject.descendants(node.source))
 
@@ -246,6 +299,9 @@ class Exporter:
     @process.register("NONE")
     def process_bone(self, node):
         self.nodes[node] = Empty
+        node_type = node.source.mw.node_type
+        if node_type != nif_switch.NODE:
+            self.errors.append(f"bone '{node.source.name}' is marked as a {node_type}; skeletal {node_type} is not supported yet")
         return True
 
     # -------
@@ -254,6 +310,10 @@ class Exporter:
 
     def get(self, source):
         return self.history[source][0]
+
+    def warn(self, message):
+        print(f"Warning: {message}")
+        self.warnings.append(message)
 
     def get_source_objects(self):
         if self.use_active_collection:
@@ -282,6 +342,8 @@ class Exporter:
                 seen.add(current)
                 objects.append(current)
 
+        objects = self.expand_switches(objects)
+
         # show a useful error message if no valid objects were discovered
         if len(objects) == 0:
             if self.use_active_collection:
@@ -292,6 +354,51 @@ class Exporter:
                raise Exception("No valid objects found. Ensure you have at least one object present in your scene.")
 
         return objects
+
+    def expand_switches(self, objects):
+        """Include the whole subtree of every included switch, whatever its selection or visibility."""
+        self.scene_objects = list(nif_switch.scene_objects())
+        layer_objects = set(bpy.context.view_layer.objects)
+
+        expanded = []
+        placed = set()
+        for ob in objects:
+            if ob in placed:
+                continue
+            placed.add(ob)
+            expanded.append(ob)
+            if not nif_switch.is_switch(ob):
+                continue
+            # descendants in scene order; nested switches are covered by their outermost switch
+            for other in self.scene_objects:
+                parent = other.parent
+                while parent is not None and parent != ob:
+                    parent = parent.parent
+                if parent is None or other in placed:
+                    continue
+                placed.add(other)
+                expanded.append(other)
+                if other not in layer_objects:
+                    self.errors.append(
+                        f"'{other.name}' in '{ob.name}' is not in the view layer; include its collection"
+                    )
+
+        for ob in expanded:
+            node_type = ob.mw.node_type
+            if node_type != nif_switch.NODE and ob.type != "EMPTY":
+                self.errors.append(f"'{ob.name}' is marked as a {node_type}, but only Empties can be")
+            elif nif_switch.is_switch_node(ob):
+                children = nif_switch.ordered_children(ob, self.scene_objects)
+                self.errors.extend(nif_switch.switch_node_problems(ob, children))
+            elif nif_switch.is_lod(ob):
+                children = nif_switch.ordered_children(ob, self.scene_objects)
+                self.errors.extend(nif_switch.lod_problems(ob, children))
+                for warning in nif_switch.lod_warnings(ob, children):
+                    self.warn(warning)
+            if nif_switch.is_null_slot(ob):
+                self.errors.extend(nif_switch.null_slot_problems(ob, self.scene_objects))
+
+        return expanded
 
     def get_root_output(self, roots):
         file_name = self.filepath.name
@@ -509,12 +616,14 @@ class Empty(SceneNode):
         if isinstance(data, nif.NiTriShapeData):
             self.output = nif.NiTriShape(data=data)
         else:
-            if self.source in self.exporter.colliders:
+            if nif_switch.is_switch_node(self.source):
+                self.output = nif.NiSwitchNode()
+            elif nif_switch.is_lod(self.source):
+                self.output = nif.NiLODNode()
+            elif self.source in self.exporter.colliders:
                 self.output = nif.RootCollisionNode(app_culled=True)
             elif self.name == "PickProxy":
                 self.output = nif.NiCollisionSwitch(propagate=True)
-            elif self.exporter.create_switch_nodes and self.name.startswith("SWITCH_"):
-                self.output = nif.NiSwitchNode()
             else:
                 self.output = nif.NiNode()
 
@@ -726,9 +835,6 @@ class Mesh(SceneNode):
     # -- get blender data --
 
     def get_mesh_data(self):
-        # Can't evaluate if hidden.
-        self.source.hide_viewport = False
-
         # Resolve dependency graph.
         dg = self.exporter.depsgraph
 
