@@ -89,8 +89,9 @@ def create_texturing_property(bl_prop, ni_prop, source_shape, target_object, ctx
         create_texturing_property_map(bl_prop, ni_prop, name, target_object, ctx.texture_paths)
     if target_object.data.vertex_colors:
         bl_prop.vertex_color.layer_name = target_object.data.vertex_colors[0].name
-        bl_prop.create_link(bl_prop.vertex_color, bl_prop.shader, "Color", "Diffuse Color")
+        bl_prop.create_link(bl_prop.vertex_color, bl_prop.shader, "Color", "Vertex Color")
         bl_prop.create_link(bl_prop.vertex_color, bl_prop.shader, "Alpha", "Diffuse Alpha")
+        bl_prop.inputs["Use Vertex Colors"].default_value = 1.0
     for controller in source_shape.controllers:
         if isinstance(controller, nif.NiUVController):
             import_animation.create_uv_controller(controller, target_object, ctx.animation)

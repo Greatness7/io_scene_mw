@@ -103,15 +103,93 @@ def tree_has_input(tree, name):
 
 
 def get_current_mw_shader_tree():
-    """Returns the shared 'MW Shader' tree, transparently rebuilding it if a stale
-    (pre-alpha-property-rendering) copy is cached under that name -- e.g. from an older
-    saved file. The stale tree is kept around (renamed aside) so materials still
-    pointing at it can be migrated lazily via MaterialProperties.upgrade()."""
+    """Keep stale groups aside until MaterialProperties.upgrade() migrates their users."""
     tree = bpy.data.node_groups.get("MW Shader")
-    if tree and not tree_has_input(tree, "Alpha Test Function"):
+    if tree and (not tree_has_input(tree, "Alpha Test Function") or not tree_has_input(tree, "Use Vertex Colors")):
         tree.name = "MW Shader.legacy"
         tree = None
     return tree or build_mw_shader_tree()
+
+
+def build_srgb_encode_tree():
+    """The same piecewise input encoding as tes3_blend's native material recipe."""
+    tree = bpy.data.node_groups.new("MW sRGB Encode", 'ShaderNodeTree')
+    nodes, links = tree.nodes, tree.links
+    new_socket(tree, 'INPUT', 'NodeSocketColor', "Color")
+    new_socket(tree, 'OUTPUT', 'NodeSocketColor', "Color")
+    group_input = nodes.new('NodeGroupInput')
+    group_output = nodes.new('NodeGroupOutput')
+
+    def vector_math(name, operation, column):
+        node = nodes.new('ShaderNodeVectorMath')
+        node.name = node.label = name
+        node.operation = operation
+        node.location = column * 200, 0
+        return node
+
+    threshold = vector_math("Raw Threshold", 'MAXIMUM', 1)
+    threshold.inputs[1].default_value = (0.0031308,) * 3
+    # Gamma is component-wise power too, and is available on the Blender 3.6 floor.
+    power = nodes.new('ShaderNodeGamma')
+    power.name = power.label = "Raw Power"
+    power.location = 400, 0
+    power.inputs[1].default_value = 1 / 2.4
+    curve = vector_math("Raw Curve", 'MULTIPLY_ADD', 3)
+    curve.inputs[1].default_value = (1.055,) * 3
+    curve.inputs[2].default_value = (-0.055,) * 3
+    below = vector_math("Raw Below Threshold", 'SUBTRACT', 2)
+    below.location.y = -200
+    encoded = vector_math("Raw Color", 'MULTIPLY_ADD', 4)
+    encoded.inputs[1].default_value = (-12.92,) * 3
+    # p(max(c,t)) - 12.92 * (max(c,t) - c), with no final encoding after combines.
+    links.new(group_input.outputs["Color"], threshold.inputs[0])
+    links.new(threshold.outputs[0], power.inputs[0])
+    links.new(power.outputs[0], curve.inputs[0])
+    links.new(threshold.outputs[0], below.inputs[0])
+    links.new(group_input.outputs["Color"], below.inputs[1])
+    links.new(below.outputs[0], encoded.inputs[0])
+    links.new(curve.outputs[0], encoded.inputs[2])
+    links.new(encoded.outputs[0], group_output.inputs["Color"])
+    group_output.location = 1000, 0
+    return tree
+
+
+def build_srgb_decode_tree():
+    """Decode raw NIF constants for display without changing stored/exported colors."""
+    tree = bpy.data.node_groups.new("MW sRGB Decode", 'ShaderNodeTree')
+    nodes, links = tree.nodes, tree.links
+    new_socket(tree, 'INPUT', 'NodeSocketColor', "Color")
+    new_socket(tree, 'OUTPUT', 'NodeSocketColor', "Color")
+    group_input = nodes.new('NodeGroupInput')
+    group_output = nodes.new('NodeGroupOutput')
+
+    threshold = nodes.new('ShaderNodeVectorMath')
+    threshold.operation = 'MAXIMUM'
+    threshold.inputs[1].default_value = (0.04045,) * 3
+    shifted = nodes.new('ShaderNodeVectorMath')
+    shifted.operation = 'MULTIPLY_ADD'
+    shifted.inputs[1].default_value = (1 / 1.055,) * 3
+    shifted.inputs[2].default_value = (0.055 / 1.055,) * 3
+    power = nodes.new('ShaderNodeGamma')
+    power.inputs[1].default_value = 2.4
+    below = nodes.new('ShaderNodeVectorMath')
+    below.operation = 'SUBTRACT'
+    decoded = nodes.new('ShaderNodeVectorMath')
+    decoded.operation = 'MULTIPLY_ADD'
+    decoded.inputs[1].default_value = (-1 / 12.92,) * 3
+    # high(max(c,t)) - (max(c,t) - c) / 12.92, including the linear dark segment.
+    links.new(group_input.outputs["Color"], threshold.inputs[0])
+    links.new(threshold.outputs[0], shifted.inputs[0])
+    links.new(shifted.outputs[0], power.inputs[0])
+    links.new(threshold.outputs[0], below.inputs[0])
+    links.new(group_input.outputs["Color"], below.inputs[1])
+    links.new(below.outputs[0], decoded.inputs[0])
+    links.new(power.outputs[0], decoded.inputs[2])
+    links.new(decoded.outputs[0], group_output.inputs["Color"])
+    for index, node in enumerate(nodes):
+        node.location = index * 200, 0
+    group_output.location = 1400, 0
+    return tree
 
 
 def build_mw_shader_tree():
@@ -148,11 +226,61 @@ def build_mw_shader_tree():
     # New sockets must remain after the legacy interface prefix; see the index note above.
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Additive Blend Enabled")
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Alpha Test Function", default=4.0)
+    # Detail's unlinked linear 0.5 is a synthetic neutral, not a decoded texture sample.
+    # A separate raw-mode source keeps it neutral without changing old defaults or indices.
+    neutral_detail = ((0.5 + 0.055) / 1.055) ** 2.4
+    new_socket(tree, 'INPUT', 'NodeSocketColor', "Raw Detail Texture", default=(neutral_detail,) * 3 + (1,))
+    # Material constants remain raw NIF values on their original sockets (including
+    # animation targets). Vertex colors are already linear and have their own source.
+    new_socket(tree, 'INPUT', 'NodeSocketColor', "Vertex Color", default=(1, 1, 1, 1))
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Use Vertex Colors")
 
     group_input = nodes.new('NodeGroupInput')
+    attribute = nodes.new('ShaderNodeAttribute')
+    attribute.name = "PreviewRawColor"
+    attribute.attribute_type = 'OBJECT'
+    attribute.attribute_name = "tes3_preview_raw"
+    attribute.location = -600, 200
+    encode_tree = bpy.data.node_groups.get("MW sRGB Encode") or build_srgb_encode_tree()
+    colors = {}
+    color_names = ["Base Texture", "Detail Texture", "Dark Texture"]
+    color_names += [f"Decal {i} Texture" for i in range(4)]
+    color_names += ["Vertex Color", "Glow Texture"]
+    for index, name in enumerate(color_names):
+        source = group_input.outputs[name]
+        raw_source = group_input.outputs["Raw Detail Texture"] if name == "Detail Texture" else source
+        encoded = nodes.new('ShaderNodeGroup')
+        encoded.name = encoded.label = f"{name} Encode"
+        encoded.node_tree = encode_tree
+        encoded.location = -400, -index * 200
+        mix = nodes.new('ShaderNodeMixRGB')
+        mix.name = mix.label = f"{name} Preview"
+        mix.blend_type = 'MIX'
+        mix.location = -200, -index * 200
+        links.new(raw_source, encoded.inputs["Color"])
+        links.new(attribute.outputs["Fac"], mix.inputs[0])
+        links.new(source, mix.inputs[1])
+        links.new(encoded.outputs["Color"], mix.inputs[2])
+        colors[name] = mix.outputs[0]
+
+    decode_tree = bpy.data.node_groups.get("MW sRGB Decode") or build_srgb_decode_tree()
+    for index, name in enumerate(["Diffuse Color", "Emissive Color"]):
+        source = group_input.outputs[name]
+        decoded = nodes.new('ShaderNodeGroup')
+        decoded.name = decoded.label = f"{name} Decode"
+        decoded.node_tree = decode_tree
+        decoded.location = -400, -2000 - index * 200
+        mix = nodes.new('ShaderNodeMixRGB')
+        mix.name = mix.label = f"{name} Preview"
+        mix.location = -200, -2000 - index * 200
+        links.new(source, decoded.inputs["Color"])
+        links.new(attribute.outputs["Fac"], mix.inputs[0])
+        links.new(decoded.outputs["Color"], mix.inputs[1])
+        links.new(source, mix.inputs[2])
+        colors[name] = mix.outputs[0]
 
     def gi(name):
-        return group_input.outputs[name]
+        return colors[name] if name in colors else group_input.outputs[name]
 
     # Base, Detail, Dark: (Base * Detail * 2) * Dark
     base_detail = nodes.new('ShaderNodeVectorMath')
@@ -186,31 +314,45 @@ def build_mw_shader_tree():
         links.new(gi(f"{decal} Texture"), blend.inputs[3])
         color = blend.outputs[0]
 
-    # Diffuse
+    # V is either decoded material diffuse or the separately converted vertex color.
+    vertex_or_material = nodes.new('ShaderNodeMixRGB')
+    vertex_or_material.name = vertex_or_material.label = "Diffuse Source"
+    vertex_or_material.location = 800, 400
+    links.new(gi("Use Vertex Colors"), vertex_or_material.inputs[0])
+    links.new(gi("Diffuse Color"), vertex_or_material.inputs[1])
+    links.new(gi("Vertex Color"), vertex_or_material.inputs[2])
+
+    # Diffuse = T × V, under Blender lighting.
     diffuse_color = nodes.new('ShaderNodeVectorMath')
     diffuse_color.operation = 'MULTIPLY'
     diffuse_color.location = 1000, 400
     links.new(color, diffuse_color.inputs[0])
-    links.new(gi("Diffuse Color"), diffuse_color.inputs[1])
+    links.new(vertex_or_material.outputs[0], diffuse_color.inputs[1])
 
     diffuse_bsdf = nodes.new('ShaderNodeBsdfDiffuse')
     diffuse_bsdf.location = 1200, 400
     links.new(diffuse_color.outputs[0], diffuse_bsdf.inputs["Color"])
 
-    # Emissive
-    emissive_bw = nodes.new('ShaderNodeRGBToBW')
-    emissive_bw.location = 1000, 100
-    links.new(gi("Emissive Color"), emissive_bw.inputs[0])
-
-    emissive_mix = nodes.new('ShaderNodeMix')
-    emissive_mix.data_type, emissive_mix.blend_type = 'RGBA', 'ADD'
-    emissive_mix.location = 1200, 100
-    links.new(emissive_bw.outputs[0], emissive_mix.inputs[0])  # Factor
-    links.new(gi("Glow Texture"), emissive_mix.inputs[6])  # A
+    # Self-illumination = T × E + G, keeping emissive RGB and texture modulation.
+    emissive_color = nodes.new('ShaderNodeVectorMath')
+    emissive_color.operation = 'MULTIPLY'
+    emissive_color.location = 1000, 100
+    links.new(color, emissive_color.inputs[0])
+    links.new(gi("Emissive Color"), emissive_color.inputs[1])
+    glow = nodes.new('ShaderNodeVectorMath')
+    glow.operation = 'ADD'
+    glow.location = 1200, 100
+    links.new(emissive_color.outputs[0], glow.inputs[0])
+    links.new(gi("Glow Texture"), glow.inputs[1])
 
     emission = nodes.new('ShaderNodeEmission')
     emission.location = 1400, 100
-    links.new(emissive_mix.outputs[2], emission.inputs["Color"])  # Result(Color)
+    links.new(glow.outputs[0], emission.inputs["Color"])
+    # Game emission is visible, but does not become a light source for other objects.
+    gate = nodes.new('ShaderNodeLightPath')
+    gate.name = gate.label = "Emission Gate"
+    gate.location = 1200, -100
+    links.new(gate.outputs["Is Camera Ray"], emission.inputs["Strength"])
 
     surface = nodes.new('ShaderNodeAddShader')
     surface.location = 1600, 300
@@ -362,6 +504,7 @@ class NodeTreeWrapper:
     # INPUTS
     ambient_input = property(lambda self: self.inputs["Ambient Color"])
     diffuse_input = property(lambda self: self.inputs["Diffuse Color"])
+    vertex_input = property(lambda self: self.inputs["Vertex Color"])
     specular_input = property(lambda self: self.inputs["Specular Color"])
     emissive_input = property(lambda self: self.inputs["Emissive Color"])
 

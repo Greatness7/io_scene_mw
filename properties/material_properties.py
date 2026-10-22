@@ -182,11 +182,16 @@ class TextureProperties(bpy.types.PropertyGroup):
                 links.new(outputs[name], inputs[name])
             except KeyError:
                 pass
+        if self.name == "Detail Texture" and "Raw Detail Texture" in inputs:
+            links.new(outputs[self.name], inputs["Raw Detail Texture"])
 
     def remove_links(self):
         inputs = self.shader_inputs
         links = self.id_data.node_tree.links
-        for name in self.active_socket_names():
+        names = list(self.active_socket_names())
+        if self.name == "Detail Texture" and "Raw Detail Texture" in inputs:
+            names.append("Raw Detail Texture")
+        for name in names:
             for outer_link in inputs[name].links:
                 try:
                     links.remove(outer_link)
@@ -240,7 +245,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
 
     @property
     def needs_upgrade(self):
-        return "Alpha Test Function" not in self.inputs
+        return "Alpha Test Function" not in self.inputs or "Use Vertex Colors" not in self.inputs
 
     def upgrade(self):
         """One-time migration for materials using an older generated MW Shader node group."""
@@ -253,11 +258,34 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
             alpha_threshold = getattr(self.material, "alpha_threshold", 133 / 255)
 
         # older versions ignored the mode fields, so a material authored in Blender stored them as zero,
-        # which reads as ONE / ONE / ALWAYS; none of 8037 alpha properties in a 2026-09-23 install scan use it
-        if (self.alpha_flags & ALPHA_MODE_MASK) == 0:
+        # which reads as ONE / ONE / ALWAYS; none of 8037 alpha properties in a 2026-09-23 install scan use it.
+        # Only pre-alpha-rendering groups need that repair: raw-color upgrades must not reinterpret
+        # valid ONE / ONE / ALWAYS authored in a current group.
+        if "Alpha Test Function" not in self.inputs and (self.alpha_flags & ALPHA_MODE_MASK) == 0:
             self.alpha_flags |= ALPHA_FLAGS_DEFAULT
 
+        had_raw_detail = "Raw Detail Texture" in self.inputs
+        vertex_source = None
+        if "Use Vertex Colors" not in self.inputs:
+            for link in self.diffuse_input.links:
+                if link.from_node == self.vertex_color:
+                    vertex_source = link.from_socket
+                    break
         self.shader.node_tree = get_current_mw_shader_tree()
+        if vertex_source is not None:
+            self.remove_link(self.diffuse_input)
+            self.links.new(vertex_source, self.vertex_input)
+            self.inputs["Use Vertex Colors"].default_value = 1.0
+        if not had_raw_detail:
+            detail = self.inputs["Detail Texture"]
+            raw_detail = self.inputs["Raw Detail Texture"]
+            if detail.is_linked:
+                self.links.new(detail.links[0].from_socket, raw_detail)
+            else:
+                # The historical unlinked detail value is a synthetic raw neutral.
+                def decode(c):
+                    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+                raw_detail.default_value = (*map(decode, detail.default_value[:3]), detail.default_value[3])
         self.alpha_threshold = alpha_threshold
         self.sync_alpha_state()
 
@@ -266,7 +294,8 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
     # -------------
     def get_use_vertex_colors(self):
         try:
-            link = self.diffuse_input.links[0]
+            # Stale materials are still readable until the explicit/load upgrade runs.
+            link = self.inputs.get("Vertex Color", self.diffuse_input).links[0]
         except IndexError:
             return False
         return self.vertex_color == link.from_node
@@ -275,11 +304,12 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         if value:
             vc = bpy.context.active_object.data.vertex_colors
             self.vertex_color.layer_name = (vc.active or vc.new()).name
-            self.links.new(self.diffuse_input, self.vertex_color.outputs["Color"])
+            self.links.new(self.vertex_input, self.vertex_color.outputs["Color"])
             self.links.new(self.opacity_input, self.vertex_color.outputs["Alpha"])
         else:
-            self.remove_link(self.inputs["Diffuse Color"])
+            self.remove_link(self.vertex_input)
             self.remove_link(self.inputs["Diffuse Alpha"])
+        self.inputs["Use Vertex Colors"].default_value = float(value)
 
     use_vertex_colors: bpy.props.BoolProperty(
         name="Vertex Colors",
