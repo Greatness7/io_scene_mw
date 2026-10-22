@@ -10,15 +10,15 @@ import numpy.linalg as la
 
 from es3 import nif
 from es3.utils import meshoptimizer
-from es3.utils.math import ID44, compose, decompose, quaternion_from_matrix, quaternion_mul
+from es3.utils.math import ID44, compose, decompose
 
 from dataclasses import replace
 from functools import cached_property
 
 from . import nif_utils
-from . import nif_shader
 from . import nif_switch
-from .conversion import export_skeletons
+from .conversion import export_animation, export_materials, export_skeletons
+from .conversion.blender_compat import get_fcurves
 from .conversion.bone_axes import export_axis_correction, import_axis_correction
 from .conversion.options import ExportOptions, export_options_from_mapping
 from .conversion.records import (
@@ -63,6 +63,12 @@ class Exporter:
         self.nodes = []
         self.materials = {}
         self.pixel_datas = {}
+        self.material_context = export_materials.ExportMaterialContext(
+            self.options,
+            self.cycle_type,
+            self.materials,
+            self.pixel_datas,
+        )
         self.root_scope = ExportScope()
         self.history = collections.defaultdict(list)
         self.armature_candidates = {}
@@ -390,7 +396,17 @@ class Exporter:
             Armature(target).create(job.owned_bones)
         else:
             raise RuntimeError(f"Unsupported export creation role: {job.role}")
-        target.animation.create()
+        parent_world = self.world_matrices[target.parent] if target.parent is not None else None
+        export_animation.export_object_animation(
+            target.source,
+            target.name,
+            target.output,
+            parent_world,
+            target.axis_correction,
+            self.options,
+            self.cycle_type,
+            self.warn,
+        )
 
     def get(self, source, scope):
         nodes = self.history[scope, source]
@@ -708,15 +724,6 @@ class SceneNode(ExportNode):
             return base_name
         return name
 
-    @property
-    def animation(self):
-        return Animation(self)
-
-    @property
-    def material(self):
-        return Material(self)
-
-
 class Empty(SceneNode):
     __slots__ = ()
 
@@ -780,7 +787,17 @@ class Armature(SceneNode):
         for node in bone_nodes:
             Empty(node).create()
             node.output.name = node.bone_name
-            node.animation.create()
+            parent_world = self.exporter.world_matrices[node.parent] if node.parent is not None else None
+            export_animation.export_object_animation(
+                node.source,
+                node.name,
+                node.output,
+                parent_world,
+                node.axis_correction,
+                self.exporter.options,
+                self.exporter.cycle_type,
+                self.exporter.warn,
+            )
 
 
 class Mesh(SceneNode):
@@ -821,7 +838,13 @@ class Mesh(SceneNode):
             tri_morphs = replace(morph_data) if morph_data is not None else None
 
             partition = material_data[i]
-            self.material.create(partition.material, tri)
+            export_materials.export_material(
+                partition.material,
+                tri,
+                self.source,
+                self.exporter.material_context,
+                is_collider=self.is_collider,
+            )
 
             self.extract_vertex_data(
                 partition.corner_indices,
@@ -1058,9 +1081,8 @@ class Mesh(SceneNode):
         except (AttributeError, IndexError):
             return None
 
-        fcurves = Animation.get_fcurves(shape_keys.animation_data)
+        fcurves = get_fcurves(shape_keys.animation_data)
 
-        animation = self.animation
         data_paths = {fc.data_path: fc for fc in fcurves}
 
         # isolate unmuted layers (a target without keys never contributes in the engine)
@@ -1088,8 +1110,8 @@ class Mesh(SceneNode):
                 key_type = nif.NiFloatData.KeyType.LIN_KEY
                 key_data = np.empty(0)
             else:
-                key_type = animation.get_interpolation_type([fc])
-                key_data = animation.collect_keyframe_points([fc], key_type)
+                key_type = export_animation.get_interpolation_type([fc])
+                key_data = export_animation.collect_keyframe_points([fc], key_type)
 
             # populate keyframe data
             keyframes.append(key_data)
@@ -1210,731 +1232,3 @@ class Mesh(SceneNode):
             skin.weights[:, vertex_remap] = skin.weights.copy()
         if morphs is not None:
             morphs.targets[:, vertex_remap] = morphs.targets.copy()
-
-
-class Material(SceneNode):
-    __slots__ = ()
-
-    def __init__(self, node):
-        self.__dict__ = node.__dict__
-
-    def create(self, material, ni_object):
-        if self.is_collider:
-            return  # no properties on colliders
-        if not (material and material.use_nodes):
-            return  # not an applicable material
-
-        try:
-            bl_prop = material.mw.validate()
-        except TypeError:
-            bl_prop = None
-
-        try:
-            if not cast(Any, bl_prop).use_vertex_colors:
-                del ni_object.data.vertex_colors
-        except AttributeError:
-            pass
-
-        # Re-use duplicate materials
-        if material in self.exporter.materials:
-            ni_object.properties = self.exporter.materials[material]
-            # Blender keeps UV animations on the material, but NIF keeps them on the object.
-            # Thus copying a material to the new object doesn't copy over any UV animations.
-            # Go through and manually copy them instead.
-            if bl_prop is not None:
-                for slot in bl_prop.texture_slots:
-                    self.animation.create_uv_controller(bl_prop, slot)
-            return
-
-        if bl_prop is None:
-            # Not a MW Material
-            self.create_fallback_property(ni_object, material)
-        else:
-            # Material Property
-            self.create_material_property(ni_object, bl_prop)
-            # Alpha Property
-            self.create_alpha_property(ni_object, bl_prop)
-            # Texture Property
-            self.create_texturing_property(ni_object, bl_prop)
-            # Wireframe Property
-            self.create_wireframe_property(ni_object, bl_prop)
-            # Stencil Property
-            self.create_stencil_property(ni_object, bl_prop)
-
-        # Update Material Cache
-        self.exporter.materials[material] = ni_object.properties
-
-    def create_material_property(self, ni_object, bl_prop):
-        ni_prop = nif.NiMaterialProperty()
-        # Material Name
-        ni_prop.name = bl_prop.material.name
-        # Material Color
-        ni_prop.ambient_color[:] = bl_prop.ambient_color[:3]
-        ni_prop.diffuse_color[:] = bl_prop.diffuse_color[:3]
-        ni_prop.specular_color[:] = bl_prop.specular_color[:3]
-        ni_prop.emissive_color[:] = bl_prop.emissive_color[:3]
-        # Material Shine
-        ni_prop.shine = bl_prop.shine
-        # Material Alpha
-        ni_prop.alpha = bl_prop.alpha
-        # Material Anims
-        self.animation.create_material_controllers(ni_prop, bl_prop)
-        # Apply Property
-        ni_object.properties.append(ni_prop)
-
-    def create_alpha_property(self, ni_object, bl_prop):
-        if bl_prop.needs_upgrade:  # export must not migrate the author's material
-            raise nif_switch.SwitchError(
-                f"Material '{bl_prop.material.name}' is from an older addon version; run Upgrade Morrowind Materials"
-            )
-        if not (bl_prop.use_alpha_blend or bl_prop.use_alpha_clip):
-            return
-        ni_prop = nif.NiAlphaProperty()
-        # Alpha Blending
-        ni_prop.alpha_blending = bl_prop.use_alpha_blend
-        # Src Blend Mode
-        ni_prop.src_blend_mode = 'SRC_ALPHA'
-        # Dst Blend Mode
-        ni_prop.dst_blend_mode = 'INV_SRC_ALPHA'
-        # Alpha Testing
-        ni_prop.alpha_testing = bl_prop.use_alpha_clip
-        # Test Threshold
-        ni_prop.test_ref = int(bl_prop.alpha_threshold * 255)
-        # Test Method
-        ni_prop.test_mode = 'GREATER'
-        # Apply Property
-        ni_object.properties.append(ni_prop)
-
-    def create_texturing_property(self, ni_object, bl_prop):
-        if not any(slot.image for slot in bl_prop.texture_slots):
-            return
-        ni_prop = nif.NiTexturingProperty()
-        # Texture Slots
-        for name in nif.NiTexturingProperty.texture_keys:
-            self.create_texturing_property_map(bl_prop, ni_prop, name)
-        # Apply Property
-        ni_object.properties.append(ni_prop)
-
-    def create_texturing_property_map(self, bl_prop, ni_prop, name):
-        try:
-            bl_slot = getattr(bl_prop, name)
-            filepath = bl_slot.image.filepath
-        except AttributeError:
-            return
-
-        ni_slot = nif.NiTexturingPropertyMap()
-
-        # material name
-        if not self.exporter.options.preserve_material_names:
-            if (name == "base_texture") and filepath:
-                prop = self.output.get_property(nif.NiMaterialProperty)
-                if prop is not None:
-                    prop.name = pathlib.Path(filepath).stem
-
-        # texture index
-        for i, uv in enumerate(self.source.data.uv_layers):
-            if uv.name == bl_slot.layer:
-                ni_slot.uv_set = i
-                break
-
-        # use repeat
-        if not bl_slot.use_repeat:
-            ni_slot.clamp_mode = 0  # CLAMP_S_CLAMP_T
-
-        # source image
-        ni_slot.source = nif.NiSourceTexture()
-
-        # use mipmaps
-        if not bl_slot.use_mipmaps:
-            ni_slot.source.use_mipmaps = nif.NiSourceTexture.UseMipMaps.NO
-
-        if (bl_slot.image.source == "GENERATED") or bl_slot.image.packed_file:
-            include_alpha = bl_prop.use_alpha_blend or bl_prop.use_alpha_clip
-            ni_slot.source.pixel_data = self.create_pixel_data(bl_slot.image, include_alpha)
-        else:
-            ni_slot.source.filename = bpy.path.abspath(filepath)
-
-        setattr(ni_prop, name, ni_slot)
-
-        # uv animations
-        self.animation.create_uv_controller(bl_prop, bl_slot)
-
-    def create_wireframe_property(self, ni_object, bl_prop):
-        if self.source.display_type == "WIRE":
-            ni_prop = nif.NiWireframeProperty(wireframe=True)
-            ni_object.properties.append(ni_prop)
-
-    def create_stencil_property(self, ni_object, bl_prop):
-        if not bl_prop.material.use_backface_culling:
-            m = nif.NiStencilProperty.DrawMode.DRAW_BOTH
-            ni_prop = nif.NiStencilProperty(draw_mode=m)
-            ni_object.properties.append(ni_prop)
-
-    def create_pixel_data(self, image, include_alpha) -> nif.NiPixelData:
-        if pixel_data := self.exporter.pixel_datas.get(image):
-            assert pixel_data.pixel_format.has_alpha == include_alpha
-        else:
-            assert image.channels == 4
-
-            width, height = image.size
-            for i in (width, height):
-                if (i == 0) or (i & (i - 1) != 0):
-                    raise ValueError("Image dimensions must be a power of 2")
-
-            # TODO: dxt compression (does not work in OpenMW yet)
-            if include_alpha:
-                pixel_format = nif.NiPixelFormat.RGBA()
-                pixel_stride = 4
-            else:
-                pixel_format = nif.NiPixelFormat.RGB()
-                pixel_stride = 3
-
-            pixel_data = nif.NiPixelData(pixel_format=pixel_format, pixel_stride=pixel_stride)
-
-            # TODO: generated mipmaps (image.resize() might work)
-            pixel_data.mipmap_levels.resize((1, 3))
-            pixel_data.mipmap_levels[:] = [width, height, 0]
-
-            # generated images seem to always have alpha channels
-            pixel_floats = np.empty((width, height, 4), np.float32)
-            image.pixels.foreach_get(pixel_floats.ravel())
-            if pixel_stride == 3:
-                pixel_floats = pixel_floats[:, :, :3]
-
-            # convert pixels from opengl layout to directx layout
-            pixel_floats = np.flipud(pixel_floats)
-
-            # convert pixels from floats into flat array of bytes
-            pixel_data.pixel_data = (pixel_floats.ravel() * 255.0).round().astype(np.ubyte)
-
-            self.exporter.pixel_datas[image] = pixel_data
-
-        return pixel_data
-
-    @staticmethod
-    def create_fallback_property(ni_object, material):
-        bl_image = nif_shader.get_base_texture_image(material)
-        if bl_image:
-            # Material Property
-            ni_prop = nif.NiMaterialProperty()
-            ni_prop.ambient_color[:] = 1.0
-            ni_prop.diffuse_color[:] = 1.0
-            ni_prop.alpha = 1.0
-            ni_object.properties.append(ni_prop)
-            # Texturing Property
-            ni_prop = nif.NiTexturingProperty()
-            ni_object.properties.append(ni_prop)
-            # Base Texture Map
-            m = ni_prop.base_texture = nif.NiTexturingPropertyMap()
-            # Base Texture Source
-            m.source = nif.NiSourceTexture()
-            m.source.filename = bpy.path.abspath(bl_image.filepath)
-
-
-class Animation(SceneNode):
-    __slots__ = ()
-
-    def __init__(self, node):
-        self.__dict__ = node.__dict__
-
-    def create(self):
-        if not self.exporter.options.export_animations:
-            return
-
-        # create text keys even if no animations are assigned
-        # this is necessary as text keys are specified on the
-        # file root and will influence all descending objects
-        self.create_text_keys()
-
-        fcurves_dict = self.get_fcurves_dict(self.source.id_data)
-        if len(fcurves_dict) == 0:
-            return
-
-        self.create_vis_controller(fcurves_dict)
-        self.create_translations(fcurves_dict)
-        self.create_rotations(fcurves_dict)
-        self.create_scales(fcurves_dict)
-
-    def create_text_keys(self):
-        try:
-            markers = self.source.animation_data.action.pose_markers
-        except AttributeError:
-            return False
-
-        if len(markers) == 0:
-            return False
-
-        text_data = nif.NiTextKeyExtraData()
-        text_data.keys.resize(len(markers))
-
-        for i, marker in enumerate(markers):
-            time = marker.frame
-            name = marker.name.replace("; ", "\r\n")
-            text_data.keys[i] = time, name
-
-        text_data.collapse_groups()
-        text_data.keys.sort()
-
-        self.output.extra_data = text_data
-
-        return True
-
-    def create_vis_controller(self, fcurves_dict):
-        key_type = nif.NiFloatData.KeyType.LIN_KEY
-        _, keys = self.collect_keys(fcurves_dict, "hide_viewport", num_axes=1, key_type=key_type)
-        if len(keys) == 0:
-            return False
-
-        controller = nif.NiVisController(
-            cycle_type=self.exporter.cycle_type,
-            target=self.output,
-            data=nif.NiVisData(),
-        )
-        data = controller.data
-        assert data is not None
-        data.keys.resize(len(keys))
-        data.times = keys[:, 0]
-        data.values = 1 - keys[:, 1]
-
-        # update controller times
-        controller.update_start_stop_times()
-
-        self.output.controllers.appendleft(controller)
-
-        return True
-
-    def create_translations(self, fcurves_dict):
-        key_type, keys = self.collect_keys(fcurves_dict, "location", num_axes=3)
-        if len(keys) == 0:
-            return False
-        assert key_type is not None
-
-        # get keyframe controller
-        controller = self.create_keyframe_controller()
-        controller.data.translations.key_type = key_type
-
-        # set the controller keys
-        controller.data.translations.keys = keys
-
-        # update start/stop times
-        controller.start_time = min(keys[0, 0], controller.start_time)
-        controller.stop_time = max(keys[-1, 0], controller.stop_time)
-
-        # convert to local space
-        offset = self.to_local_space()
-        if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
-            t = controller.data.translations
-            t.values[:] = t.values @ offset[:3, :3].T + offset[:3, 3]
-            if key_type.name == "BEZ_KEY":
-                t.in_tans[:] = t.in_tans @ offset[:3, :3].T
-                t.out_tans[:] = t.out_tans @ offset[:3, :3].T
-
-        return True
-
-    def create_rotations(self, fcurves_dict):
-        has_euler = self.create_euler_rotations(fcurves_dict)
-        has_quats = self.create_quaternion_rotations(fcurves_dict)
-        if has_euler and has_quats:
-            raise ValueError(f"'({self.name})' mixing euler and quaternion rotations in the same action is not supported")
-        return has_euler or has_quats
-
-    def create_euler_rotations(self, fcurves_dict):
-        key_type, keys = self.collect_keys(fcurves_dict, "rotation_euler", num_axes=3)
-        if len(keys) == 0:
-            return False
-        assert key_type is not None
-
-        if isinstance(self.source, bpy.types.PoseBone):
-            raise ValueError(f'({self.name}) bones euler animations are not currently supported.')
-
-        # get keyframe controller
-        controller = self.create_keyframe_controller()
-
-        # prepare euler rotations
-        rotations = controller.data.rotations
-        rotations.key_type = rotations.KeyType.EULER_KEY
-        if key_type.name == 'LIN_KEY':
-            axis_columns = [(0, 1 + i) for i in range(3)]  # time, value
-        else:
-            axis_columns = [(0, 1 + i, 4 + i, 7 + i) for i in range(3)]  # time, value, in_tan, out_tan
-        rotations.euler_data = tuple(nif.NiFloatData(key_type=key_type, keys=keys[:, c]) for c in axis_columns)
-
-        # update start/stop times
-        controller.start_time = min(keys[0, 0], controller.start_time)
-        controller.stop_time = max(keys[-1, 0], controller.stop_time)
-
-        # convert to local space
-        offset = self.to_local_space()
-        if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
-            rotations.convert_to_quaternions()
-            values = controller.data.rotations.values
-            offset = quaternion_from_matrix(offset)
-            quaternion_mul(offset, values, out=values)
-            values /= la.norm(values, axis=1)[:, None]
-
-        return True
-
-    def create_quaternion_rotations(self, fcurves_dict):
-        # TODO: TCB interpolation
-        key_type = nif.NiRotData.KeyType.LIN_KEY
-
-        # components are sampled from Blender, which interpolates them independently
-        _, keys = self.collect_keys(fcurves_dict, "rotation_quaternion", num_axes=4, key_type=key_type, sample=True)
-        if len(keys) == 0:
-            return False
-
-        # get keyframe controller
-        controller = self.create_keyframe_controller()
-
-        # split times from values
-        values = keys[:, 1:]
-
-        # apply axis corrections
-        if isinstance(self.source, bpy.types.PoseBone):
-            offset = quaternion_from_matrix(self.axis_correction)
-            quaternion_mul(values, offset, out=values)
-
-        # convert to local space
-        offset = self.to_local_space()
-        if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
-            offset = quaternion_from_matrix(offset)
-            quaternion_mul(offset, values, out=values)
-
-        # normalize rotation keys
-        values /= la.norm(values, axis=1)[:, None]
-
-        # set the controller keys
-        controller.data.rotations.keys = keys
-
-        # update start/stop times
-        controller.start_time = min(keys[0, 0], controller.start_time)
-        controller.stop_time = max(keys[-1, 0], controller.stop_time)
-
-        return True
-
-    def create_scales(self, fcurves_dict):
-        key_type, keys = self.collect_keys(fcurves_dict, "scale", num_axes=3)
-        if len(keys) == 0:
-            return False
-        assert key_type is not None
-
-        # require uniform scaling
-        scales_min = keys[:, 1:4].min(axis=1)
-        scales_max = keys[:, 1:4].max(axis=1)
-        if not np.allclose(scales_min, scales_max, rtol=0, atol=1e-4):
-            print(f"({self.name}) non-uniform scale animations are not supported")
-            return False
-
-        # use the first axis only
-        if key_type.name == 'LIN_KEY':
-            keys = keys[:, :2]  # time, x.value
-        else:
-            keys = keys[:, (0, 1, 4, 7)]  # time, x.value, x.in_tan, x.out_tan
-
-        # get keyframe controller
-        controller = self.create_keyframe_controller()
-
-        # set the controller keys
-        controller.data.scales.key_type = key_type
-        controller.data.scales.keys = keys
-
-        # update start/stop times
-        controller.start_time = min(keys[0, 0], controller.start_time)
-        controller.stop_time = max(keys[-1, 0], controller.stop_time)
-
-        # convert to local space
-        offset = self.to_local_space()
-        if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
-            offset_scale = decompose(offset)[-1][-1]
-            s = controller.data.scales
-            s.values[:] *= offset_scale
-            if key_type.name == "BEZ_KEY":
-                s.in_tans[:] *= offset_scale
-                s.out_tans[:] *= offset_scale
-
-        return True
-
-    def create_uv_controller(self, bl_prop, bl_slot):
-        if not self.exporter.options.export_animations:
-            return False
-        if not (bl_slot.image and bl_slot.layer):
-            return False
-
-        anims = self.get_fcurves_dict(bl_prop.texture_group.node_tree)
-        if len(anims) == 0:
-            return False
-
-        uv_data = nif.NiUVData()
-        bl_node = bl_slot.mapping_node
-
-        channels = {
-            (uv_data.u_offset_data, uv_data.v_offset_data):
-                bl_node.inputs["Location"].path_from_id("default_value"),
-            (uv_data.u_tiling_data, uv_data.v_tiling_data):
-                bl_node.inputs["Scale"].path_from_id("default_value"),
-        }
-
-        # bail if no keyframes present
-        if not any(map(anims.get, channels.values())):
-            return False
-
-        for outputs, data_path in channels.items():
-            for i, output in enumerate(outputs):
-                fcurves = [fc for fc in anims[data_path] if fc.array_index == i]
-
-                key_type = self.get_interpolation_type(fcurves)
-                if key_type is None:
-                    continue
-
-                output.key_type = key_type
-                output.keys = self.collect_keyframe_points(fcurves, key_type)
-
-        try:
-            # TODO: do these in shader instead
-            uv_data.u_offset_data.keys[:, 1] *= -1
-            uv_data.v_offset_data.keys[:, 1] *= -1
-        except AttributeError:
-            pass
-
-        # create controller
-        controller = nif.NiUVController(
-            cycle_type=self.exporter.cycle_type,
-            target=self.output,
-            data=uv_data
-        )
-        controller.update_start_stop_times()
-
-        # find uv set index
-        for i, uv in enumerate(self.source.data.uv_layers):
-            if uv.name == bl_slot.layer:
-                controller.texture_set = i
-                break
-
-        # attach controller
-        self.output.controllers.appendleft(controller)
-
-        return True
-
-    def create_material_controllers(self, ni_prop, bl_prop):
-        if not self.exporter.options.export_animations:
-            return
-
-        anims = self.get_fcurves_dict(bl_prop.material.node_tree)
-        if len(anims) == 0:
-            return
-
-        self.create_color_controller(anims, ni_prop, bl_prop)
-        self.create_alpha_controller(anims, ni_prop, bl_prop)
-
-    def create_color_controller(self, fcurves_dict, ni_prop, bl_prop):
-        channels = {
-            'DIFFUSE': bl_prop.diffuse_input,
-            'EMISSIVE': bl_prop.emissive_input,
-        }
-
-        for color_field, source in channels.items():
-            data_path = source.path_from_id("default_value")
-            fcurves = fcurves_dict[data_path]
-
-            key_type = self.get_interpolation_type(fcurves)
-            if key_type is None:
-                continue
-
-            keys = self.collect_keyframe_points(fcurves[:3], key_type)
-            if len(keys) == 0:
-                continue
-
-            # create output controller
-            controller = nif.NiMaterialColorController(
-                cycle_type=self.exporter.cycle_type,
-                color_field=color_field,
-                target=ni_prop,
-                data=nif.NiPosData(
-                    key_type=key_type,
-                    keys=keys
-                ),
-            )
-
-            # update controller times
-            controller.update_start_stop_times()
-
-            # attach the controller
-            ni_prop.controllers.appendleft(controller)
-
-        return True
-
-    def create_alpha_controller(self, fcurves_dict, ni_prop, bl_prop):
-        data_path = bl_prop.opacity_input.path_from_id("default_value")
-        fcurves = fcurves_dict[data_path]
-
-        key_type = self.get_interpolation_type(fcurves)
-        if key_type is None:
-            return False
-
-        keys = self.collect_keyframe_points(fcurves, key_type)
-        if len(keys) == 0:
-            return False
-
-        # create output controller
-        controller = nif.NiAlphaController(
-            cycle_type=self.exporter.cycle_type,
-            target=ni_prop,
-            data=nif.NiFloatData(key_type=key_type, keys=keys),
-        )
-
-        # update controller times
-        controller.update_start_stop_times()
-
-        # attach the controller
-        ni_prop.controllers.appendleft(controller)
-
-        return True
-
-    def to_local_space(self):
-        if isinstance(self.source, bpy.types.PoseBone):
-            matrix = self.source.id_data.convert_space(
-                pose_bone=self.source, matrix=ID44.T, from_space="LOCAL", to_space="WORLD"
-            )
-            return la.solve(self.exporter.world_matrices[self.parent], matrix)
-        else: # non-bone animations
-            if self.parent is not None:
-                return la.inv(self.exporter.world_matrices[self.parent])
-            return ID44
-
-    @staticmethod
-    def get_fcurves(anim_data):
-        if bpy.app.version >= (5, 0, 0):
-            from bpy_extras import anim_utils
-            channelbag = cast(Any, anim_utils).animdata_get_channelbag_for_assigned_slot(anim_data)
-            return channelbag.fcurves
-        return anim_data.action.fcurves
-
-    @staticmethod
-    def get_fcurves_dict(bl_object):
-        fcurves_dict = collections.defaultdict(list)
-
-        try:
-            anim_data = bl_object.animation_data
-            if bpy.app.version >= (5, 0, 0):
-                fcurves = Animation.get_fcurves(anim_data)
-            else:
-                fcurves = anim_data.action.fcurves
-        except AttributeError:
-            pass
-        else:
-            for fc in fcurves:
-                fcurves_dict[fc.data_path].append(fc)
-
-        return fcurves_dict
-
-    def collect_keys(self, fcurves_dict, key, num_axes, key_type=None, sample=False):
-        """Return (key_type, keys) for an animated property: one row per key time, one column per axis.
-
-        Read-only: the author's action is never modified. Axes keyed at different times are aligned by
-        inserting keys that leave each axis's curve unchanged; with `sample`, inserted values come from
-        Blender's own evaluation instead. An axis without keyframes holds the property's current value.
-        """
-        # correct data path for pose bones
-        if isinstance(self.source, bpy.types.PoseBone):
-            data_path = f'pose.bones["{self.name}"].{key}'
-        else:
-            data_path = self.source.path_from_id(key)
-
-        fcurves = {fc.array_index: fc for fc in fcurves_dict.get(data_path, ()) if len(fc.keyframe_points)}
-        if len(fcurves) == 0:
-            return None, ()
-
-        if key_type is None:
-            key_type = self.get_interpolation_type([fcurves[i] for i in sorted(fcurves)])
-        assert key_type is not None
-
-        axes = {
-            i: nif.NiFloatData(key_type=key_type, keys=self.collect_keyframe_points([fc], key_type))
-            for i, fc in fcurves.items()
-        }
-
-        # the union of every axis's key times, merging times closer than the insertion tolerance
-        times = np.unique(np.concatenate([axis.times for axis in axes.values()]))
-        times = times[np.concatenate(([True], np.diff(times) > 1e-6))]
-
-        values, in_tans, out_tans = [], [], []
-        for i in range(num_axes):
-            axis = axes.get(i)
-            if axis is None:
-                static = getattr(self.source, key)[i]
-                values.append(np.full(len(times), static))
-                in_tans.append(np.zeros(len(times)))
-                out_tans.append(np.zeros(len(times)))
-                continue
-            if sample:
-                values.append([fcurves[i].evaluate(t) for t in times])
-                continue
-            axis.evaluate_and_insert(times)
-            assert len(axis.keys) == len(times)
-            values.append(axis.values)
-            if key_type.name == 'BEZ_KEY':
-                in_tans.append(axis.in_tans)
-                out_tans.append(axis.out_tans)
-
-        columns = [times, *values]
-        if key_type.name == 'BEZ_KEY':
-            columns += [*in_tans, *out_tans]
-        return key_type, np.column_stack(columns).astype(np.float32)
-
-    def create_keyframe_controller(self):
-        result = self.output.controllers.find_type_with_owner(nif.NiKeyframeController)
-        if result is not None:
-            owner, controller = result
-        else:
-            owner = self.output
-            self.output.controllers.appendleft(
-                nif.NiKeyframeController(
-                    cycle_type=self.exporter.cycle_type,
-                    target=owner,
-                    data=nif.NiKeyframeData(),
-                )
-            )
-        return owner.controller
-
-    @staticmethod
-    def collect_keyframe_points(fcurves, key_type, dtype=np.float32):
-        # collect/convert keyframe keys
-        num_axes = len(fcurves)
-        num_frames = len(fcurves[0].keyframe_points)
-        num_values = 1 + num_axes * (1 if key_type.name == 'LIN_KEY' else 3)
-        # e.g. times column + a values column with in/out tans for each axis
-
-        keys = np.empty((num_frames, num_values), dtype)
-        temp = np.empty((num_frames, 2), dtype)
-
-        for i, fc in enumerate(fcurves, start=1):
-            # collect times/values
-            fc.keyframe_points.foreach_get("co", temp.ravel())
-            keys[:, (0, i)] = temp
-
-            if key_type.name == 'BEZ_KEY':
-                # collect incoming tangents
-                fc.keyframe_points.foreach_get("handle_left", temp.ravel())
-                keys[:, i + num_axes * 1] = (keys[:, i] - temp[:, 1]) * 3.0
-                # collect outgoing tangents
-                fc.keyframe_points.foreach_get("handle_right", temp.ravel())
-                keys[:, i + num_axes * 2] = (temp[:, 1] - keys[:, i]) * 3.0
-
-        # sort the keys by their times
-        keys = keys[keys[:, 0].argsort()]
-
-        return keys
-
-    @staticmethod
-    def get_interpolation_type(fcurves):
-        # Blender lets each keyframe point define its own interpolation mode.
-        # Morrowind supports only a single interpolation mode per-controller.
-        # For now we will just use the interpolation mode from the first key.
-        try:
-            interpolation = fcurves[0].keyframe_points[0].interpolation
-        except IndexError:
-            return None
-        if interpolation == 'LINEAR':
-            return nif.NiFloatData.KeyType.LIN_KEY
-        else:
-            return nif.NiFloatData.KeyType.BEZ_KEY

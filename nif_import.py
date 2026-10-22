@@ -12,9 +12,9 @@ from es3 import nif
 from es3.utils.math import ID44, decompose
 
 from . import nif_utils
-from . import nif_shader
 from . import nif_switch
-from .conversion import import_skeletons
+from .conversion import import_animation, import_materials, import_skeletons
+from .conversion.blender_compat import ensure_action, ensure_fcurve
 from .conversion.options import ImportOptions, import_options_from_mapping
 from .conversion.records import (
     ImportCreationJob,
@@ -64,6 +64,13 @@ class Importer:
         self.colliders = collections.defaultdict(set)
         self.switches = []
         self.warnings = []
+        self.animation_context = import_animation.ImportAnimationContext(self.options, self.runtime.scene, self.warn)
+        self.material_context = import_materials.ImportMaterialContext(
+            self.options,
+            self.runtime.texture_paths,
+            self.materials,
+            self.animation_context,
+        )
         self.filepath = pathlib.Path(filepath)
         self.world_matrices = {}
 
@@ -140,7 +147,7 @@ class Importer:
 
         # unmute animations
         for skeleton in self.skeletons:
-            Animation(skeleton.root).set_mute(False)
+            import_animation.set_mute(skeleton.root.output, False, self.animation_context)
 
         # restore frame pos
         self.runtime.scene.frame_current = frame_current
@@ -241,7 +248,6 @@ class Importer:
             self.bone_candidates,
             self.get,
         )
-
     def resolve_armature(self, root, bones, orphan_bones):
         posed_worlds = import_skeletons.evaluate_node_worlds(self.nodes)
         return import_skeletons.resolve_armature(root, bones, orphan_bones, self.nodes, self.get, posed_worlds)
@@ -253,7 +259,6 @@ class Importer:
             self.get,
             self.skeletons_by_source,
         )
-
     def correct_rest_position(self, root):
         skeleton = self.skeletons_by_source[root.source]
         import_skeletons.correct_rest_positions(
@@ -262,7 +267,6 @@ class Importer:
             self.get,
             self.skeletons_by_source,
         )
-
     def apply_axis_corrections(self):
         import_skeletons.apply_axis_corrections(self.skeletons, self.nodes)
 
@@ -411,7 +415,6 @@ class Importer:
             self.get,
             self.skeletons_by_source,
         )
-
     def get_skeleton_for_bone(self, bone):
         return next(skeleton for skeleton in self.skeletons if bone in skeleton.posed_world)
 
@@ -492,15 +495,6 @@ class SceneNode(ImportNode):
             return {**getattr(self.parent, "properties"), **props}
         return props
 
-    @property
-    def animation(self):
-        return Animation(self)
-
-    @property
-    def material(self):
-        return Material(self)
-
-
 class Empty(SceneNode):
     __slots__ = ()
 
@@ -535,7 +529,12 @@ class Empty(SceneNode):
         if self.source.is_bounding_box:
             self.convert_to_bounding_box()
 
-        self.animation.create()
+        import_animation.import_object_animation(
+            self.source,
+            self.output,
+            self.bone_name,
+            self.importer.animation_context,
+        )
 
         return self.output
 
@@ -649,8 +648,13 @@ class Armature(SceneNode):
             # TODO try not to call scene update
             self.importer.runtime.view_layer.depsgraph.update()
             # create animations, preserve poses
-            node.animation.create()
-            node.animation.set_mute(True)
+            import_animation.import_object_animation(
+                node.source,
+                node.output,
+                node.bone_name,
+                self.importer.animation_context,
+            )
+            import_animation.set_mute(node.output, True, self.importer.animation_context)
 
         return bl_object
 
@@ -690,7 +694,12 @@ class Mesh(SceneNode):
             except AttributeError:
                 pass
 
-        self.material.create()
+        import_materials.import_material(
+            self.source,
+            self.properties,
+            self.output,
+            self.importer.material_context,
+        )
 
         return bl_object
 
@@ -773,13 +782,11 @@ class Mesh(SceneNode):
 
         vertex_morphs = morph_data.targets
 
-        animation = self.animation
-
         # add basis key
         ob.shape_key_add(name="Basis")
 
         # add anim data
-        action = animation.get_action(ob.data.shape_keys)
+        action = ensure_action(ob.data.shape_keys)
 
         # add morph keys
         for i, target in enumerate(self.source.morph_targets):
@@ -789,16 +796,16 @@ class Mesh(SceneNode):
 
             # create morph fcurves
             data_path = shape_key.path_from_id("value")
-            fc = animation.create_fcurves(action, data_path)
+            fc = ensure_fcurve(action, data_path)
 
             # add fcurve keyframes
             fc.keyframe_points.add(len(target.keys))
             fc.keyframe_points.foreach_set("co", target.keys[:, :2].ravel())
-            animation.create_interpolation_data(target, fc)
+            import_animation.create_interpolation_data(target, fc)
             fc.update()
 
         # update frame range
-        animation.update_frame_range(self.source.controller)
+        import_animation.update_frame_range(self.importer.runtime.scene, self.source.controller)
 
     def calc_geometry_data(self):
         vertices = self.source.data.vertices
@@ -879,578 +886,3 @@ class Mesh(SceneNode):
             skin=ImportSkinBuffers(vertex_weights) if len(vertex_weights) else None,
             morphs=ImportMorphBuffers(vertex_morphs) if len(vertex_morphs) else None,
         )
-
-
-class Material(SceneNode):
-    __slots__ = ()
-
-    def __init__(self, node):
-        self.__dict__ = node.__dict__
-
-    def create(self):
-        properties = self.properties
-        if len(properties) == 0:
-            return
-
-        ni_alpha = properties.get(nif.NiAlphaProperty)
-        ni_material = properties.get(nif.NiMaterialProperty)
-        ni_stencil = properties.get(nif.NiStencilProperty)
-        ni_texture = properties.get(nif.NiTexturingProperty)
-        ni_wireframe = properties.get(nif.NiWireframeProperty)
-
-        # Vertex colors need a texturing property present to be visible.
-        if (ni_texture is None) and len(self.source.data.vertex_colors):
-            ni_texture = nif.NiTexturingProperty()
-
-        # Blender stores wireframe on the object rather than a material.
-        if ni_wireframe and ni_wireframe.wireframe:
-            self.output.display_type = "WIRE"
-
-        # Re-Use Materials
-        name = self.calc_name_from_textures(ni_texture)
-        if self.apply_existing_material(name, ni_alpha):
-            return
-
-        # Merge Duplicates
-        props_hash = (
-            *properties.values(),
-            # "use_vertex_colors" is stored on the material
-            len(self.source.data.vertex_colors),
-            # uv animations are also stored on the material
-            self.source.controllers.find_type(nif.NiUVController),
-        )
-        bl_prop = None
-        try:
-            bl_prop = self.importer.materials[props_hash]
-        except KeyError:
-            bl_prop = self.importer.materials[props_hash] = nif_shader.execute(self.output)
-        else:
-            # material already exists, reuse it
-            self.link_object_material(self.output, bl_prop.material)
-            return
-        finally:
-            if self.importer.options.use_existing_materials and bl_prop is not None:
-                bl_prop.material.name = name
-        assert bl_prop is not None
-
-        # Setup Properties
-        if ni_alpha:
-            self.create_alpha_property(bl_prop, ni_alpha)
-        if ni_material:
-            self.create_material_property(bl_prop, ni_material)
-        if ni_stencil:
-            self.create_stencil_property(bl_prop, ni_stencil)
-        if ni_texture:
-            self.create_texturing_property(bl_prop, ni_texture)
-        if ni_wireframe:
-            self.create_wireframe_property(bl_prop, ni_wireframe)
-
-    def create_alpha_property(self, bl_prop, ni_prop):
-        # Alpha Flags
-        bl_prop.alpha_flags = ni_prop.flags
-        # Alpha Threshold
-        bl_prop.alpha_threshold = float(ni_prop.test_ref / 255)
-        # Blending Method
-        if ni_prop.alpha_blending:
-            bl_prop.use_alpha_blend = True
-        if ni_prop.alpha_testing:
-            bl_prop.use_alpha_clip = True
-
-    def create_material_property(self, bl_prop, ni_prop):
-        # Material Name
-        if not self.importer.options.use_existing_materials:
-            bl_prop.material.name = ni_prop.name
-        # Material Color
-        bl_prop.ambient_color[:3] = ni_prop.ambient_color
-        bl_prop.diffuse_color[:3] = ni_prop.diffuse_color
-        bl_prop.specular_color[:3] = ni_prop.specular_color
-        bl_prop.emissive_color[:3] = ni_prop.emissive_color
-        # Material Shine
-        bl_prop.shine = ni_prop.shine
-        # Material Alpha
-        bl_prop.alpha = ni_prop.alpha
-        # Material Anims
-        self.animation.create_color_controller(bl_prop, ni_prop)
-        self.animation.create_alpha_controller(bl_prop, ni_prop)
-
-    def create_texturing_property(self, bl_prop, ni_prop):
-        # Texture Slots
-        for name in nif.NiTexturingProperty.texture_keys:
-            self.create_texturing_property_map(bl_prop, ni_prop, name)
-        # Vertex Colors
-        if self.output.data.vertex_colors:
-            bl_prop.vertex_color.layer_name = self.output.data.vertex_colors[0].name
-            bl_prop.create_link(bl_prop.vertex_color, bl_prop.shader, "Color", "Diffuse Color")
-            bl_prop.create_link(bl_prop.vertex_color, bl_prop.shader, "Alpha", "Diffuse Alpha")
-        # UV Animations
-        for controller in self.source.controllers:
-            if isinstance(controller, nif.NiUVController):
-                self.animation.create_uv_controller(controller)
-
-    def create_wireframe_property(self, bl_prop, ni_prop):
-        if ni_prop.wireframe:
-            self.output.display_type = "WIRE"
-
-    def create_stencil_property(self, bl_prop, ni_prop):
-        bl_prop.material.use_backface_culling = False
-        bl_prop.material.show_transparent_back = True
-
-    def create_texturing_property_map(self, bl_prop, ni_prop, slot_name):
-        try:
-            bl_slot = getattr(bl_prop, slot_name)
-            ni_slot = getattr(ni_prop, slot_name)
-            # only supports slots with texture image attached
-            image = self.create_image(ni_slot.source.filename)
-        except (AttributeError, LookupError):
-            return
-
-        # texture image
-        bl_slot.image = image
-
-        # use repeat
-        if ni_slot.clamp_mode.name == 'CLAMP_S_CLAMP_T':
-            bl_slot.use_repeat = False
-
-        # use mipmaps
-        if ni_slot.source.use_mipmaps.name == 'NO':
-            bl_slot.use_mipmaps = False
-
-        # uv layer
-        try:
-            bl_slot.layer = self.output.data.uv_layers[ni_slot.uv_set].name
-        except IndexError:
-            pass
-
-    def create_image(self, filepath):
-        abspath = self.resolve_texture_path(filepath)
-
-        if abspath.exists():
-            image = bpy.data.images.load(str(abspath), check_existing=True)
-        else:  # placeholder
-            image = bpy.data.images.new(name=abspath.name, width=1, height=1)
-            image.filepath = str(abspath)
-            image.source = "FILE"
-
-        return image
-
-    def calc_name_from_textures(self, ni_prop):
-        if not self.importer.options.use_existing_materials:
-            return ""
-
-        if ni_prop is None:
-            return ""
-
-        names = {}
-        for tex_key, tex_map in zip(ni_prop.texture_keys, ni_prop.texture_maps):
-            try:
-                names[tex_key] = pathlib.Path(tex_map.source.filename).stem.lower()
-            except AttributeError:
-                pass
-
-        if names.keys() == {"base_texture"}:
-            return names["base_texture"]
-
-        return " | ".join(f"{k.rpartition('_')[0]}:{v}" for k, v in names.items())
-
-    def apply_existing_material(self, name, ni_alpha):
-        """
-        Check if a material with the same name and properties already exists
-        in the current blend file. If so, use it instead of making a new one.
-        """
-        if not self.importer.options.use_existing_materials:
-            return
-
-        use_vertex_colors = bool(len(self.source.data.vertex_colors))
-        use_alpha_blend = getattr(ni_alpha, "alpha_blending", False)
-        use_alpha_clip = getattr(ni_alpha, "alpha_testing", False)
-
-        base_name, index = name, 0
-        while True:
-            try:
-                material = cast(Any, bpy.data.materials[name])
-                bl_prop = material.mw.validate()
-            except (LookupError, TypeError):
-                break
-
-            if (
-                bl_prop.use_vertex_colors == use_vertex_colors
-                and bl_prop.use_alpha_blend == use_alpha_blend
-                and bl_prop.use_alpha_clip == use_alpha_clip
-            ):
-                self.link_object_material(self.output, bl_prop.material)
-                return True
-
-            index += 1
-            name = f"{base_name}.{index:03}"
-
-    @staticmethod
-    def link_object_material(bl_object, bl_material):
-        # Use any existing empty material slot first.
-        for slot in bl_object.material_slots:
-            if slot.material is None:
-                break
-        else:
-            bl_object.data.materials.append(None)
-            slot = bl_object.material_slots[-1]
-
-        slot.link = "OBJECT"
-        slot.material = bl_material
-
-    def resolve_texture_path(
-        self,
-        relpath,
-        case_insensitive = pathlib.Path(__file__.upper()).exists()
-    ):
-        # get the initial filepath
-        path = pathlib.Path(bpy.path.native_pathsep(relpath).lower())
-
-        # discard "data files" prefix
-        if path.parts[0] == "data files":
-            path = path.relative_to("data files")
-
-        # discard "textures" prefix
-        if path.parts[0] == "textures":
-            path = path.relative_to("textures")
-
-        # potential file extensions
-        suffixes = {path.suffix, ".dds", ".tga", ".bmp"}
-
-        # evaluate final image path
-        for directory in self.importer.runtime.texture_paths:
-            abspath = directory / path
-            for suffix in suffixes:
-                abspath = abspath.with_suffix(suffix)
-                if not case_insensitive:
-                    abspath = pathlib.Path(bpy.path.resolve_ncase(str(abspath)))
-                if abspath.exists():
-                    return abspath
-
-        return pathlib.Path("textures") / path
-
-
-class Animation(SceneNode):
-    __slots__ = ()
-
-    def __init__(self, node):
-        self.__dict__ = node.__dict__
-
-    def create(self):
-        if self.importer.options.ignore_animations:
-            return
-
-        bl_object = self.output.id_data
-
-        if self.source.extra_data:
-            self.create_text_keys(bl_object)
-
-        if self.source.controller:
-            self.create_kf_controller(bl_object)
-            self.create_vis_controller(bl_object)
-
-    def create_text_keys(self, bl_object):
-        text_data = self.source.extra_datas.find_type(nif.NiTextKeyExtraData)
-        if text_data is None:
-            return
-
-        action = self.get_action(bl_object)
-
-        for frame, text in text_data.keys.tolist():
-            for name in filter(None, text.splitlines()):
-                assert len(name) < 64, f"Marker exceeds character limit ({name})"
-                action.pose_markers.new(name).frame = round(frame)
-
-    def create_kf_controller(self, bl_object):
-        controller = self.source.controllers.find_type(nif.NiKeyframeController)
-        if not (controller and controller.data):
-            return
-
-        # get animation action
-        action = self.get_action(bl_object)
-
-        # translation keys
-        self.create_translations(controller, action)
-        # rotation keys
-        self.create_rotations(controller, action)
-        # scale keys
-        self.create_scales(controller, action)
-
-        self.update_frame_range(controller)
-
-    def create_translations(self, controller, action):
-        data = controller.data.translations
-        if len(data.keys) == 0:
-            return
-
-        # get blender data path
-        data_path = self.output.path_from_id("location")
-
-        # build blender fcurves
-        for i in range(3):
-            fc = self.animation.create_fcurves(action, data_path, index=i, action_group=self.bone_name)
-            fc.keyframe_points.add(len(data.keys))
-            fc.keyframe_points.foreach_set("co", data.keys[:, (0, i+1)].ravel())
-            self.create_interpolation_data(data, fc, axis=i)
-            fc.update()
-
-    def create_rotations(self, controller, action):
-        if controller.data.rotations.euler_data:
-            if isinstance(self.output, bpy.types.PoseBone):
-                print(f"[INFO] Euler animations on bones are not currently supported. ({self.name})")
-                controller.data.rotations.convert_to_quaternions()
-            else:
-                self.output.rotation_mode = controller.data.rotations.euler_axis_order.name
-                self.create_euler_rotations(controller, action)
-                return
-
-        self.output.rotation_mode = 'QUATERNION'
-        self.create_quaternion_rotations(controller, action)
-
-    def create_euler_rotations(self, controller, action):
-        for i, data in enumerate(controller.data.rotations.euler_data):
-            if len(data.keys) == 0:
-                continue
-
-            # get blender data path
-            data_path = self.output.path_from_id("rotation_euler")
-
-            # build blender fcurves
-            fc = self.animation.create_fcurves(action, data_path, index=i, action_group=self.output.name)
-            fc.keyframe_points.add(len(data.keys))
-            fc.keyframe_points.foreach_set("co", data.keys[:, :2].ravel())
-            self.create_interpolation_data(data, fc)
-            fc.update()
-
-    def create_quaternion_rotations(self, controller, action):
-        data = controller.data.rotations
-        if len(data.keys) == 0:
-            return
-
-        # get blender data path
-        data_path = self.output.path_from_id("rotation_quaternion")
-
-        # build blender fcurves
-        for i in range(4):
-            fc = self.animation.create_fcurves(action, data_path, index=i, action_group=self.output.name)
-            fc.keyframe_points.add(len(data.keys))
-            fc.keyframe_points.foreach_set("co", data.keys[:, (0, i+1)].ravel())
-            fc.update()
-
-    def create_scales(self, controller, action):
-        data = controller.data.scales
-        if len(data.keys) == 0:
-            return
-
-        # get blender data path
-        data_path = self.output.path_from_id("scale")
-
-        # build blender fcurves
-        for i in range(3):
-            fc = self.animation.create_fcurves(action, data_path, index=i, action_group=self.output.name)
-            fc.keyframe_points.add(len(data.keys))
-            fc.keyframe_points.foreach_set("co", data.keys[:, :2].ravel())
-            self.create_interpolation_data(controller.data.scales, fc)
-            fc.update()
-
-    def create_vis_controller(self, bl_object):
-        controller = self.source.controllers.find_type(nif.NiVisController)
-        if controller is None:
-            return
-
-        data = controller.data
-        if (data is None) or len(data.keys) == 0:
-            return
-
-        keys = np.empty((len(data.keys), 2), dtype=np.float32)
-
-        # invert appculled flag
-        keys[:, 1] = 1 - data.values
-
-        # get animations action
-        action = self.get_action(bl_object)
-
-        # get blender data path
-        try:
-            data_path = self.output.path_from_id("hide_viewport")
-        except AttributeError:
-            print(f"Warning: NiVisController on bones are not supported ({self.name})")
-            return
-
-        # build blender fcurves
-        fc = self.animation.create_fcurves(action, data_path, index=0, action_group=self.output.name)
-        fc.keyframe_points.add(len(keys))
-        fc.keyframe_points.foreach_set("co", keys.ravel())
-        fc.update()
-
-    def create_uv_controller(self, controller):
-        if self.importer.options.ignore_animations:
-            return
-
-        data = controller.data
-        if data is None:
-            return
-
-        # get blender property
-        try:
-            bl_prop = self.output.active_material.mw
-        except AttributeError:
-            return
-
-        # get animation action
-        action = self.get_action(bl_prop.texture_group.node_tree)
-
-        # get the texture slot
-        try:
-            uv_name = self.output.data.uv_layers[controller.texture_set].name
-            bl_slot = next(s for s in bl_prop.texture_slots if s.layer == uv_name)
-            bl_node = bl_slot.mapping_node
-        except (IndexError, StopIteration):
-            print("Warning: skipping NiUVController due to invalid texture set")
-            return
-
-        channels = {
-            (data.u_offset_data, data.v_offset_data):
-                bl_node.inputs["Location"].path_from_id("default_value"),
-            (data.u_tiling_data, data.v_tiling_data):
-                bl_node.inputs["Scale"].path_from_id("default_value"),
-        }
-
-        try:
-            # TODO: do these in shader instead
-            data.u_offset_data.keys[:, 1] *= -1
-            data.v_offset_data.keys[:, 1] *= -1
-        except AttributeError:
-            pass
-
-        for sources, data_path in channels.items():
-            for i, uv_data in enumerate(sources):
-                # build blender fcurves
-                fc = self.animation.create_fcurves(action, data_path, index=i, action_group=uv_name)
-                fc.keyframe_points.add(len(uv_data.keys))
-                fc.keyframe_points.foreach_set("co", uv_data.keys[:, :2].ravel())
-                self.create_interpolation_data(uv_data, fc)
-                fc.update()
-
-        self.update_frame_range(controller)
-
-    def create_color_controller(self, bl_prop, ni_prop):
-        if self.importer.options.ignore_animations:
-            return
-
-        controller = ni_prop.controllers.find_type(nif.NiMaterialColorController)
-        if controller is None:
-            return
-
-        data = controller.data
-        if data is None:
-            return
-
-        keys = controller.data.keys
-        if len(keys) == 0:
-            return
-
-        # get blender data path
-        if controller.color_field == 'DIFFUSE':
-            data_path = bl_prop.diffuse_input.path_from_id("default_value")
-        elif controller.color_field == 'EMISSIVE':
-            data_path = bl_prop.emissive_input.path_from_id("default_value")
-        else:
-            raise NotImplementedError(f"'{controller.color_field}' animations are not supported")
-
-        # create blender action
-        action = self.get_action(bl_prop.material.node_tree)
-
-        # build blender fcurves
-        for i in range(3):
-            fc = self.animation.create_fcurves(action, data_path, index=i, action_group=bl_prop.material.name)
-            fc.keyframe_points.add(len(keys))
-            fc.keyframe_points.foreach_set("co", keys[:, (0, i+1)].ravel())
-            self.create_interpolation_data(data, fc)
-            fc.update()
-
-        self.update_frame_range(controller)
-
-    def create_alpha_controller(self, bl_prop, ni_prop):
-        if self.importer.options.ignore_animations:
-            return
-
-        controller = ni_prop.controllers.find_type(nif.NiAlphaController)
-        if controller is None:
-            return
-
-        data = controller.data
-        if data is None:
-            return
-
-        keys = controller.data.keys
-        if len(keys) == 0:
-            return
-
-        # create blender action
-        action = self.get_action(bl_prop.material.node_tree)
-
-        # get blender data path
-        data_path = bl_prop.opacity_input.path_from_id("default_value")
-
-        # build blender fcurves
-        fc = self.animation.create_fcurves(action, data_path, index=0, action_group=bl_prop.material.name)
-        fc.keyframe_points.add(len(keys))
-        fc.keyframe_points.foreach_set("co", keys[:, :2].ravel())
-        self.create_interpolation_data(data, fc)
-        fc.update()
-
-        self.update_frame_range(controller)
-
-    @staticmethod
-    def get_action(bl_object):
-        try:
-            action = bl_object.animation_data.action
-        except AttributeError:
-            action = bpy.data.actions.new(f"{bl_object.name}Action")
-            anim_data = bl_object.animation_data_create()
-            anim_data.action = action
-
-            if bpy.app.version >= (4, 4, 0):
-                anim_data.action_slot = action.slots.new(id_type=bl_object.id_type, name=bl_object.name)
-
-        return action
-
-    @staticmethod
-    def create_fcurves(action, data_path, index=0, action_group=""):
-        if bpy.app.version >= (5, 0, 0):
-            from bpy_extras import anim_utils
-            channelbag = cast(Any, anim_utils).action_ensure_channelbag_for_slot(action, *action.slots)
-            return channelbag.fcurves.ensure(data_path, index=index, group_name=action_group)
-        else:
-            return action.fcurves.new(data_path, index=index, action_group=action_group)
-
-    @staticmethod
-    def create_interpolation_data(ni_data, fcurves, axis: Any = ...):
-        if ni_data.key_type.name == 'NO_INTERP':
-            for kp in fcurves.keyframe_points:
-                kp.interpolation = 'CONSTANT'
-        elif ni_data.key_type.name == 'LIN_KEY':
-            for kp in fcurves.keyframe_points:
-                kp.interpolation = 'LINEAR'
-        else:
-            for kp in fcurves.keyframe_points:
-                kp.interpolation = 'BEZIER'
-                kp.handle_left_type = kp.handle_right_type = 'FREE'
-            handles = ni_data.get_tangent_handles()  # TODO: call this once per controller rather than per axis
-            fcurves.keyframe_points.foreach_set("handle_left", handles[0, axis].ravel())
-            fcurves.keyframe_points.foreach_set("handle_right", handles[1, axis].ravel())
-
-    def update_frame_range(self, controller):
-        scene = self.importer.runtime.scene
-        frame_end = int(np.ceil(controller.stop_time))
-        scene.frame_end = scene.frame_preview_end = max(scene.frame_end, frame_end)
-
-    def set_mute(self, state, fcurves=None):
-        if self.importer.options.ignore_animations:
-            return
-
-        if fcurves is None:
-            try:
-                fcurves = self.output.id_data.animation_data.action.fcurves
-            except AttributeError:
-                return
-        fcurves.foreach_set("mute", [state] * len(fcurves))
