@@ -126,8 +126,8 @@ class Importer:
             for skeleton in self.skeletons:
                 import_animation.set_mute(self.outputs[skeleton.root], False, self.animation_context)
 
-        # set active object
-        self.runtime.view_layer.objects.active = self.get_root_output(roots)
+            # Include the active-object change in the frame-restoration evaluation.
+            self.runtime.view_layer.objects.active = self.get_root_output(roots)
 
     # -------
     # RESOLVE
