@@ -1,0 +1,13 @@
+{
+  "include": [
+    "conversion",
+    "nif_import.py",
+    "nif_export.py",
+    "nif_utils.py"
+  ],
+  "extraPaths": [
+    "lib"
+  ],
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "basic"
+}

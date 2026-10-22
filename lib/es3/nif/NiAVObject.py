@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 from ..utils.flags import bool_property, enum_property
 from ..utils.math import compose, decompose_uniform, dotproduct, ID33, ID44, ZERO3
+from ..utils.transforms import evaluate_world_matrices
 from ..utils.typing import *
 
 from .NiBinaryStream import NiBinaryStream
@@ -110,6 +111,12 @@ class NiAVObject(NiObjectNET):
             return cast("ndarray", ID44.copy())  # pyright: ignore[reportUnknownMemberType]
         path = reversed(list(self.find_path(ancestor)))
         return dotproduct([obj.matrix for obj in path])
+
+    def world_matrices(self) -> dict[NiAVObject, ndarray]:
+        """Evaluate world matrices for this spatial subtree in hierarchy order."""
+        records: list[tuple[NiAVObject, NiAVObject | None, ndarray]] = [(self, None, self.matrix)]
+        records.extend((node, node.parent, node.matrix) for node in self.descendants())
+        return evaluate_world_matrices(records)
 
     @property
     def is_biped(self) -> bool:

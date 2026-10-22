@@ -30,7 +30,6 @@ class ImportNode:
     output: Any = None
     _parent: ImportNode | None = None
     children: list[ImportNode] = field(default_factory=list)
-    matrix_posed: Array | None = None
     switch_plan: ImportSwitchPlan | None = None
 
 
@@ -47,10 +46,13 @@ class ImportSwitchPlan:
     slots: tuple[ImportNode | ImportNullSlot, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ResolvedImportSkeleton:
     root: ImportNode
+    root_bone: ImportNode
     bones: tuple[ImportNode, ...]
+    posed_world: dict[ImportNode, Array]
+    rest_world: dict[ImportNode, Array]
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,16 +70,21 @@ class ExportRole(Enum):
     UNSUPPORTED = auto()
 
 
+@dataclass(eq=False, slots=True)
+class ExportScope:
+    parent: ExportScope | None = None
+
+
 @dataclass(eq=False)
 class ExportNode:
     exporter: Any
     source: Any
     matrix_local: Array
+    scope: ExportScope | None = None
     role: ExportRole = ExportRole.UNSUPPORTED
     output: Any = None
     _parent: ExportNode | None = None
     children: list[ExportNode] = field(default_factory=list)
-    matrix_bind: Array | None = None
     baked_vertex_scale: Array | None = None
     switch_plan: ExportSwitchPlan | None = None
 
@@ -93,10 +100,12 @@ class ExportSwitchPlan:
     slots: tuple[ExportNode | ExportNullSlot, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ResolvedExportSkeleton:
     armature: ExportNode
     bones: tuple[ExportNode, ...]
+    bind_relative_to_root: dict[ExportNode, Array]
+    world_matrices: dict[ExportNode, Array]
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +141,7 @@ class ExportSkinBuffers(Generic[NodeT]):
     root: NodeT
     bones: tuple[NodeT, ...]
     weights: Array
+    bind_relative_to_root: dict[NodeT, Array]
 
 
 @dataclass(slots=True)

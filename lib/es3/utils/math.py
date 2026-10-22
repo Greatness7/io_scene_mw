@@ -104,6 +104,29 @@ def quaternion_from_euler_angle(angle: float | FloatArray, euler_axis: int, out:
     return np.squeeze(out)  # pyright: ignore[reportUnknownMemberType]
 
 
+def quaternion_from_matrix(matrix: FloatArray) -> FloatArray:
+    m00, m10, m20 = (float(matrix[0, i]) for i in range(3))
+    m01, m11, m21 = (float(matrix[1, i]) for i in range(3))
+    m02, m12, m22 = (float(matrix[2, i]) for i in range(3))
+
+    if m22 < 0:
+        if m00 > m11:
+            t = 1 + m00 - m11 - m22
+            q = (m12 - m21), t, (m01 + m10), (m20 + m02)
+        else:
+            t = 1 - m00 + m11 - m22
+            q = (m20 - m02), (m01 + m10), t, (m12 + m21)
+    elif m00 < -m11:
+        t = 1 - m00 - m11 + m22
+        q = (m01 - m10), (m20 + m02), (m12 + m21), t
+    else:
+        t = 1 + m00 + m11 + m22
+        q = t, (m12 - m21), (m20 - m02), (m01 - m10)
+
+    values = np.array(q, dtype=matrix.dtype)
+    return values * 0.5 / np.sqrt(t)
+
+
 def quaternion_mul(a: FloatArray, b: FloatArray, out: FloatArray | None = None) -> FloatArray:
     aw, ax, ay, zy = np.rollaxis(a, -1)
     bw, bx, by, bz = np.rollaxis(b, -1)

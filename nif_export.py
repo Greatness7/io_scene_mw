@@ -3,13 +3,14 @@ import bpy
 import timeit
 import pathlib
 import collections
+from typing import Any, cast
 
 import numpy as np
 import numpy.linalg as la
 
 from es3 import nif
 from es3.utils import meshoptimizer
-from es3.utils.math import ID44, compose, decompose
+from es3.utils.math import ID44, compose, decompose, quaternion_from_matrix, quaternion_mul
 
 from dataclasses import replace
 from functools import cached_property
@@ -17,6 +18,8 @@ from functools import cached_property
 from . import nif_utils
 from . import nif_shader
 from . import nif_switch
+from .conversion import export_skeletons
+from .conversion.bone_axes import export_axis_correction, import_axis_correction
 from .conversion.options import ExportOptions, export_options_from_mapping
 from .conversion.records import (
     ExportCreationJob,
@@ -24,21 +27,12 @@ from .conversion.records import (
     ExportNode,
     ExportNullSlot,
     ExportRole,
+    ExportScope,
     ExportSkinBuffers,
     ExportSwitchPlan,
     MaterialPartition,
-    ResolvedExportSkeleton,
 )
 from .conversion.runtime import ExportRuntime
-
-from bpy_extras.io_utils import axis_conversion
-
-biped_axis_correction = np.array(axis_conversion('Y', 'Z', '-X', 'Z').to_4x4(), dtype="<f")
-biped_axis_correction_inverse = la.inv(biped_axis_correction)
-
-other_axis_correction = np.array(axis_conversion('-Z', '-Y', 'Y', 'Z').to_4x4(), dtype="<f")
-other_axis_correction_inverse = la.inv(other_axis_correction)
-
 
 def save(context, filepath, report=None, **config):
     """save the scene to a nif file"""
@@ -69,6 +63,7 @@ class Exporter:
         self.nodes = []
         self.materials = {}
         self.pixel_datas = {}
+        self.root_scope = ExportScope()
         self.history = collections.defaultdict(list)
         self.armature_candidates = {}
         self.skeletons = []
@@ -79,12 +74,13 @@ class Exporter:
         self.warnings = []
         self.scene_objects = []
         self.depsgraph = None
+        self.world_matrices = {}
 
     def execute(self):
         bl_objects = self.get_source_objects()
 
         # resolve heirarchy
-        roots = self.resolve_nodes(bl_objects, sequence=self.scene_objects)
+        roots = self.resolve_nodes(bl_objects, sequence=self.scene_objects, scope=self.root_scope)
 
         # nothing is written unless every switch can be exported as authored
         if self.errors:
@@ -92,8 +88,12 @@ class Exporter:
 
         # resolve armatures
         if any(self.armature_candidates):
-            self.resolve_armatures()
-            self.apply_axis_corrections()
+            self.skeletons, self.skeletons_by_source = export_skeletons.resolve_armatures(
+                self.armature_candidates,
+                self.nodes,
+                self.get,
+            )
+            self.world_matrices = export_skeletons.apply_axis_corrections(self.skeletons, self.nodes)
 
         # resolve depsgraph
         self.resolve_depsgraph()
@@ -101,6 +101,9 @@ class Exporter:
         # uniform scale fix
         for root in roots:
             root.ensure_uniform_scale()
+        self.world_matrices = export_skeletons.evaluate_node_worlds(self.nodes)
+        for skeleton in self.skeletons:
+            skeleton.world_matrices = self.world_matrices
 
         # create ni objects
         creation_schedule = self.build_creation_schedule()
@@ -132,8 +135,10 @@ class Exporter:
     # RESOLVE
     # -------
 
-    def resolve_nodes(self, bl_objects, parent=None, sequence=None):
-        roots = [SceneNode(self, obj, parent) for obj in bl_objects if not obj.parent]
+    def resolve_nodes(self, bl_objects, parent=None, sequence=None, scope=None):
+        if scope is None:
+            scope = self.root_scope
+        roots = [SceneNode(self, obj, scope, parent) for obj in bl_objects if not obj.parent]
         included = set(bl_objects)
 
         queue = collections.deque(roots)
@@ -141,7 +146,7 @@ class Exporter:
             node = queue.popleft()
             if self.process(node):
                 self.nodes.append(node)
-                self.history[node.source].append(node)
+                self.history[node.scope, node.source].append(node)
 
                 if node.role is ExportRole.EMPTY:
                     self.discover_empty(node)
@@ -152,7 +157,7 @@ class Exporter:
                     # slots follow the scene sequence; null-slot markers stay out of node creation
                     children = nif_switch.ordered_children(node.source, sequence or bl_objects)
                     slots = tuple(
-                        ExportNullSlot(child) if nif_switch.is_null_slot(child) else SceneNode(self, child, node)
+                        ExportNullSlot(child) if nif_switch.is_null_slot(child) else SceneNode(self, child, scope, node)
                         for child in children
                         if child in included
                     )
@@ -160,7 +165,7 @@ class Exporter:
                     self.switches.append(plan)
                     queue.extend(slot for slot in slots if isinstance(slot, ExportNode))
                 elif hasattr(node.source, "children"):
-                    queue.extend(SceneNode(self, child, node) for child in bl_objects if child.parent == node.source)
+                    queue.extend(SceneNode(self, child, scope, node) for child in bl_objects if child.parent == node.source)
             elif any(nif_switch.is_switch(p.source) for p in node.parents):
                 self.errors.append(f"'{node.source.name}' is inside a switch-family node but its type ({node.source.type}) cannot be exported")
 
@@ -182,54 +187,20 @@ class Exporter:
                 node.output.active_index = nif_switch.active_index(node.source, targets)
 
     def resolve_armatures(self):
-        # insertion order puts an armature before any armature parented to its bones
-        for source in self.armature_candidates:
-            armature = self.get(source)
-            pose_bones = source.pose.bones
-            bones = tuple(self.get(pose_bones[bone.name]) for bone in source.data.bones)
-            skeleton = ResolvedExportSkeleton(armature, bones)
-            self.skeletons.append(skeleton)
-            self.skeletons_by_source[source] = skeleton
-            self.resolve_armature(skeleton)
+        self.skeletons, self.skeletons_by_source = export_skeletons.resolve_armatures(
+            self.armature_candidates,
+            self.nodes,
+            self.get,
+        )
 
     def resolve_armature(self, skeleton):
-        root_node = skeleton.armature
-        root = root_node.source
-        root_matrix = root_node.matrix_world
-
-        # convert from armature space to local space
-        for node in skeleton.bones:
-            node.matrix_world = root_matrix @ node.matrix_local
-
-        # update parent of those using bone parenting
-        for node in list(root_node.children):
-            if type(node.source) is bpy.types.Object:
-                if node.source.parent_type == "BONE":
-                    pose_bone = root.pose.bones[node.source.parent_bone]
-                    node.parent = self.get(pose_bone)
-                    node.matrix_world = np.array(node.source.matrix_world)
+        export_skeletons.resolve_armature(skeleton, self.nodes, self.get)
 
     def apply_axis_corrections(self):
-        for skeleton in self.skeletons:
-            self.apply_axis_correction(skeleton)
+        self.world_matrices = export_skeletons.apply_axis_corrections(self.skeletons, self.nodes)
 
     def apply_axis_correction(self, skeleton):
-        """ TODO
-            only apply on 'Bip01' nodes
-        """
-        root_node = skeleton.armature
-        root_matrix = root_node.matrix_world
-        root_inverse = la.inv(root_matrix)
-
-        for node in skeleton.bones:
-            prev_matrix_local = node.matrix_local.copy()
-
-            node.matrix_bind = root_inverse @ node.matrix_world @ node.axis_correction
-            node.matrix_world = root_matrix @ node.source.matrix @ node.axis_correction
-
-            inverse_transform = la.solve(node.matrix_local, prev_matrix_local)
-            for child in node.children:
-                child.matrix_local = inverse_transform @ child.matrix_local
+        self.world_matrices = export_skeletons.apply_axis_corrections([skeleton], self.nodes)
 
     def resolve_depsgraph(self):
         temp_modifiers = []
@@ -329,20 +300,28 @@ class Exporter:
     def discover_empty(self, node):
         if node.source.instance_type == 'COLLECTION':
             collection = node.source.instance_collection
-            self.resolve_nodes(list(collection.objects), parent=node)
+            self.resolve_nodes(list(collection.objects), parent=node, scope=ExportScope(node.scope))
 
         if nif_switch.is_switch(node.source):
             return  # an explicit type outranks name conventions
 
         if nif_switch.is_collision(node.source):
-            self.colliders[node.source].update(nif.NiAVObject.descendants(node.source))
-        elif (not self.colliders) and node.name.lower().startswith("collision"):
-            self.colliders[node.source].update(nif.NiAVObject.descendants(node.source))
+            self.colliders[node.scope, node.source].update(self.blender_descendants(node.source))
+        elif not any(scope is node.scope for scope, _source in self.colliders) and node.name.lower().startswith("collision"):
+            self.colliders[node.scope, node.source].update(self.blender_descendants(node.source))
 
     def discover_armature(self, node):
         bones = tuple(node.source.pose.bones)
-        self.armature_candidates[node.source] = bones
-        self.resolve_nodes(bones, parent=node)
+        self.armature_candidates[node.scope, node.source] = bones
+        self.resolve_nodes(bones, parent=node, scope=node.scope)
+
+    @staticmethod
+    def blender_descendants(source):
+        queue = collections.deque(source.children)
+        while queue:
+            child = queue.popleft()
+            yield child
+            queue.extend(child.children)
 
     # -------
     # UTILITY
@@ -365,7 +344,7 @@ class Exporter:
             if target in scheduled_targets:
                 raise RuntimeError("An export target cannot have more than one creation job")
             if target.role is ExportRole.ARMATURE:
-                skeleton = self.skeletons_by_source[target.source]
+                skeleton = self.skeletons_by_source[target.scope, target.source]
                 duplicate_bones = scheduled_bones.intersection(skeleton.bones)
                 if duplicate_bones:
                     raise RuntimeError("Each exported bone must be owned by exactly one armature creation job")
@@ -379,7 +358,27 @@ class Exporter:
 
         if scheduled_bones != owned_bones:
             raise RuntimeError("Each exported bone must be owned by exactly one armature creation job")
-        return tuple(jobs)
+
+        jobs_by_target = {job.target: job for job in jobs}
+        ordered_jobs = []
+        ordered_targets = set()
+
+        def append_with_dependencies(job):
+            if job.target in ordered_targets:
+                return
+            if job.role is ExportRole.MESH:
+                find_armature = getattr(job.target.source, "find_armature", None)
+                armature_source = find_armature() if find_armature is not None else None
+                if armature_source is not None:
+                    skeleton = self.get_skeleton(armature_source, job.target.scope, job.target.name)
+                    append_with_dependencies(jobs_by_target[skeleton.armature])
+            ordered_jobs.append(job)
+            ordered_targets.add(job.target)
+
+        for job in jobs:
+            append_with_dependencies(job)
+
+        return tuple(ordered_jobs)
 
     def create_job(self, job):
         target = job.target
@@ -393,8 +392,24 @@ class Exporter:
             raise RuntimeError(f"Unsupported export creation role: {job.role}")
         target.animation.create()
 
-    def get(self, source):
-        return self.history[source][0]
+    def get(self, source, scope):
+        nodes = self.history[scope, source]
+        if len(nodes) != 1:
+            raise nif_switch.SwitchError(
+                f"Expected one export occurrence of '{source.name}' in its collection scope, found {len(nodes)}"
+            )
+        return nodes[0]
+
+    def get_skeleton(self, source, scope, user_name):
+        current_scope = scope
+        while current_scope is not None:
+            skeleton = self.skeletons_by_source.get((current_scope, source))
+            if skeleton is not None:
+                return skeleton
+            current_scope = current_scope.parent
+        raise nif_switch.SwitchError(
+            f"Armature '{source.name}' used by '{user_name}' has no unambiguous included occurrence in its collection scope"
+        )
 
     def warn(self, message):
         print(f"Warning: {message}")
@@ -402,7 +417,10 @@ class Exporter:
 
     def get_source_objects(self):
         if self.options.use_active_collection:
-            base_objects = list(self.runtime.view_layer.active_layer_collection.collection.all_objects)
+            active_layer_collection = self.runtime.view_layer.active_layer_collection
+            if active_layer_collection is None:
+                raise RuntimeError("NIF export requires an active collection")
+            base_objects = list(active_layer_collection.collection.all_objects)
         else:
             base_objects = list(self.runtime.view_layer.objects)
 
@@ -507,6 +525,7 @@ class Exporter:
                     needs_animation_node = True
 
         if needs_animation_node:
+            replaced_root = None
             # if conditions are met we can update in-place rather than using a wrapper
             in_place =  type(root) is nif.NiNode and root.name not in ("Bip01", "Root Bone")
             if in_place:
@@ -517,6 +536,7 @@ class Exporter:
                 kwargs = dict(name=file_name, children=[root])
             root = nif.NiBSAnimationNode(**kwargs)
             if in_place:
+                assert replaced_root is not None
                 replaced_root.replace_children(())  # clear null slots left by engine-style tail detachment
             root.animated = True
             root.not_random = not self.options.randomize_animations
@@ -525,7 +545,7 @@ class Exporter:
 
     def iter_bones(self, root):
         """yields bone nodes in hierarchical order"""
-        yield from self.skeletons_by_source[root.source].bones
+        yield from self.skeletons_by_source[root.scope, root.source].bones
 
     def setup_collision(self, data):
         # without "RCN" the engine only looks for a RootCollisionNode among the root's direct children
@@ -562,18 +582,18 @@ class Exporter:
 
 
 class SceneNode(ExportNode):
-    def __init__(self, exporter, source, parent=None):
+    def __init__(self, exporter, source, scope, parent=None):
         if isinstance(source, bpy.types.PoseBone):
             matrix_local = np.asarray(source.bone.matrix_local, dtype="<f")
         else:
             matrix_local = np.asarray(source.matrix_local, dtype="<f")
-        super().__init__(exporter, source, matrix_local)
+        super().__init__(exporter, source, matrix_local, scope)
         self.parent = parent
 
     def __repr__(self):
         if not self.parent:
             return f'SceneNode("{self.name}", parent=None)'
-        return f'SceneNode("{self.name}", parent="{self.parent.name}")'
+        return f'SceneNode("{self.name}", parent="{self.parent.source.name}")'
 
     def create(self, *args, **kwargs):
         raise NotImplementedError
@@ -608,50 +628,33 @@ class SceneNode(ExportNode):
 
     @parent.setter
     def parent(self, node):
-        try:  # remove from old children list
-            self._parent.children.remove(self)
-        except (AttributeError, ValueError):
-            pass
+        if self._parent is not None:
+            try:
+                self._parent.children.remove(self)
+            except ValueError:
+                pass
         self._parent = node
-        try:  # append onto new children list
+        if self._parent is not None:
             self._parent.children.append(self)
-        except (AttributeError, ValueError):
-            pass
 
     @property
     def parents(self):
         node = self.parent
         while node:
             yield node
-            node = node.parent
+            node = node._parent
 
     @property
     def properties(self):
         raise NotImplementedError
 
     @property
-    def matrix_world(self):
-        if self.parent:
-            return self.parent.matrix_world @ self.matrix_local
-        return self.matrix_local
-
-    @matrix_world.setter
-    def matrix_world(self, matrix):
-        if self.parent:
-            matrix = la.solve(self.parent.matrix_world, matrix)
-        self.matrix_local = matrix
-
-    @property
     def axis_correction(self):
-        if "Bip01" in self.name:
-            return biped_axis_correction
-        return other_axis_correction
+        return export_axis_correction(self.name)
 
     @property
     def axis_correction_inverse(self):
-        if "Bip01" in self.name:
-            return biped_axis_correction_inverse
-        return other_axis_correction_inverse
+        return import_axis_correction(self.name)
 
     @property
     def is_bounding_box(self):
@@ -659,29 +662,43 @@ class SceneNode(ExportNode):
 
     @property
     def is_collider(self):
-        return any(self.source in s for s in self.exporter.colliders.values())
+        return any(
+            scope is self.scope and self.source in descendants
+            for (scope, _root), descendants in self.exporter.colliders.items()
+        )
 
     def ensure_uniform_scale(self):
         if self.is_bounding_box:
             return
+
+        linear = self.matrix_local[:3, :3]
+        axis_lengths = la.norm(linear, axis=0)
+        if np.any(axis_lengths < 1e-8):
+            raise nif_switch.SwitchError(f"'{self.name}' has a singular transform; zero scale cannot be exported")
+        normalized = linear / axis_lengths
+        if not np.allclose(normalized.T @ normalized, np.eye(3), rtol=0, atol=1e-4):
+            raise nif_switch.SwitchError(f"'{self.name}' has shear, which cannot be represented by a NIF transform")
 
         t, r, s = decompose(self.matrix_local)
 
         if not np.allclose(s[:1], s[1:], rtol=0, atol=0.001):
             print(f"[INFO] {self.source.name} has non-uniform scale")
 
-            try:
-                if self.source.type == "MESH":
-                    self.baked_vertex_scale = s
-            except AttributeError:
-                pass  # pose bone
+            if isinstance(self.source, bpy.types.PoseBone):
+                raise nif_switch.SwitchError(
+                    f"Bone '{self.name}' has non-uniform scale, which cannot be represented without changing its bind pose"
+                )
+            if self.source.type == "MESH":
+                self.baked_vertex_scale = s
 
             self.matrix_local = compose(t, r, 1)
+            scale_matrix = ID44.copy()
+            scale_matrix[:3, :3] = np.diag(s)
             for child in self.children:
-                child.matrix_local[:3, :3] *= s
+                child.matrix_local = scale_matrix @ child.matrix_local
 
         for child in self.children:
-            child.ensure_uniform_scale()
+            cast(SceneNode, child).ensure_uniform_scale()
 
     @staticmethod
     def strip_blender_suffix(name):
@@ -714,7 +731,7 @@ class Empty(SceneNode):
                 self.output = nif.NiSwitchNode()
             elif nif_switch.is_lod(self.source):
                 self.output = nif.NiLODNode()
-            elif self.source in self.exporter.colliders:
+            elif (self.scope, self.source) in self.exporter.colliders:
                 self.output = nif.RootCollisionNode(app_culled=True)
             elif self.name == "PickProxy":
                 self.output = nif.NiCollisionSwitch(propagate=True)
@@ -743,7 +760,8 @@ class Empty(SceneNode):
         return self.output
 
     def create_bounding_volume(self):
-        t, r, s = decompose(self.matrix_world)
+        placement = self.exporter.get(self.source, self.scope)
+        t, r, s = decompose(self.exporter.world_matrices[placement])
         s *= self.source.empty_display_size
         self.output.bounding_volume = nif.NiBoxBV(center=t, axes=r, extents=s)
         self.output.matrix = ID44
@@ -852,6 +870,8 @@ class Mesh(SceneNode):
             bl.loops.foreach_get("normal", ni.normals.ravel())
             bl.free_normals_split()
 
+        if self.baked_vertex_scale is not None:
+            ni.normals /= self.baked_vertex_scale
         ni.normals /= la.norm(ni.normals, axis=1, keepdims=True)
 
     def create_uv_sets(self, ni, bl):
@@ -880,6 +900,10 @@ class Mesh(SceneNode):
         if skin_data is None:
             return
 
+        missing = [node.name for node in (skin_data.root, *skin_data.bones) if node.output is None]
+        if missing:
+            raise RuntimeError(f"Skin references skeleton outputs that have not been created: {', '.join(missing)}")
+
         skin = trishape.skin = nif.NiSkinInstance()
         skin.root, *skin.bones = [node.output for node in (skin_data.root, *skin_data.bones)]
 
@@ -887,7 +911,8 @@ class Mesh(SceneNode):
         skin.data.bone_data = [nif.NiSkinDataBoneData() for _ in skin_data.bones]
 
         # root to skin offset
-        offset = la.solve(skin_data.root.matrix_world, self.matrix_world)
+        placement = self.exporter.get(self.source, self.scope)
+        offset = la.solve(self.exporter.world_matrices[skin_data.root], self.exporter.world_matrices[placement])
         skin.data.matrix = la.inv(offset)
 
         # calculate bone data
@@ -896,7 +921,8 @@ class Mesh(SceneNode):
 
             # skip empty weights
             if len(j) == 0:
-                skin.bones[i] = skin.data.bone_data[i] = None
+                cast(Any, skin.bones)[i] = None
+                cast(Any, skin.data.bone_data)[i] = None
                 continue
 
             # set vertex weights
@@ -905,9 +931,7 @@ class Mesh(SceneNode):
             bone_data.vertex_weights["f1"] = skin_data.weights[i, j]
 
             # skin to bone offset
-            matrix_bind = skin_data.bones[i].matrix_bind
-            if matrix_bind is None:
-                raise RuntimeError(f"Bone '{skin_data.bones[i].name}' has no resolved bind matrix")
+            matrix_bind = skin_data.bind_relative_to_root[skin_data.bones[i]]
             bone_data.matrix = la.solve(matrix_bind, offset)
 
             # apply center/radius
@@ -926,7 +950,7 @@ class Mesh(SceneNode):
             cycle_type=self.exporter.cycle_type,
             target=trishape,
         )
-        controller.stop_time = max(kf[-1, 0] for kf in filter(len, morph_data.keys))
+        controller.stop_time = max(keys[-1, 0] for keys in morph_data.keys if len(keys))
 
         # create morph data
         controller.data = nif.NiMorphData(relative_targets=1)
@@ -968,7 +992,7 @@ class Mesh(SceneNode):
         armature = self.source.find_armature()
         if not armature:
             return None
-        skeleton = self.exporter.skeletons_by_source[armature]
+        skeleton = self.exporter.get_skeleton(armature, self.scope, self.name)
         bone_nodes = {node.source: node for node in skeleton.bones}
 
         # find valid bone groups
@@ -1015,6 +1039,7 @@ class Mesh(SceneNode):
             root=skeleton.armature,
             bones=tuple(bone_nodes[bone] for bone in bones.values()),
             weights=weights,
+            bind_relative_to_root=skeleton.bind_relative_to_root,
         )
 
     def get_morph_data(self, bl_data, ni_data):
@@ -1075,6 +1100,9 @@ class Mesh(SceneNode):
 
         # make relative to basis
         targets[1:] -= targets[0]
+
+        if self.baked_vertex_scale is not None:
+            targets *= self.baked_vertex_scale
 
         # view as per-face-loops
         targets = targets[:, ni_data.triangles].reshape(-1, len(ni_data.vertices), 3)
@@ -1202,7 +1230,7 @@ class Material(SceneNode):
             bl_prop = None
 
         try:
-            if not bl_prop.use_vertex_colors:
+            if not cast(Any, bl_prop).use_vertex_colors:
                 del ni_object.data.vertex_colors
         except AttributeError:
             pass
@@ -1462,9 +1490,11 @@ class Animation(SceneNode):
             target=self.output,
             data=nif.NiVisData(),
         )
-        controller.data.keys.resize(len(keys))
-        controller.data.times = keys[:, 0]
-        controller.data.values = 1 - keys[:, 1]
+        data = controller.data
+        assert data is not None
+        data.keys.resize(len(keys))
+        data.times = keys[:, 0]
+        data.values = 1 - keys[:, 1]
 
         # update controller times
         controller.update_start_stop_times()
@@ -1477,6 +1507,7 @@ class Animation(SceneNode):
         key_type, keys = self.collect_keys(fcurves_dict, "location", num_axes=3)
         if len(keys) == 0:
             return False
+        assert key_type is not None
 
         # get keyframe controller
         controller = self.create_keyframe_controller()
@@ -1511,6 +1542,7 @@ class Animation(SceneNode):
         key_type, keys = self.collect_keys(fcurves_dict, "rotation_euler", num_axes=3)
         if len(keys) == 0:
             return False
+        assert key_type is not None
 
         if isinstance(self.source, bpy.types.PoseBone):
             raise ValueError(f'({self.name}) bones euler animations are not currently supported.')
@@ -1536,8 +1568,8 @@ class Animation(SceneNode):
         if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
             rotations.convert_to_quaternions()
             values = controller.data.rotations.values
-            offset = nif_utils.quaternion_from_matrix(offset)
-            nif_utils.quaternion_mul(offset, values, out=values)
+            offset = quaternion_from_matrix(offset)
+            quaternion_mul(offset, values, out=values)
             values /= la.norm(values, axis=1)[:, None]
 
         return True
@@ -1559,14 +1591,14 @@ class Animation(SceneNode):
 
         # apply axis corrections
         if isinstance(self.source, bpy.types.PoseBone):
-            offset = nif_utils.quaternion_from_matrix(self.axis_correction)
-            nif_utils.quaternion_mul(values, offset, out=values)
+            offset = quaternion_from_matrix(self.axis_correction)
+            quaternion_mul(values, offset, out=values)
 
         # convert to local space
         offset = self.to_local_space()
         if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
-            offset = nif_utils.quaternion_from_matrix(offset)
-            nif_utils.quaternion_mul(offset, values, out=values)
+            offset = quaternion_from_matrix(offset)
+            quaternion_mul(offset, values, out=values)
 
         # normalize rotation keys
         values /= la.norm(values, axis=1)[:, None]
@@ -1584,6 +1616,7 @@ class Animation(SceneNode):
         key_type, keys = self.collect_keys(fcurves_dict, "scale", num_axes=3)
         if len(keys) == 0:
             return False
+        assert key_type is not None
 
         # require uniform scaling
         scales_min = keys[:, 1:4].min(axis=1)
@@ -1762,17 +1795,17 @@ class Animation(SceneNode):
             matrix = self.source.id_data.convert_space(
                 pose_bone=self.source, matrix=ID44.T, from_space="LOCAL", to_space="WORLD"
             )
-            return la.solve(self.parent.matrix_world, matrix)
+            return la.solve(self.exporter.world_matrices[self.parent], matrix)
         else: # non-bone animations
             if self.parent is not None:
-                return la.inv(self.parent.matrix_world)
+                return la.inv(self.exporter.world_matrices[self.parent])
             return ID44
 
     @staticmethod
     def get_fcurves(anim_data):
         if bpy.app.version >= (5, 0, 0):
             from bpy_extras import anim_utils
-            channelbag = anim_utils.animdata_get_channelbag_for_assigned_slot(anim_data)
+            channelbag = cast(Any, anim_utils).animdata_get_channelbag_for_assigned_slot(anim_data)
             return channelbag.fcurves
         return anim_data.action.fcurves
 
@@ -1813,6 +1846,7 @@ class Animation(SceneNode):
 
         if key_type is None:
             key_type = self.get_interpolation_type([fcurves[i] for i in sorted(fcurves)])
+        assert key_type is not None
 
         axes = {
             i: nif.NiFloatData(key_type=key_type, keys=self.collect_keyframe_points([fc], key_type))
