@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 class NiObject(metaclass=NiMeta):
     _refs = ()
     _ptrs = ()
+    _resolve_exclude = ()
 
     def __init__(self, **kwargs: Any) -> None:
         for k, v in kwargs.items():
@@ -62,6 +63,8 @@ class NiObject(metaclass=NiMeta):
 
     def resolve_links(self, objects: dict[int, NiObject]) -> None:
         for name in self._refs + self._ptrs:
+            if name in self._resolve_exclude:
+                continue
             item = getattr(self, name)
             if item is None:
                 continue

@@ -1,27 +1,4 @@
-import types
 import numpy as np
-
-
-def dispatcher(func):
-    registry = {}
-
-    def register(name, func=None):
-        if func is None:
-            return lambda x: register(name, x)
-        return registry.setdefault(name, func)
-
-    def wrapper(self, node):
-        name = getattr(node.source, "type", "NONE")
-        return registry.get(name, func)(self, node)
-
-    wrapper.register = register
-
-    return wrapper
-
-
-class Namespace(types.SimpleNamespace):
-    from copy import copy, deepcopy
-
 
 # --------------
 # MATH FUNCTIONS

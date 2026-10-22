@@ -2,15 +2,19 @@ from __future__ import annotations
 
 from collections import deque
 from enum import IntEnum
+from typing import TYPE_CHECKING, cast
 
 from ..utils.flags import bool_property, enum_property
-from ..utils.math import compose, decompose_uniform, dotproduct, ID33, ZERO3
+from ..utils.math import compose, decompose_uniform, dotproduct, ID33, ID44, ZERO3
 from ..utils.typing import *
 
 from .NiBinaryStream import NiBinaryStream
 from .NiBoundingVolume import NiBoundingVolume
 from .NiObjectNET import NiObjectNET
 from .NiProperty import NiProperty
+
+if TYPE_CHECKING:
+    from .NiNode import NiNode  # cycle: NiNode imports NiAVObject
 
 
 class PropagateMode(IntEnum):
@@ -28,9 +32,7 @@ class NiAVObject(NiObjectNET):
     velocity: NiPoint3 = ZERO3
     properties: list[NiProperty | None] = []
     bounding_volume: NiBoundingVolume | None = None
-
-    # TODO: remove
-    children = []  # type: list[NiAVObject | None]  # pyright: ignore[reportTypeCommentUsage]
+    _parent: NiNode | None = None
 
     # provide access to related enums
     PropagateMode = PropagateMode
@@ -41,6 +43,21 @@ class NiAVObject(NiObjectNET):
     visual = bool_property(mask=0x0008)
 
     _refs = (*NiObjectNET._refs, "properties")
+
+    @property
+    def parent(self) -> NiNode | None:
+        """The node that owns this object's spatial slot. Only the mutators on `NiNode` write it."""
+        return self._parent
+
+    @property
+    def children(self) -> Sequence[NiAVObject | None]:
+        """An immutable empty sequence because leaf objects own no child slots."""
+        return ()
+
+    @classmethod
+    def attributes(cls) -> set[str]:
+        # `_parent` is runtime ownership, not stream data
+        return super().attributes() - {"_parent"}
 
     def load(self, stream: NiBinaryStream) -> None:
         super().load(stream)
@@ -89,6 +106,8 @@ class NiAVObject(NiObjectNET):
         self.translation, self.rotation, self.scale = decompose_uniform(value)
 
     def matrix_relative_to(self, ancestor: NiAVObject) -> ndarray:
+        if self is ancestor:
+            return cast("ndarray", ID44.copy())  # pyright: ignore[reportUnknownMemberType]
         path = reversed(list(self.find_path(ancestor)))
         return dotproduct([obj.matrix for obj in path])
 
@@ -129,15 +148,11 @@ class NiAVObject(NiObjectNET):
             else:
                 queue.extend((node, child) for child in reversed(node.children) if child is not None)
 
-    def find_path(self, ancestor: NiAVObject, breadth_first: bool = True) -> Iterator[NiAVObject]:
-        parents: dict[NiAVObject, NiAVObject] = {}
-        for parent, node in ancestor.descendants_pairs(breadth_first):
-            parents[node] = parent
-            if node is self:
-                break
-        else:
-            raise ValueError(f"find_path: no path from {self} to {ancestor} exists")
-
+    def find_path(self, ancestor: NiAVObject) -> Iterator[NiAVObject]:
+        """Yield self, then each parent, up to but excluding `ancestor`."""
+        node: NiAVObject | None = self
         while node is not ancestor:
+            if node is None:
+                raise ValueError(f"find_path: no path from {self} to {ancestor} exists")
             yield node
-            node = parents[node]
+            node = node._parent

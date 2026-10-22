@@ -1,6 +1,8 @@
 import bpy
 from bpy_extras.io_utils import ExportHelper  # type: ignore
 
+from ..conversion.options import EXPORT_DEFAULTS
+
 
 class ExportScene(bpy.types.Operator, ExportHelper):
     """Export a Morrowind NIF File"""
@@ -19,7 +21,7 @@ class ExportScene(bpy.types.Operator, ExportHelper):
     vertex_precision: bpy.props.FloatProperty(
         name="Vertex Precision",
         description="Precision used when optimizing vertices. Respects normals. (Recommended: 0.001)",
-        default=0.001,
+        default=EXPORT_DEFAULTS.vertex_precision,
         min=0.0001,
         max=1000.0,
     )
@@ -27,19 +29,19 @@ class ExportScene(bpy.types.Operator, ExportHelper):
     use_active_collection: bpy.props.BoolProperty(
         name="Only Collection",
         description="Only export objects from the active collection",
-        default=False,
+        default=EXPORT_DEFAULTS.use_active_collection,
     )
 
     use_selection: bpy.props.BoolProperty(
         name="Only Selected",
         description="Only export objects that are selected",
-        default=False,
+        default=EXPORT_DEFAULTS.use_selection,
     )
 
     export_animations: bpy.props.BoolProperty(
         name="Export Animations",
         description="Animations will be exported. Uncheck to skip all animation data during export",
-        default=True,
+        default=EXPORT_DEFAULTS.export_animations,
     )
 
     randomize_animations: bpy.props.BoolProperty(
@@ -48,7 +50,7 @@ class ExportScene(bpy.types.Operator, ExportHelper):
             "Enable animation randomization. If unchecked animation timings will be synchronized across all instances."
             "\nThis does not affect animations that are controlled by text keys."
         ),
-        default=True,
+        default=EXPORT_DEFAULTS.randomize_animations,
     )
 
     extract_keyframe_data: bpy.props.BoolProperty(
@@ -57,17 +59,17 @@ class ExportScene(bpy.types.Operator, ExportHelper):
             "Extract animations and visuals to corresponding 'x.kf' and 'x.nif' files."
             "\n(e.g. exporting 'base_anim.nif' will create 'xbase_anim.nif' and 'xbase_anim.kf' files)"
         ),
-        default=False,
+        default=EXPORT_DEFAULTS.extract_keyframe_data,
     )
 
-    preserve_root_tranforms: bpy.props.BoolProperty(
+    preserve_root_transforms: bpy.props.BoolProperty(
         name="Preserve Root Transforms",
         description=(
             "Keep a single root object's transformations on the file's root node, instead of inserting an"
             " untransformed parent node above it. This setting is only applicable if there is a single"
             " root object with modified transforms. (Recommended: False)"
         ),
-        default=False,
+        default=EXPORT_DEFAULTS.preserve_root_transforms,
     )
 
     preserve_material_names: bpy.props.BoolProperty(
@@ -76,7 +78,7 @@ class ExportScene(bpy.types.Operator, ExportHelper):
             "Preserve material names from the source file. If unchecked materials will be renamed based on the"
             " assigned textures"
         ),
-        default=True,
+        default=EXPORT_DEFAULTS.preserve_material_names,
     )
 
     strip_numeric_suffixes: bpy.props.BoolProperty(
@@ -85,7 +87,7 @@ class ExportScene(bpy.types.Operator, ExportHelper):
             "Remove Blender's automatic numeric suffixes (.001, .002, etc.) from object and material names during export."
             " Disable this if you have animations that rely on these suffixes"
         ),
-        default=False,
+        default=EXPORT_DEFAULTS.strip_numeric_suffixes,
     )
 
     @classmethod

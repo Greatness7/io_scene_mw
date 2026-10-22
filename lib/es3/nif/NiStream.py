@@ -65,7 +65,12 @@ class NiStream:
     def objects(
         self, iterator: Callable[[Iterable[Iterable[NiObject]]], Iterable[NiObject]] = chain.from_iterable
     ) -> Iterator[NiObject]:
-        traversals = (root.traverse(set()) for root in self.roots if root is not None)
+        # One visited set across every root, so an object reachable from two roots is emitted once and
+        # `write_objects` can index the table by position. The `root not in seen` guard is load-bearing:
+        # `traverse` adds `self` to `seen` and yields it before testing anything, so a root that is also a
+        # descendant of an earlier root would otherwise be emitted a second time with its subtree skipped.
+        seen: set[NiObject] = set()
+        traversals = (root.traverse(seen) for root in self.roots if root is not None and root not in seen)
         yield from iterator(traversals)
 
     def objects_of_type(self, cls: type[NiObjectT] | tuple[type[NiObjectT], ...]) -> Iterator[NiObjectT]:

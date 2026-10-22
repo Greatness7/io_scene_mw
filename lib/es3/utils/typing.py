@@ -7,6 +7,7 @@ from typing import (
     Iterable as Iterable,
     Iterator as Iterator,
     Mapping as Mapping,
+    Sequence as Sequence,
     TYPE_CHECKING,
     TypeVar,
 )

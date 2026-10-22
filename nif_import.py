@@ -13,6 +13,19 @@ from es3.utils.math import ID44, compose, decompose
 from . import nif_utils
 from . import nif_shader
 from . import nif_switch
+from .conversion.options import ImportOptions, import_options_from_mapping
+from .conversion.records import (
+    ImportCreationJob,
+    ImportMeshBuffers,
+    ImportMorphBuffers,
+    ImportNode,
+    ImportNullSlot,
+    ImportRole,
+    ImportSkinBuffers,
+    ImportSwitchPlan,
+    ResolvedImportSkeleton,
+)
+from .conversion.runtime import ImportRuntime
 
 from bpy_extras.io_utils import axis_conversion
 
@@ -29,7 +42,9 @@ def load(context, filepath, report=None, **config):
     print(f"Import File: {filepath}")
     time = timeit.default_timer()
 
-    importer = Importer(filepath, config)
+    options = import_options_from_mapping(config)
+    runtime = ImportRuntime.from_context(context)
+    importer = Importer(filepath, options, runtime)
     importer.execute()
 
     for warning in importer.warnings:
@@ -43,25 +58,20 @@ def load(context, filepath, report=None, **config):
 
 
 class Importer:
-    vertex_precision = 0.001
-    attach_keyframe_data = False
-    discard_root_transforms = True
-    use_existing_materials = False
-    ignore_collision_nodes = False
-    ignore_custom_normals = False
-    ignore_animations = False
-
-    def __init__(self, filepath, config):
-        vars(self).update(config)
-        self.nodes = {}
+    def __init__(self, filepath, options: ImportOptions, runtime: ImportRuntime):
+        self.options = options
+        self.runtime = runtime
+        self.nodes = []
+        self.discovery_order = []
         self.materials = {}
         self.mesh_data = {}
         self.history = collections.defaultdict(list)
-        self.armatures = collections.defaultdict(set)
+        self.bone_candidates = collections.defaultdict(set)
+        self.skeletons = []
+        self.skeletons_by_source = {}
         self.colliders = collections.defaultdict(set)
         self.switches = []
         self.warnings = []
-        self.active_collection = bpy.context.view_layer.active_layer_collection.collection
         self.filepath = pathlib.Path(filepath)
 
     def execute(self):
@@ -75,12 +85,12 @@ class Importer:
 
         # fix transforms
         # several roots sit under the engine's container, so their transforms are real placement
-        if self.discard_root_transforms and len(data.roots) == 1:
+        if self.options.discard_root_transforms and len(data.roots) == 1:
             if isinstance(data.root, nif.NiNode):
                 data.root.matrix = ID44
 
         # attach kf file
-        if self.attach_keyframe_data:
+        if self.options.attach_keyframe_data:
             self.import_keyframe_data(data)
 
         # copy file name
@@ -89,42 +99,43 @@ class Importer:
                 root.name = self.filepath.name
 
         # scale correction
-        data.apply_scale(self.scale_correction)
+        data.apply_scale(self.runtime.scale_correction)
 
         # time correction
-        data.apply_time_scale(bpy.context.scene.render.fps)
+        data.apply_time_scale(self.runtime.fps)
 
         # resolve heirarchy
         roots = self.resolve_nodes(data.roots_of_type(nif.NiAVObject))
 
         # resolve armatures
-        if any(self.armatures):
+        if any(self.bone_candidates):
             self.resolve_armatures()
             self.correct_rest_positions()
             self.apply_axis_corrections()
             self.correct_bone_parenting()
 
+        creation_schedule = self.build_creation_schedule()
+
         # discard frame pos
-        frame_current = bpy.context.scene.frame_current
-        bpy.context.scene.frame_set(0)
+        frame_current = self.runtime.scene.frame_current
+        self.runtime.scene.frame_set(0)
 
         # create bl objects
-        for node, cls in self.nodes.items():
-            if node.output is None:
-                cls(node).create()
+        for job in creation_schedule:
+            self.create_job(job)
 
         # switch types and selections
         self.resolve_switches()
 
         # unmute animations
-        for node in map(self.get, self.armatures):
-            node.animation.set_mute(False)
+        for skeleton in self.skeletons:
+            skeleton.root.animation.set_mute(False)
 
         # restore frame pos
-        bpy.context.scene.frame_current = frame_current
+        self.runtime.scene.frame_current = frame_current
 
         # set active object
-        bpy.context.view_layer.objects.active = self.get_root_output(roots)
+        self.runtime.view_layer.objects.active = self.get_root_output(roots)
 
     # -------
     # RESOLVE
@@ -135,28 +146,36 @@ class Importer:
 
         queue = collections.deque(root_nodes)
         while queue:
-            node = queue.popleft()
-            if isinstance(node, SwitchNull):
-                self.nodes[node] = SwitchNull
-            elif self.process(node):
-                self.history[node.source].append(node)
-                # exact types: NiFltAnimationNode stays an ordinary node
-                if type(node.source) in (nif.NiSwitchNode, nif.NiLODNode):
-                    # null links are slots too: queue them in place so markers link in source order
-                    node.switch_slots = [
-                        SceneNode(self, child, node) if isinstance(child, nif.NiAVObject) else SwitchNull(self, node)
-                        for child in node.source.children
-                    ]
-                    self.switches.append(node)
-                    queue.extend(node.switch_slots)
-                elif hasattr(node.source, "children"):
-                    queue.extend(SceneNode(self, child, node) for child in node.source.children_of_type(nif.NiAVObject))
+            target = queue.popleft()
+            self.discovery_order.append(target)
+            if isinstance(target, ImportNullSlot):
+                continue
+
+            node = target
+            if not self.process(node):
+                continue
+
+            self.nodes.append(node)
+            self.history[node.source].append(node)
+            # exact types: NiFltAnimationNode stays an ordinary node
+            if type(node.source) in (nif.NiSwitchNode, nif.NiLODNode):
+                # null links are slots too: queue them in place so markers link in source order
+                slots = tuple(
+                    SceneNode(self, child, node) if isinstance(child, nif.NiAVObject) else ImportNullSlot(self, node)
+                    for child in node.source.children
+                )
+                plan = node.switch_plan = ImportSwitchPlan(node, slots)
+                self.switches.append(plan)
+                queue.extend(slots)
+            elif hasattr(node.source, "children"):
+                queue.extend(SceneNode(self, child, node) for child in node.source.children_of_type(nif.NiAVObject))
 
         return root_nodes
 
     def resolve_switches(self):
         """Mark imported switch-family nodes and resolve their selections or ranges, once every child object exists."""
-        for node in self.switches:
+        for plan in self.switches:
+            node = plan.owner
             name = node.source.name
             node_type = type(node.source).__name__
             if not (isinstance(node.output, bpy.types.Object) and node.output.type == "EMPTY"):
@@ -166,7 +185,7 @@ class Importer:
             node.output.mw.node_type = node_type
             slots = [
                 slot.output if slot.parent is node and isinstance(slot.output, bpy.types.Object) else None
-                for slot in node.switch_slots
+                for slot in plan.slots
             ]
             if None in slots:
                 self.warn(f"{node_type} '{name}' lost a child to skeleton or collision handling; its indices shifted")
@@ -210,18 +229,21 @@ class Importer:
         "Bip01 L UpperArm" and "Bip01 R UpperArm" skins) join their Bip01's armature, while disjoint skeletons,
         such as several actors in one scene, stay separate armatures.
         """
-        orphan_bones = self.armatures.pop(None, set())
+        orphan_bones = self.bone_candidates.get(None, set())
+        candidates = {root: set(bones) for root, bones in self.bone_candidates.items() if root is not None}
 
         merged = collections.defaultdict(set)
-        for root, bones in self.armatures.items():
-            outer = [n.source for n in self.get(root).parents if n.source in self.armatures]
+        for root, bones in candidates.items():
+            outer = [n.source for n in self.get(root).parents if n.source in candidates]
             merged[outer[-1] if outer else root].update(bones, {root})
 
         # hierarchical order, so armatures are created and corrected in a stable order
-        self.armatures.clear()
         for node in self.nodes:
-            if node.source in merged and node.source not in self.armatures:
-                self.resolve_armature(node.source, merged[node.source], orphan_bones)
+            if node.source in merged and node.source not in self.skeletons_by_source:
+                skeleton = self.resolve_armature(node.source, merged[node.source], orphan_bones)
+                if skeleton is not None:
+                    self.skeletons.append(skeleton)
+                    self.skeletons_by_source[node.source] = skeleton
 
     def resolve_armature(self, root, bones, orphan_bones):
         root_node = self.get(root)
@@ -237,7 +259,7 @@ class Importer:
 
         # bail if no bones present
         if len(bones) == 0:
-            return
+            return None
 
         # consider any descendants which are animated to be bones
         # this is usually desired, and to not do so would mean we
@@ -258,10 +280,10 @@ class Importer:
                 bones.add(source)
 
         # order bones by heirarchy
-        self.armatures[root] = dict.fromkeys(node.source for node in self.nodes if node.source in bones).keys()
+        ordered_bones = tuple(node for node in self.nodes if node.source in bones)
 
         # preserve bone pose matrices
-        for node in self.iter_bones(root_node):
+        for node in ordered_bones:
             node.matrix_posed = node.matrix_world
 
         # send all bones to rest pose
@@ -269,11 +291,13 @@ class Importer:
         root.apply_skins(keep_skins=True)
 
         # apply updated rest matrices
-        for node in self.iter_bones(root_node):
+        for node in ordered_bones:
             node.matrix_local = node.source.matrix
+            node.role = ImportRole.BONE
 
         # specify node as Armature
-        self.nodes[root_node] = Armature
+        root_node.role = ImportRole.ARMATURE
+        return ResolvedImportSkeleton(root_node, ordered_bones)
 
     def correct_rest_positions(self):
         """Correct the rest pose of the root bone.
@@ -288,8 +312,8 @@ class Importer:
         regards to location and scale, but has had its rotation about all axes
         aligned to the nearest 90 degree angle.
         """
-        for root in map(self.get, self.armatures):
-            self.correct_rest_position(root)
+        for skeleton in self.skeletons:
+            self.correct_rest_position(skeleton.root)
 
     def correct_rest_position(self, root):
         root_bone = next(self.iter_bones(root))
@@ -313,11 +337,12 @@ class Importer:
         root_bone.matrix_world = corrected_matrix
 
     def apply_axis_corrections(self):
-        for root in map(self.get, self.armatures):
-            self.apply_axis_correction(root)
+        for skeleton in self.skeletons:
+            self.apply_axis_correction(skeleton.root)
 
     def apply_axis_correction(self, root):
         bones = list(self.iter_bones(root))
+        bone_set = set(bones)
 
         # apply bone axis corrections
         for node in reversed(bones):
@@ -333,10 +358,10 @@ class Importer:
             if not (kf_controller and kf_controller.data):
                 continue
 
-            try:
+            if node.parent in bone_set:
                 parent_matrix = node.parent.matrix_posed
                 parent_matrix_uncorrected = parent_matrix @ node.parent.axis_correction_inverse
-            except AttributeError:  # parent is not bone
+            else:
                 parent_matrix = node.parent.matrix_world if node.parent else ID44
                 parent_matrix_uncorrected = parent_matrix
 
@@ -374,60 +399,67 @@ class Importer:
         Usually this occurs when a file contains nested armatures.
         See `Tri Hand01` in the vanilla `r/skeleton.nif` model for example.
         """
-        for armature in map(self.get, self.armatures):
-            for node in self.get_skinned_meshes(armature):
-                if node.parent != armature:
+        for skeleton in self.skeletons:
+            for node in self.get_skinned_meshes(skeleton.root):
+                if node.parent != skeleton.root:
                     matrix_world = node.matrix_world
-                    node.parent = armature
+                    node.parent = skeleton.root
                     node.matrix_world = matrix_world
 
     # -------
     # PROCESS
     # -------
 
-    @nif_utils.dispatcher
     def process(self, node):
+        source_type = type(node.source)
+        if source_type in (
+            nif.NiNode,
+            nif.NiLODNode,
+            nif.NiSwitchNode,
+            nif.NiBSAnimationNode,
+            nif.NiCollisionSwitch,
+        ):
+            return self.process_empty(node)
+        if source_type is nif.NiTriShape:
+            return self.process_mesh(node)
+        if source_type is nif.RootCollisionNode:
+            return self.process_collision(node)
+
         print(f"Warning: Unhandled Type: {node.source.type}")
         # containment: an unsupported type becomes a placeholder rather than terminating
         # traversal, so its supported descendants survive. Returning True is what lets
         # resolve_nodes keep walking; deliberate skips (collision) still return False.
-        self.nodes[node] = Empty
+        node.role = ImportRole.EMPTY
         return True
 
-    @process.register("NiNode")
-    @process.register("NiLODNode")
-    @process.register("NiSwitchNode")
-    @process.register("NiBSAnimationNode")
-    @process.register("NiCollisionSwitch")
     def process_empty(self, node):
-        self.nodes[node] = Empty
+        node.role = ImportRole.EMPTY
 
         # detect bones via name conventions
         name = node.name.lower()
         if (name == "bip01") or (name == "root bone"):
-            self.armatures[node.source].update()
+            self.bone_candidates[node.source].update()
         elif ("bip01" in name) or name.endswith(" bone"):
-            self.armatures[None].add(node.source)
+            self.bone_candidates[None].add(node.source)
 
         return True
 
-    @process.register("NiTriShape")
     def process_mesh(self, node):
-        self.nodes[node] = Mesh
+        node.role = ImportRole.MESH
 
         # track skinned meshes
         skin = node.source.skin
         if skin and skin.root and skin.bones:
-            self.armatures[skin.root].update(skin.bones)
+            self.bone_candidates[skin.root].update(skin.bones)
 
         return True
 
-    @process.register("RootCollisionNode")
     def process_collision(self, node):
-        if self.ignore_collision_nodes:
+        if self.options.ignore_collision_nodes:
+            node.role = ImportRole.PRUNED
             return False
 
-        self.nodes[node] = Empty
+        node.role = ImportRole.EMPTY
         self.colliders[node.source].update(node.source.descendants())
         return True
 
@@ -443,7 +475,55 @@ class Importer:
         self.warnings.append(message)
 
     def iter_bones(self, root):
-        yield from map(self.get, self.armatures[root.source])
+        yield from self.skeletons_by_source[root.source].bones
+
+    def build_creation_schedule(self):
+        owned_bones = set()
+        for skeleton in self.skeletons:
+            duplicate_bones = owned_bones.intersection(skeleton.bones)
+            if duplicate_bones:
+                raise RuntimeError("Each imported bone must belong to exactly one resolved skeleton")
+            owned_bones.update(skeleton.bones)
+
+        jobs = []
+        scheduled_bones = set()
+        scheduled_targets = set()
+
+        for target in self.discovery_order:
+            if isinstance(target, ImportNullSlot):
+                if target in scheduled_targets:
+                    raise RuntimeError("An import target cannot have more than one creation job")
+                jobs.append(ImportCreationJob(target, None))
+                scheduled_targets.add(target)
+                continue
+            if target.role in (ImportRole.PRUNED, ImportRole.BONE):
+                continue
+            if target in scheduled_targets:
+                raise RuntimeError("An import target cannot have more than one creation job")
+            if target.role is ImportRole.ARMATURE:
+                skeleton = self.skeletons_by_source[target.source]
+                jobs.append(ImportCreationJob(target, target.role, skeleton.bones))
+                scheduled_bones.update(skeleton.bones)
+            else:
+                jobs.append(ImportCreationJob(target, target.role))
+            scheduled_targets.add(target)
+
+        if scheduled_bones != owned_bones:
+            raise RuntimeError("Each imported bone must be owned by exactly one armature creation job")
+        return tuple(jobs)
+
+    def create_job(self, job):
+        target = job.target
+        if isinstance(target, ImportNullSlot):
+            SwitchNull(target).create()
+        elif job.role is ImportRole.EMPTY:
+            Empty(target).create()
+        elif job.role is ImportRole.MESH:
+            Mesh(target).create()
+        elif job.role is ImportRole.ARMATURE:
+            Armature(target).create(job.owned_bones)
+        else:
+            raise RuntimeError(f"Unsupported import creation role: {job.role}")
 
     def get_root_output(self, roots):
         # a root may legitimately have no output: an ignored RootCollisionNode
@@ -453,7 +533,7 @@ class Importer:
     def get_armature_node(self, source):
         """The armature node deforming with `source`: itself or its nearest ancestor that is an armature."""
         node = self.get(source)
-        return next((n for n in (node, *node.parents) if n.source in self.armatures), None)
+        return next((n for n in (node, *node.parents) if n.source in self.skeletons_by_source), None)
 
     def get_skinned_meshes(self, armature):
         for node in self.nodes:
@@ -482,23 +562,11 @@ class Importer:
             kf_data.load(kf_path)
             data.attach_keyframe_data(kf_data)
 
-    @property
-    def scale_correction(self):
-        addon = bpy.context.preferences.addons[__package__]
-        return addon.preferences.scale_correction
-
-
-class SceneNode:
+class SceneNode(ImportNode):
 
     def __init__(self, importer, source, parent=None):
-        self.importer = importer
-        #
-        self.source = source
-        self.output = None
-        #
+        super().__init__(importer, source, np.asarray(source.matrix, dtype="<f"))
         self.parent = parent
-        self.children = list()
-        self.matrix_local = np.asarray(source.matrix, dtype="<f")
 
     def __repr__(self):
         if not self.parent:
@@ -592,7 +660,7 @@ class Empty(SceneNode):
 
     def create(self, bl_data=None):
         self.output = self.create_object(bl_data)
-        self.output.empty_display_size *= self.importer.scale_correction
+        self.output.empty_display_size *= self.importer.runtime.scale_correction
         self.output.mw.object_flags = self.source.flags
 
         bl_parent = getattr(self.parent, "output", None)
@@ -623,7 +691,7 @@ class Empty(SceneNode):
 
     def create_object(self, bl_data=None):
         bl_object = bpy.data.objects.new(self.name, bl_data)
-        self.importer.active_collection.objects.link(bl_object)
+        self.importer.runtime.active_collection.objects.link(bl_object)
         bl_object.select_set(True)
         return bl_object
 
@@ -633,19 +701,13 @@ class Empty(SceneNode):
         self.output.matrix_world = self.source.bounding_volume.matrix.T
 
 
-class SwitchNull(SceneNode):
+class SwitchNull(ImportNullSlot):
     """A null link in a switch's children, realized as a marked Empty so the slot keeps its index."""
 
-    def __init__(self, importer, parent=None):
-        if isinstance(importer, SwitchNull):  # the creation pass wraps nodes, like Empty(node)
-            self.__dict__ = importer.__dict__
-            return
-        self.importer = importer
-        self.source = None
-        self.output = None
-        self.parent = parent
-        self.children = list()
-        self.matrix_local = ID44.copy()
+    __slots__ = ()
+
+    def __init__(self, slot):
+        self.__dict__ = slot.__dict__
 
     @property
     def name(self):
@@ -657,7 +719,7 @@ class SwitchNull(SceneNode):
             return None  # skeletal switch, diagnosed by resolve_switches
 
         self.output = bpy.data.objects.new(self.name, None)
-        self.importer.active_collection.objects.link(self.output)
+        self.importer.runtime.active_collection.objects.link(self.output)
         self.output.select_set(True)
         self.output.empty_display_size = bl_parent.empty_display_size * 0.5
         self.output.mw.is_switch_null = True
@@ -671,7 +733,7 @@ class Armature(SceneNode):
     def __init__(self, node):
         self.__dict__ = node.__dict__
 
-    def create(self):
+    def create(self, bone_nodes):
         # create armature object
         bl_data = bpy.data.armatures.new(self.name)
         bl_object = Empty(self).create(bl_data)
@@ -681,7 +743,7 @@ class Armature(SceneNode):
         bl_object.show_in_front = True
 
         # swap to edit mode to allow creation of bones
-        bpy.context.view_layer.objects.active = bl_object
+        self.importer.runtime.view_layer.objects.active = bl_object
         bpy.ops.object.mode_set(mode="EDIT")
 
         # used for calculating armature space matrices
@@ -691,7 +753,7 @@ class Armature(SceneNode):
         bones = {}
 
         # position bone heads
-        for node in self.importer.iter_bones(self):
+        for node in bone_nodes:
             # create bone and assign its parent
             bone = bones[node] = bl_data.edit_bones.new(node.bone_name)
             bone.parent = bones.get(node.parent)
@@ -731,7 +793,7 @@ class Armature(SceneNode):
             # compute the armature-space matrix
             pose_bone.matrix = (root_inverse @ node.matrix_posed).T
             # TODO try not to call scene update
-            bpy.context.view_layer.depsgraph.update()
+            self.importer.runtime.view_layer.depsgraph.update()
             # create animations, preserve poses
             node.animation.create()
             node.animation.set_mute(True)
@@ -762,8 +824,8 @@ class Mesh(SceneNode):
             self.create_vertex_colors(bl_object, ni_data.vertex_colors)
             self.create_uv_sets(bl_object, ni_data.uv_sets)
 
-            self.create_vertex_weights(bl_object, ni_data.vertex_weights)
-            self.create_vertex_morphs(bl_object, ni_data.vertex_morphs)
+            self.create_vertex_weights(bl_object, ni_data.skin)
+            self.create_vertex_morphs(bl_object, ni_data.morphs)
 
             self.create_normals(bl_object, ni_data.normals)
 
@@ -810,7 +872,7 @@ class Mesh(SceneNode):
             ob.data.polygons.foreach_set("use_smooth", use_smooth)
 
             # apply custom normals
-            if not self.importer.ignore_custom_normals:
+            if not self.importer.options.ignore_custom_normals:
                 if ob.data.validate(verbose=False, clean_customdata=False):
                     print(f"Warning: Invalid mesh data, custom normals will be skipped: ({ob.name})")
                 else:
@@ -828,9 +890,11 @@ class Mesh(SceneNode):
             vc = ob.data.vertex_colors.new()
             vc.data.foreach_set("color", vertex_colors.ravel())
 
-    def create_vertex_weights(self, ob, vertex_weights):
-        if not len(vertex_weights):
+    def create_vertex_weights(self, ob, skin_data):
+        if skin_data is None:
             return
+
+        vertex_weights = skin_data.weights
 
         root = self.importer.get(self.source.skin.root)
         bones = map(self.importer.get, self.source.skin.bones)
@@ -847,9 +911,11 @@ class Mesh(SceneNode):
             for j in np.flatnonzero(weights).tolist():
                 vg.add((j,), weights[j], "ADD")
 
-    def create_vertex_morphs(self, ob, vertex_morphs):
-        if not len(vertex_morphs):
+    def create_vertex_morphs(self, ob, morph_data):
+        if morph_data is None:
             return
+
+        vertex_morphs = morph_data.targets
 
         animation = self.animation
 
@@ -901,7 +967,7 @@ class Mesh(SceneNode):
 
         if len(vertex_colors):
             # reconstruct as per-triangle layout
-            vertex_colors = vertex_colors[triangles].reshape(-1, 3)
+            vertex_colors = vertex_colors[triangles].reshape(-1, 4)
 
         # remove doubles
         scale = decompose(self.matrix_world)[-1]
@@ -909,7 +975,7 @@ class Mesh(SceneNode):
             vertices * scale,
             *vertex_weights,
             *vertex_morphs,
-            precision=self.importer.vertex_precision,
+            precision=self.importer.options.vertex_precision,
         )
         if len(vertices) > len(indices) > 3:
             vertices = vertices[indices]
@@ -947,14 +1013,14 @@ class Mesh(SceneNode):
             triangles[target_faces] = new_vertex_indices.reshape(-1, 3)
         # '''
 
-        return nif_utils.Namespace(
+        return ImportMeshBuffers(
             triangles=triangles,
             vertices=vertices,
             normals=normals,
             uv_sets=uv_sets,
             vertex_colors=vertex_colors,
-            vertex_weights=vertex_weights,
-            vertex_morphs=vertex_morphs,
+            skin=ImportSkinBuffers(vertex_weights) if len(vertex_weights) else None,
+            morphs=ImportMorphBuffers(vertex_morphs) if len(vertex_morphs) else None,
         )
 
 
@@ -1005,7 +1071,7 @@ class Material(SceneNode):
             self.link_object_material(self.output, bl_prop.material)
             return
         finally:
-            if self.importer.use_existing_materials:
+            if self.importer.options.use_existing_materials:
                 bl_prop.material.name = name
 
         # Setup Properties
@@ -1033,7 +1099,7 @@ class Material(SceneNode):
 
     def create_material_property(self, bl_prop, ni_prop):
         # Material Name
-        if not self.importer.use_existing_materials:
+        if not self.importer.options.use_existing_materials:
             bl_prop.material.name = ni_prop.name
         # Material Color
         bl_prop.ambient_color[:3] = ni_prop.ambient_color
@@ -1109,7 +1175,7 @@ class Material(SceneNode):
         return image
 
     def calc_name_from_textures(self, ni_prop):
-        if not self.importer.use_existing_materials:
+        if not self.importer.options.use_existing_materials:
             return ""
 
         if ni_prop is None:
@@ -1132,7 +1198,7 @@ class Material(SceneNode):
         Check if a material with the same name and properties already exists
         in the current blend file. If so, use it instead of making a new one.
         """
-        if not self.importer.use_existing_materials:
+        if not self.importer.options.use_existing_materials:
             return
 
         use_vertex_colors = bool(len(self.source.data.vertex_colors))
@@ -1170,8 +1236,8 @@ class Material(SceneNode):
         slot.link = "OBJECT"
         slot.material = bl_material
 
-    @staticmethod
     def resolve_texture_path(
+        self,
         relpath,
         case_insensitive = pathlib.Path(__file__.upper()).exists()
     ):
@@ -1190,9 +1256,8 @@ class Material(SceneNode):
         suffixes = {path.suffix, ".dds", ".tga", ".bmp"}
 
         # evaluate final image path
-        addon = bpy.context.preferences.addons[__package__]
-        for item in addon.preferences.texture_paths:
-            abspath = item.name / path
+        for directory in self.importer.runtime.texture_paths:
+            abspath = directory / path
             for suffix in suffixes:
                 abspath = abspath.with_suffix(suffix)
                 if not case_insensitive:
@@ -1200,7 +1265,7 @@ class Material(SceneNode):
                 if abspath.exists():
                     return abspath
 
-        return ("textures" / path)
+        return pathlib.Path("textures") / path
 
 
 class Animation(SceneNode):
@@ -1210,7 +1275,7 @@ class Animation(SceneNode):
         self.__dict__ = node.__dict__
 
     def create(self):
-        if self.importer.ignore_animations:
+        if self.importer.options.ignore_animations:
             return
 
         bl_object = self.output.id_data
@@ -1357,7 +1422,7 @@ class Animation(SceneNode):
         fc.update()
 
     def create_uv_controller(self, controller):
-        if self.importer.ignore_animations:
+        if self.importer.options.ignore_animations:
             return
 
         data = controller.data
@@ -1408,7 +1473,7 @@ class Animation(SceneNode):
         self.update_frame_range(controller)
 
     def create_color_controller(self, bl_prop, ni_prop):
-        if self.importer.ignore_animations:
+        if self.importer.options.ignore_animations:
             return
 
         controller = ni_prop.controllers.find_type(nif.NiMaterialColorController)
@@ -1445,7 +1510,7 @@ class Animation(SceneNode):
         self.update_frame_range(controller)
 
     def create_alpha_controller(self, bl_prop, ni_prop):
-        if self.importer.ignore_animations:
+        if self.importer.options.ignore_animations:
             return
 
         controller = ni_prop.controllers.find_type(nif.NiAlphaController)
@@ -1514,14 +1579,13 @@ class Animation(SceneNode):
             fcurves.keyframe_points.foreach_set("handle_left", handles[0, axis].ravel())
             fcurves.keyframe_points.foreach_set("handle_right", handles[1, axis].ravel())
 
-    @staticmethod
-    def update_frame_range(controller):
-        scene = bpy.context.scene
+    def update_frame_range(self, controller):
+        scene = self.importer.runtime.scene
         frame_end = int(np.ceil(controller.stop_time))
         scene.frame_end = scene.frame_preview_end = max(scene.frame_end, frame_end)
 
     def set_mute(self, state, fcurves=None):
-        if self.importer.ignore_animations:
+        if self.importer.options.ignore_animations:
             return
 
         if fcurves is None:

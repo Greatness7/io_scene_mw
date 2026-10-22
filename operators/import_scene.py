@@ -1,6 +1,8 @@
 import bpy
 from bpy_extras.io_utils import ImportHelper  # type: ignore
 
+from ..conversion.options import IMPORT_DEFAULTS
+
 
 class ImportScene(bpy.types.Operator, ImportHelper):
     """Import a Morrowind NIF File"""
@@ -19,7 +21,7 @@ class ImportScene(bpy.types.Operator, ImportHelper):
     vertex_precision: bpy.props.FloatProperty(
         name="Vertex Precision",
         description="Precision used when optimizing vertices. (Recommended: 0.001)",
-        default=0.001,
+        default=IMPORT_DEFAULTS.vertex_precision,
         min=0.0001,
         max=1000.0,
     )
@@ -30,7 +32,7 @@ class ImportScene(bpy.types.Operator, ImportHelper):
             "Attach animations from the corresponding .kf file. Requires file names to be an exact match."
             "\n(e.g. when enabled importing 'xbase_anim.nif' will attach animations from 'xbase_anim.kf')"
         ),
-        default=False,
+        default=IMPORT_DEFAULTS.attach_keyframe_data,
     )
 
     discard_root_transforms: bpy.props.BoolProperty(
@@ -40,7 +42,7 @@ class ImportScene(bpy.types.Operator, ImportHelper):
             " provided by individual cell references. Despite this some meshes do define root transformations,"
             " which can lead to unintended results if accidentally applied before exporting"
         ),
-        default=True,
+        default=IMPORT_DEFAULTS.discard_root_transforms,
     )
 
     use_existing_materials: bpy.props.BoolProperty(
@@ -50,12 +52,12 @@ class ImportScene(bpy.types.Operator, ImportHelper):
             " Pre-existing material names must match the base texture name (without extension) to be eligible."
             " When enabled newly imported materials are automatically renamed to their base texture file name"
         ),
-        default=False,
+        default=IMPORT_DEFAULTS.use_existing_materials,
     )
 
-    ignore_collision_nodes: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
-    ignore_custom_normals: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
-    ignore_animations: bpy.props.BoolProperty(default=False, options={"HIDDEN"})
+    ignore_collision_nodes: bpy.props.BoolProperty(default=IMPORT_DEFAULTS.ignore_collision_nodes, options={"HIDDEN"})
+    ignore_custom_normals: bpy.props.BoolProperty(default=IMPORT_DEFAULTS.ignore_custom_normals, options={"HIDDEN"})
+    ignore_animations: bpy.props.BoolProperty(default=IMPORT_DEFAULTS.ignore_animations, options={"HIDDEN"})
 
     @classmethod
     def poll(cls, context):

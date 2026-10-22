@@ -11,11 +11,25 @@ from es3 import nif
 from es3.utils import meshoptimizer
 from es3.utils.math import ID44, compose, decompose
 
+from dataclasses import replace
 from functools import cached_property
 
 from . import nif_utils
 from . import nif_shader
 from . import nif_switch
+from .conversion.options import ExportOptions, export_options_from_mapping
+from .conversion.records import (
+    ExportCreationJob,
+    ExportMorphBuffers,
+    ExportNode,
+    ExportNullSlot,
+    ExportRole,
+    ExportSkinBuffers,
+    ExportSwitchPlan,
+    MaterialPartition,
+    ResolvedExportSkeleton,
+)
+from .conversion.runtime import ExportRuntime
 
 from bpy_extras.io_utils import axis_conversion
 
@@ -32,7 +46,9 @@ def save(context, filepath, report=None, **config):
     print(f"Export File: {filepath}")
     time = timeit.default_timer()
 
-    exporter = Exporter(filepath, config)
+    options = export_options_from_mapping(config)
+    runtime = ExportRuntime.from_context(context)
+    exporter = Exporter(filepath, options, runtime)
     exporter.execute()
 
     for warning in exporter.warnings:
@@ -46,22 +62,17 @@ def save(context, filepath, report=None, **config):
 
 
 class Exporter:
-    vertex_precision = 0.001
-    extract_keyframe_data = False
-    export_animations = True
-    preserve_root_tranforms = False
-    preserve_material_names = True
-    strip_numeric_suffixes = True
-    randomize_animations = False
-
-    def __init__(self, filepath, config):
-        vars(self).update(config)
+    def __init__(self, filepath, options: ExportOptions, runtime: ExportRuntime):
+        self.options = options
+        self.runtime = runtime
         self.filepath = pathlib.Path(filepath)
-        self.nodes = {}
+        self.nodes = []
         self.materials = {}
         self.pixel_datas = {}
         self.history = collections.defaultdict(list)
-        self.armatures = collections.defaultdict(set)
+        self.armature_candidates = {}
+        self.skeletons = []
+        self.skeletons_by_source = {}
         self.colliders = collections.defaultdict(set)
         self.switches = []
         self.errors = []
@@ -80,7 +91,7 @@ class Exporter:
             raise nif_switch.SwitchError("\n".join(dict.fromkeys(self.errors)))
 
         # resolve armatures
-        if any(self.armatures):
+        if any(self.armature_candidates):
             self.resolve_armatures()
             self.apply_axis_corrections()
 
@@ -92,10 +103,9 @@ class Exporter:
             root.ensure_uniform_scale()
 
         # create ni objects
-        for node, cls in self.nodes.items():
-            if node.output is None:
-                cls(node).create()
-                node.animation.create()
+        creation_schedule = self.build_creation_schedule()
+        for job in creation_schedule:
+            self.create_job(job)
 
         # switch children and selections, once every real output exists
         self.finalize_switches()
@@ -103,19 +113,19 @@ class Exporter:
         data = nif.NiStream()
         data.root = self.get_root_output(roots)
         self.widen_controller_ranges(data)
-        data.apply_scale(self.scale_correction)
-        data.apply_time_scale(1 / bpy.context.scene.render.fps)
+        data.apply_scale(self.runtime.scale_correction)
+        data.apply_time_scale(1 / self.runtime.fps)
         data.merge_properties(ignore={"name", "shine", "specular_color"})
         child_orders = [(node, list(node.children)) for node in data.objects_of_type(nif.NiNode)]
         data.sort()
         for node, children in child_orders:
-            node.children = children
+            node.reorder_children(children)
         self.setup_collision(data)
         self.setup_markers(data)
         data.save(self.filepath)
 
         # extract x/kf file
-        if self.extract_keyframe_data:
+        if self.options.extract_keyframe_data:
             self.export_keyframe_data(data)
 
     # -------
@@ -130,17 +140,25 @@ class Exporter:
         while queue:
             node = queue.popleft()
             if self.process(node):
+                self.nodes.append(node)
                 self.history[node.source].append(node)
+
+                if node.role is ExportRole.EMPTY:
+                    self.discover_empty(node)
+                elif node.role is ExportRole.ARMATURE:
+                    self.discover_armature(node)
+
                 if nif_switch.is_switch(node.source):
                     # slots follow the scene sequence; null-slot markers stay out of node creation
                     children = nif_switch.ordered_children(node.source, sequence or bl_objects)
-                    node.switch_slots = [
-                        child if nif_switch.is_null_slot(child) else SceneNode(self, child, node)
+                    slots = tuple(
+                        ExportNullSlot(child) if nif_switch.is_null_slot(child) else SceneNode(self, child, node)
                         for child in children
                         if child in included
-                    ]
-                    self.switches.append(node)
-                    queue.extend(slot for slot in node.switch_slots if isinstance(slot, SceneNode))
+                    )
+                    plan = node.switch_plan = ExportSwitchPlan(node, slots)
+                    self.switches.append(plan)
+                    queue.extend(slot for slot in slots if isinstance(slot, ExportNode))
                 elif hasattr(node.source, "children"):
                     queue.extend(SceneNode(self, child, node) for child in bl_objects if child.parent == node.source)
             elif any(nif_switch.is_switch(p.source) for p in node.parents):
@@ -149,10 +167,11 @@ class Exporter:
         return roots
 
     def finalize_switches(self):
-        for node in self.switches:
-            slots = node.switch_slots
-            node.output.children = [slot.output if isinstance(slot, SceneNode) else None for slot in slots]
-            targets = [slot.source if isinstance(slot, SceneNode) else slot for slot in slots]
+        for plan in self.switches:
+            node = plan.owner
+            slots = plan.slots
+            node.output.replace_children([slot.output if isinstance(slot, ExportNode) else None for slot in slots])
+            targets = [slot.source for slot in slots]
             if nif_switch.is_lod(node.source):
                 # data.apply_scale converts these to game units later and leaves no-limit untouched
                 node.output.active_index = 0
@@ -164,15 +183,22 @@ class Exporter:
 
     def resolve_armatures(self):
         # insertion order puts an armature before any armature parented to its bones
-        for root in self.armatures:
-            self.resolve_armature(root)
+        for source in self.armature_candidates:
+            armature = self.get(source)
+            pose_bones = source.pose.bones
+            bones = tuple(self.get(pose_bones[bone.name]) for bone in source.data.bones)
+            skeleton = ResolvedExportSkeleton(armature, bones)
+            self.skeletons.append(skeleton)
+            self.skeletons_by_source[source] = skeleton
+            self.resolve_armature(skeleton)
 
-    def resolve_armature(self, root):
-        root_node = self.get(root)
+    def resolve_armature(self, skeleton):
+        root_node = skeleton.armature
+        root = root_node.source
         root_matrix = root_node.matrix_world
 
         # convert from armature space to local space
-        for node in self.iter_bones(root_node):
+        for node in skeleton.bones:
             node.matrix_world = root_matrix @ node.matrix_local
 
         # update parent of those using bone parenting
@@ -184,17 +210,18 @@ class Exporter:
                     node.matrix_world = np.array(node.source.matrix_world)
 
     def apply_axis_corrections(self):
-        for root in self.armatures:
-            self.apply_axis_correction(self.get(root))
+        for skeleton in self.skeletons:
+            self.apply_axis_correction(skeleton)
 
-    def apply_axis_correction(self, root_node):
+    def apply_axis_correction(self, skeleton):
         """ TODO
             only apply on 'Bip01' nodes
         """
+        root_node = skeleton.armature
         root_matrix = root_node.matrix_world
         root_inverse = la.inv(root_matrix)
 
-        for node in self.iter_bones(root_node):
+        for node in skeleton.bones:
             prev_matrix_local = node.matrix_local.copy()
 
             node.matrix_bind = root_inverse @ node.matrix_world @ node.axis_correction
@@ -210,7 +237,7 @@ class Exporter:
         temp_mute_keys = []
         temp_unhidden = []
         try:
-            meshes = [node.source for node, cls in self.nodes.items() if cls is Mesh]
+            meshes = [node.source for node in self.nodes if node.role is ExportRole.MESH]
             for source in meshes:
                 # hidden switch variants still export; disabled objects are not evaluated
                 if source.hide_viewport:
@@ -245,7 +272,7 @@ class Exporter:
                             temp_mute_keys.append(k)
 
             # get evaluated dependency graph
-            self.depsgraph = bpy.context.evaluated_depsgraph_get()
+            self.depsgraph = self.runtime.context.evaluated_depsgraph_get()
         finally:
             for m in temp_hide_view:
                 m.show_viewport = True
@@ -267,53 +294,104 @@ class Exporter:
     # PROCESS
     # -------
 
-    @nif_utils.dispatcher
     def process(self, node):
+        if isinstance(node.source, bpy.types.PoseBone):
+            return self.process_bone(node)
+        if node.source.type == "EMPTY":
+            return self.process_empty(node)
+        if node.source.type == "MESH":
+            return self.process_mesh(node)
+        if node.source.type == "ARMATURE":
+            return self.process_armature(node)
+
         print(f"Warning: Unsupported Type ({node.source.type})")
         return False
 
-    @process.register("EMPTY")
     def process_empty(self, node):
-        self.nodes[node] = Empty
+        node.role = ExportRole.EMPTY
+        return True
 
+    def process_mesh(self, node):
+        node.role = ExportRole.MESH
+        return True
+
+    def process_armature(self, node):
+        node.role = ExportRole.ARMATURE
+        return True
+
+    def process_bone(self, node):
+        node.role = ExportRole.BONE
+        node_type = node.source.mw.node_type
+        if node_type != nif_switch.NODE:
+            self.errors.append(f"bone '{node.source.name}' is marked as a {node_type}; skeletal {node_type} is not supported yet")
+        return True
+
+    def discover_empty(self, node):
         if node.source.instance_type == 'COLLECTION':
             collection = node.source.instance_collection
             self.resolve_nodes(list(collection.objects), parent=node)
 
         if nif_switch.is_switch(node.source):
-            return True  # an explicit type outranks name conventions
+            return  # an explicit type outranks name conventions
 
         if nif_switch.is_collision(node.source):
             self.colliders[node.source].update(nif.NiAVObject.descendants(node.source))
         elif (not self.colliders) and node.name.lower().startswith("collision"):
             self.colliders[node.source].update(nif.NiAVObject.descendants(node.source))
 
-        return True
-
-    @process.register("MESH")
-    def process_mesh(self, node):
-        self.nodes[node] = Mesh
-        return True
-
-    @process.register("ARMATURE")
-    def process_armature(self, node):
-        self.nodes[node] = Armature
-        bones = list(node.source.pose.bones)
-        self.armatures[node.source] = bones
+    def discover_armature(self, node):
+        bones = tuple(node.source.pose.bones)
+        self.armature_candidates[node.source] = bones
         self.resolve_nodes(bones, parent=node)
-        return True
-
-    @process.register("NONE")
-    def process_bone(self, node):
-        self.nodes[node] = Empty
-        node_type = node.source.mw.node_type
-        if node_type != nif_switch.NODE:
-            self.errors.append(f"bone '{node.source.name}' is marked as a {node_type}; skeletal {node_type} is not supported yet")
-        return True
 
     # -------
     # UTILITY
     # -------
+
+    def build_creation_schedule(self):
+        owned_bones = set()
+        for skeleton in self.skeletons:
+            duplicate_bones = owned_bones.intersection(skeleton.bones)
+            if duplicate_bones:
+                raise RuntimeError("Each exported bone must belong to exactly one resolved skeleton")
+            owned_bones.update(skeleton.bones)
+
+        jobs = []
+        scheduled_bones = set()
+        scheduled_targets = set()
+        for target in self.nodes:
+            if target.role is ExportRole.BONE:
+                continue
+            if target in scheduled_targets:
+                raise RuntimeError("An export target cannot have more than one creation job")
+            if target.role is ExportRole.ARMATURE:
+                skeleton = self.skeletons_by_source[target.source]
+                duplicate_bones = scheduled_bones.intersection(skeleton.bones)
+                if duplicate_bones:
+                    raise RuntimeError("Each exported bone must be owned by exactly one armature creation job")
+                jobs.append(ExportCreationJob(target, target.role, skeleton.bones))
+                scheduled_bones.update(skeleton.bones)
+            elif target.role in (ExportRole.EMPTY, ExportRole.MESH):
+                jobs.append(ExportCreationJob(target, target.role))
+            else:
+                raise RuntimeError(f"Unsupported export creation role: {target.role}")
+            scheduled_targets.add(target)
+
+        if scheduled_bones != owned_bones:
+            raise RuntimeError("Each exported bone must be owned by exactly one armature creation job")
+        return tuple(jobs)
+
+    def create_job(self, job):
+        target = job.target
+        if job.role is ExportRole.EMPTY:
+            Empty(target).create()
+        elif job.role is ExportRole.MESH:
+            Mesh(target).create()
+        elif job.role is ExportRole.ARMATURE:
+            Armature(target).create(job.owned_bones)
+        else:
+            raise RuntimeError(f"Unsupported export creation role: {job.role}")
+        target.animation.create()
 
     def get(self, source):
         return self.history[source][0]
@@ -323,15 +401,15 @@ class Exporter:
         self.warnings.append(message)
 
     def get_source_objects(self):
-        if self.use_active_collection:
-            base_objects = list(bpy.context.view_layer.active_layer_collection.collection.all_objects)
+        if self.options.use_active_collection:
+            base_objects = list(self.runtime.view_layer.active_layer_collection.collection.all_objects)
         else:
-            base_objects = list(bpy.context.view_layer.objects)
+            base_objects = list(self.runtime.view_layer.objects)
 
-        if self.use_selection:
-            allowed = set(bpy.context.selected_objects)
+        if self.options.use_selection:
+            allowed = set(self.runtime.context.selected_objects)
         else:
-            allowed = set(bpy.context.visible_objects)
+            allowed = set(self.runtime.context.visible_objects)
 
         # Preserve Blender's sequence, while ensuring every included object has a
         # deterministic, top-down path to the scene root.
@@ -353,9 +431,9 @@ class Exporter:
 
         # show a useful error message if no valid objects were discovered
         if len(objects) == 0:
-            if self.use_active_collection:
+            if self.options.use_active_collection:
                raise Exception("No valid objects found. Ensure you have an active collection when using the 'Only Active Collection' option.")
-            elif self.use_selection:
+            elif self.options.use_selection:
                raise Exception("No valid objects found. Ensure you have at least one object selected when using the 'Only Selected' option.")
             else:
                raise Exception("No valid objects found. Ensure you have at least one object present in your scene.")
@@ -364,8 +442,8 @@ class Exporter:
 
     def expand_switches(self, objects):
         """Include the whole subtree of every included switch, whatever its selection or visibility."""
-        self.scene_objects = list(nif_switch.scene_objects())
-        layer_objects = set(bpy.context.view_layer.objects)
+        self.scene_objects = list(nif_switch.scene_objects(self.runtime.scene))
+        layer_objects = set(self.runtime.view_layer.objects)
 
         expanded = []
         placed = set()
@@ -414,13 +492,13 @@ class Exporter:
         # if there was only one root and it had no transforms, use it as the file root
         if len(roots) == 1:
             no_transforms = np.allclose(roots[0].matrix_local, ID44, rtol=0, atol=1e-4)
-            if no_transforms or self.preserve_root_tranforms:
+            if no_transforms or self.options.preserve_root_transforms:
                 root = roots[0].output
 
         # if there are controllers but no text keys, we'll wrap in a NiBSAnimationNode
         needs_animation_node = False
 
-        if self.export_animations and not self.extract_keyframe_data:
+        if self.options.export_animations and not self.options.extract_keyframe_data:
             for node in root.descendants(breadth_first=True):
                 if node.extra_datas.find_type(nif.NiTextKeyExtraData):
                     needs_animation_node = False
@@ -431,19 +509,23 @@ class Exporter:
         if needs_animation_node:
             # if conditions are met we can update in-place rather than using a wrapper
             in_place =  type(root) is nif.NiNode and root.name not in ("Bip01", "Root Bone")
-            kwargs = root.asdict() if in_place else dict(name=file_name, children=[root])
+            if in_place:
+                # `asdict()` snapshots the child list; construction transfers each child to the replacement.
+                replaced_root = root
+                kwargs = root.asdict()
+            else:
+                kwargs = dict(name=file_name, children=[root])
             root = nif.NiBSAnimationNode(**kwargs)
+            if in_place:
+                replaced_root.replace_children(())  # clear null slots left by engine-style tail detachment
             root.animated = True
-            root.not_random = not self.randomize_animations
+            root.not_random = not self.options.randomize_animations
 
         return root
 
     def iter_bones(self, root):
         """yields bone nodes in hierarchical order"""
-        edit_bones = root.source.data.bones
-        pose_bones = root.source.pose.bones
-        for bone in edit_bones:
-            yield self.get(pose_bones[bone.name])
+        yield from self.skeletons_by_source[root.source].bones
 
     def setup_collision(self, data):
         # without "RCN" the engine only looks for a RootCollisionNode among the root's direct children
@@ -466,40 +548,27 @@ class Exporter:
                     material.ambient_color = material.diffuse_color
 
     @property
-    def scale_correction(self):
-        addon = bpy.context.preferences.addons[__package__]
-        return 1 / addon.preferences.scale_correction
-
-    @property
     def cycle_type(self):
-        return "CLAMP" if self.extract_keyframe_data else "CYCLE"
+        return "CLAMP" if self.options.extract_keyframe_data else "CYCLE"
 
-    @staticmethod
-    def widen_controller_ranges(data):
+    def widen_controller_ranges(self, data):
         # The engine loops each controller over its own [start_time, stop_time] and holds the end keys
         # outside them, so covering the scene range keeps every loop in step with the Blender timeline.
         # CLAMP controllers already hold their end keys, and keep the range of their own keys.
-        scene = bpy.context.scene
         for obj in data.objects():
             if isinstance(obj, nif.NiTimeController) and obj.cycle_type != "CLAMP":
-                obj.start_time = min(obj.start_time, scene.frame_start)
-                obj.stop_time = max(obj.stop_time, scene.frame_end)
+                obj.start_time = min(obj.start_time, self.runtime.frame_start)
+                obj.stop_time = max(obj.stop_time, self.runtime.frame_end)
 
 
-class SceneNode:
+class SceneNode(ExportNode):
     def __init__(self, exporter, source, parent=None):
-        self.exporter = exporter
-        #
-        self.source = source
-        self.output = None
-        #
-        self.parent = parent
-        self.children = list()
-        #
         if isinstance(source, bpy.types.PoseBone):
-            self.matrix_local = np.asarray(source.bone.matrix_local, dtype="<f")
+            matrix_local = np.asarray(source.bone.matrix_local, dtype="<f")
         else:
-            self.matrix_local = np.asarray(source.matrix_local, dtype="<f")
+            matrix_local = np.asarray(source.matrix_local, dtype="<f")
+        super().__init__(exporter, source, matrix_local)
+        self.parent = parent
 
     def __repr__(self):
         if not self.parent:
@@ -514,7 +583,7 @@ class SceneNode:
         base_name = self.strip_blender_suffix(self.source.name)
 
         # Always strip if the export option is active.
-        if self.exporter.strip_numeric_suffixes:
+        if self.exporter.options.strip_numeric_suffixes:
             return base_name
 
         # The engine requires exact matches for these.
@@ -603,7 +672,7 @@ class SceneNode:
 
             try:
                 if self.source.type == "MESH":
-                    self.vertex_transform = s
+                    self.baked_vertex_scale = s
             except AttributeError:
                 pass  # pose bone
 
@@ -658,7 +727,7 @@ class Empty(SceneNode):
 
         # set parent
         if self.parent:
-            self.parent.output.children.append(self.output)
+            self.parent.output.attach_child(self.output)
 
         # set flags
         self.output.flags |= self.source.mw.object_flags
@@ -686,11 +755,11 @@ class Armature(SceneNode):
     def __init__(self, node):
         self.__dict__ = node.__dict__
 
-    def create(self):
+    def create(self, bone_nodes):
         # create root
         Empty(self).create()
         # create bones
-        for node in self.exporter.iter_bones(self):
+        for node in bone_nodes:
             Empty(node).create()
             node.output.name = node.bone_name
             node.animation.create()
@@ -723,18 +792,28 @@ class Mesh(SceneNode):
             outputs = [Empty(self).create(ni_data)]
         else:
             # Create a trishape for each material.
-            outputs = Empty(self).create().children = [nif.NiTriShape() for _ in material_data]
+            parent_output = Empty(self).create()
+            outputs = [nif.NiTriShape() for _ in material_data]
+            parent_output.replace_children(outputs)
 
         for i, tri in enumerate(outputs):
             tri.name = tri.name or f"Tri {self.name} {i}"
             tri.data = tri.data or nif.NiTriShapeData()
-            tri_skin = skin_data.copy()
-            tri_morphs = morph_data.copy()
+            tri_skin = replace(skin_data) if skin_data is not None else None
+            tri_morphs = replace(morph_data) if morph_data is not None else None
 
-            material, indices = material_data[i]
-            self.material.create(material, tri)
+            partition = material_data[i]
+            self.material.create(partition.material, tri)
 
-            self.extract_vertex_data(indices, ni_data, tri.data, skin_data, tri_skin, morph_data, tri_morphs)
+            self.extract_vertex_data(
+                partition.corner_indices,
+                ni_data,
+                tri.data,
+                skin_data,
+                tri_skin,
+                morph_data,
+                tri_morphs,
+            )
             self.optimize_geometry(tri.data, tri_skin, tri_morphs)
             self.create_vertex_groups(tri, tri_skin)
             self.create_vertex_morphs(tri, tri_morphs)
@@ -749,8 +828,8 @@ class Mesh(SceneNode):
 
         # Ensure vertex transforms.
         # TODO refactor this!
-        if hasattr(self, "vertex_transform"):
-            ni.vertices *= self.vertex_transform
+        if self.baked_vertex_scale is not None:
+            ni.vertices *= self.baked_vertex_scale
 
         if len(ni.triangles):
             ni.vertices = ni.vertices[ni.triangles].reshape(-1, 3)
@@ -798,7 +877,7 @@ class Mesh(SceneNode):
             bl.vertex_colors[0].data.foreach_get("color", ni.vertex_colors.ravel())
 
     def create_vertex_groups(self, trishape, skin_data):
-        if len(skin_data.weights) == 0:
+        if skin_data is None:
             return
 
         skin = trishape.skin = nif.NiSkinInstance()
@@ -826,7 +905,10 @@ class Mesh(SceneNode):
             bone_data.vertex_weights["f1"] = skin_data.weights[i, j]
 
             # skin to bone offset
-            bone_data.matrix = la.solve(skin_data.bones[i].matrix_bind, offset)
+            matrix_bind = skin_data.bones[i].matrix_bind
+            if matrix_bind is None:
+                raise RuntimeError(f"Bone '{skin_data.bones[i].name}' has no resolved bind matrix")
+            bone_data.matrix = la.solve(matrix_bind, offset)
 
             # apply center/radius
             bone_data.update_center_radius(trishape.data.vertices[j], exact=True)
@@ -836,7 +918,7 @@ class Mesh(SceneNode):
         skin.data.bone_data = [*filter(None, skin.data.bone_data)]
 
     def create_vertex_morphs(self, trishape, morph_data):
-        if len(morph_data.targets) == 0:
+        if morph_data is None:
             return
 
         # create controller
@@ -878,16 +960,16 @@ class Mesh(SceneNode):
         return bl_object, bl_data
 
     def get_skin_data(self, bl_data, ni_data):
-        skin_data = nif_utils.Namespace(root=None, bones=(), weights=())
-
         # ignore collider meshes
         if self.is_collider:
-            return skin_data
+            return None
 
         # find the armature root
         armature = self.source.find_armature()
         if not armature:
-            return skin_data
+            return None
+        skeleton = self.exporter.skeletons_by_source[armature]
+        bone_nodes = {node.source: node for node in skeleton.bones}
 
         # find valid bone groups
         bones = {}
@@ -900,7 +982,7 @@ class Mesh(SceneNode):
         # allocate weights array
         weights = np.zeros([len(bones), len(bl_data.vertices)])
         if weights.size == 0:
-            return skin_data
+            return None
 
         # populate weights array
         index_remap = {j: i for i, j in enumerate(bones)}
@@ -929,30 +1011,27 @@ class Mesh(SceneNode):
         # view as per-face-loops
         weights = weights[:, ni_data.triangles].reshape(len(bones), -1)
 
-        # get all armature nodes
-        skin_data.root = self.exporter.get(armature)
-        skin_data.bones = [self.exporter.get(bone) for bone in bones.values()]
-        skin_data.weights = weights
-
-        return skin_data
+        return ExportSkinBuffers(
+            root=skeleton.armature,
+            bones=tuple(bone_nodes[bone] for bone in bones.values()),
+            weights=weights,
+        )
 
     def get_morph_data(self, bl_data, ni_data):
-        morph_data = nif_utils.Namespace(targets=(), keys=(), interpolations=())
-
         # respect export setting
-        if not self.exporter.export_animations:
-            return morph_data
+        if not self.exporter.options.export_animations:
+            return None
 
         # ignore collider meshes
         if self.is_collider:
-            return morph_data
+            return None
 
         # collect shape key data
         try:
             shape_keys = self.source.data.shape_keys
             basis = shape_keys.key_blocks[0]
         except (AttributeError, IndexError):
-            return morph_data
+            return None
 
         fcurves = Animation.get_fcurves(shape_keys.animation_data)
 
@@ -969,38 +1048,42 @@ class Mesh(SceneNode):
 
         # bail if all were muted or empty
         if not len(fcurves_dict) > 1:
-            return morph_data
+            return None
 
         # allocate keyframe data
-        morph_data.keys = [None] * len(fcurves_dict)
-        morph_data.interpolations = [None] * len(fcurves_dict)
+        keyframes = []
+        interpolations = []
 
         # allocate morph targets
-        morph_data.targets = np.empty((len(fcurves_dict), len(bl_data.vertices), 3))
+        targets = np.empty((len(fcurves_dict), len(bl_data.vertices), 3))
 
         for i, (fc, sk) in enumerate(fcurves_dict.items()):
             if i == 0:
                 # is basis layer
                 key_type = nif.NiFloatData.KeyType.LIN_KEY
-                keys = np.empty(0)
+                key_data = np.empty(0)
             else:
                 key_type = animation.get_interpolation_type([fc])
-                keys = animation.collect_keyframe_points([fc], key_type)
+                key_data = animation.collect_keyframe_points([fc], key_type)
 
             # populate keyframe data
-            morph_data.keys[i] = keys
-            morph_data.interpolations[i] = key_type
+            keyframes.append(key_data)
+            interpolations.append(key_type)
 
             # populate morph targets
-            sk.data.foreach_get("co", morph_data.targets[i].ravel())
+            sk.data.foreach_get("co", targets[i].ravel())
 
         # make relative to basis
-        morph_data.targets[1:] -= morph_data.targets[0]
+        targets[1:] -= targets[0]
 
         # view as per-face-loops
-        morph_data.targets = morph_data.targets[:, ni_data.triangles].reshape(-1, len(ni_data.vertices), 3)
+        targets = targets[:, ni_data.triangles].reshape(-1, len(ni_data.vertices), 3)
 
-        return morph_data
+        return ExportMorphBuffers(
+            targets=targets,
+            keys=tuple(keyframes),
+            interpolations=tuple(interpolations),
+        )
 
     def get_material_data(self, bl_object, bl_data):
         # get each polygon's material index
@@ -1012,7 +1095,7 @@ class Mesh(SceneNode):
 
         # simple case for a single material
         if len(active_material_indices) <= 1:
-            return [(bl_object.active_material, ...)]
+            return [MaterialPartition(bl_object.active_material, None)]
 
         # get each polygon's vertex indices
         loops = np.arange(len(bl_data.loops), dtype=int).reshape(-1, 3)
@@ -1022,7 +1105,7 @@ class Mesh(SceneNode):
             material = bl_object.material_slots[i].material
             indices = loops[material_indices == i].ravel()
             if len(indices):
-                material_data.append((material, indices))
+                material_data.append(MaterialPartition(material, indices))
 
         return material_data
 
@@ -1037,8 +1120,8 @@ class Mesh(SceneNode):
             data.normals,
             data.vertex_colors,
             *data.uv_sets,
-            # *skin_data.weights,
-            # *morph_data.targets,
+            # *(skin_data.weights if skin_data is not None else ()),
+            # *(morph_data.targets if morph_data is not None else ()),
         ]
 
         if len(data.uv_sets):
@@ -1054,7 +1137,7 @@ class Mesh(SceneNode):
             arrays.append(np.sign(cross_z).repeat(3))
 
         # clear duplicates
-        indices, inverse = nif_utils.unique_rows(*arrays, precision=self.exporter.vertex_precision)
+        indices, inverse = nif_utils.unique_rows(*arrays, precision=self.exporter.options.vertex_precision)
 
         # update face data
         try:
@@ -1068,6 +1151,7 @@ class Mesh(SceneNode):
 
     @staticmethod
     def extract_vertex_data(indices, src_data, dst_data, src_skin, dst_skin, src_morphs, dst_morphs):
+        indices = ... if indices is None else indices
         if len(src_data.vertices):
             dst_data.vertices = src_data.vertices[indices]
         if len(src_data.normals):
@@ -1076,9 +1160,9 @@ class Mesh(SceneNode):
             dst_data.vertex_colors = src_data.vertex_colors[indices]
         if len(src_data.uv_sets):
             dst_data.uv_sets = src_data.uv_sets[:, indices]
-        if len(src_skin.weights):
+        if src_skin is not None and dst_skin is not None:
             dst_skin.weights = src_skin.weights[:, indices]
-        if len(src_morphs.targets):
+        if src_morphs is not None and dst_morphs is not None:
             dst_morphs.targets = src_morphs.targets[:, indices]
 
     @staticmethod
@@ -1094,9 +1178,9 @@ class Mesh(SceneNode):
             data.vertex_colors[vertex_remap] = data.vertex_colors.copy()
         if len(data.uv_sets):
             data.uv_sets[:, vertex_remap] = data.uv_sets.copy()
-        if len(skin.weights):
+        if skin is not None:
             skin.weights[:, vertex_remap] = skin.weights.copy()
-        if len(morphs.targets):
+        if morphs is not None:
             morphs.targets[:, vertex_remap] = morphs.targets.copy()
 
 
@@ -1213,7 +1297,7 @@ class Material(SceneNode):
         ni_slot = nif.NiTexturingPropertyMap()
 
         # material name
-        if not self.exporter.preserve_material_names:
+        if not self.exporter.options.preserve_material_names:
             if (name == "base_texture") and filepath:
                 prop = self.output.get_property(nif.NiMaterialProperty)
                 if prop is not None:
@@ -1326,7 +1410,7 @@ class Animation(SceneNode):
         self.__dict__ = node.__dict__
 
     def create(self):
-        if not self.exporter.export_animations:
+        if not self.exporter.options.export_animations:
             return
 
         # create text keys even if no animations are assigned
@@ -1538,7 +1622,7 @@ class Animation(SceneNode):
         return True
 
     def create_uv_controller(self, bl_prop, bl_slot):
-        if not self.exporter.export_animations:
+        if not self.exporter.options.export_animations:
             return False
         if not (bl_slot.image and bl_slot.layer):
             return False
@@ -1599,7 +1683,7 @@ class Animation(SceneNode):
         return True
 
     def create_material_controllers(self, ni_prop, bl_prop):
-        if not self.exporter.export_animations:
+        if not self.exporter.options.export_animations:
             return
 
         anims = self.get_fcurves_dict(bl_prop.material.node_tree)

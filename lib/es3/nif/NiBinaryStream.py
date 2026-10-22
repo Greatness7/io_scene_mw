@@ -36,10 +36,13 @@ class NiBinaryStream(BinaryStream):
         for obj in self._read_history.values():
             obj.resolve_links(self._read_history)
 
-            # fix roots
-            if getattr(obj, "children", None):
+            # fix roots: a declared root that is really a child of another object is replaced by that
+            # parent. Compare non-null slots by identity -- `root in obj.children` matches an unresolved
+            # root (`None`, from a dangling or -1 root link) against any null child slot.
+            children = getattr(obj, "children", None)
+            if children:
                 for i, root in enumerate(roots):
-                    if root in obj.children:
+                    if root is not None and any(child is root for child in children):
                         roots[i] = obj
 
         # clear history
@@ -51,9 +54,11 @@ class NiBinaryStream(BinaryStream):
         # prep history
         self._write_history = {}
 
-        # build history
-        for i, obj in enumerate(objects):
-            self._write_history[obj] = i
+        # build history; the index must equal the row the object is written to, so take it from the
+        # dict's own length rather than from the input. `objects` is public API and a caller may pass a
+        # sequence containing repeats, which would otherwise record an index past the end of the table.
+        for obj in objects:
+            self._write_history.setdefault(obj, len(self._write_history))
 
         # write objects
         self.write_uint(len(self._write_history))
