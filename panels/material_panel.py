@@ -31,6 +31,7 @@ class MaterialPanel(bpy.types.Panel, MaterialPanelBase):
         material = context.material
         try:
             material.mw.validate()
+            material.mw.upgrade()
             MaterialPanelBase.is_active = True
         except (AttributeError, TypeError):
             MaterialPanelBase.is_active = False
@@ -92,7 +93,7 @@ class MaterialPanelSettings(bpy.types.Panel, MaterialSubPanelBase):
         column = self.layout.column(align=True)
         column.enabled = this.use_alpha_clip
         #
-        column.prop(this.material, "alpha_threshold", text="Threshold")
+        column.prop(this.alpha_threshold_input, "default_value", text="Threshold", slider=True)
 
 
 class MaterialPanelTemplate(bpy.types.Panel, MaterialSubPanelBase):

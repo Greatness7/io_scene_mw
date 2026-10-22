@@ -1029,6 +1029,7 @@ class Material(SceneNode):
         ni_object.properties.append(ni_prop)
 
     def create_alpha_property(self, ni_object, bl_prop):
+        bl_prop.upgrade()
         if not (bl_prop.use_alpha_blend or bl_prop.use_alpha_clip):
             return
         ni_prop = nif.NiAlphaProperty()
@@ -1041,7 +1042,7 @@ class Material(SceneNode):
         # Alpha Testing
         ni_prop.alpha_testing = bl_prop.use_alpha_clip
         # Test Threshold
-        ni_prop.test_ref = int(bl_prop.material.alpha_threshold * 255)
+        ni_prop.test_ref = int(bl_prop.alpha_threshold * 255)
         # Test Method
         ni_prop.test_mode = 'GREATER'
         # Apply Property

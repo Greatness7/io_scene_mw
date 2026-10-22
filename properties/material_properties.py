@@ -1,6 +1,6 @@
 import bpy
 
-from ..nif_shader import NodeTreeWrapper
+from ..nif_shader import NodeTreeWrapper, get_current_mw_shader_tree
 
 
 class TextureProperties(bpy.types.PropertyGroup):
@@ -191,6 +191,16 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
     def unregister():
         pass
 
+    def upgrade(self):
+        """One-time migration for materials saved before the alpha-clip node rework."""
+        if "Alpha Clip Threshold" in self.inputs:
+            return
+
+        self.shader.node_tree = get_current_mw_shader_tree()
+
+        self.alpha_threshold = getattr(self.material, "alpha_threshold", 133 / 255)
+        self.alpha_clip_enabled_input.default_value = 1.0 if (self.alpha_flags & 0x0200) else 0.0
+
     # -------------
     # Vertex Colors
     # -------------
@@ -219,18 +229,39 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         options=set(),
     )
 
+    # ------------------------------
+    # Alpha Flags (source of truth)
+    # ------------------------------
+    def apply_render_method(self):
+        blending = bool(self.alpha_flags & 0x0001)
+        if bpy.app.version >= (4, 2, 0):
+            self.material.surface_render_method = 'BLENDED' if blending else 'DITHERED'
+        elif blending:
+            self.material.blend_method = 'BLEND'
+        elif self.alpha_flags & 0x0200:
+            self.material.blend_method = 'CLIP'
+        else:
+            self.material.blend_method = 'OPAQUE'
+
+    def sync_alpha_state(self):
+        blending = bool(self.alpha_flags & 0x0001)
+        testing = bool(self.alpha_flags & 0x0200)
+        self.alpha_factor = 1.0 if (blending or testing) else 0.0
+        self.alpha_clip_enabled_input.default_value = 1.0 if testing else 0.0
+        self.apply_render_method()
+
     # -----------
     # Alpha Blend
     # -----------
     def get_use_alpha_blend(self):
-        return (self.alpha_factor == 1.0) and (self.material.blend_method == "BLEND")
+        return (self.alpha_flags & 0x0001) != 0
 
     def set_use_alpha_blend(self, value):
-        self.alpha_factor = 1.0 if value else 0.0
         if value:
-            self.material.blend_method = "BLEND"
+            self.alpha_flags |= 0x0001
         else:
-            self.material.blend_method = "CLIP" if value else "OPAQUE"
+            self.alpha_flags &= ~0x0001
+        self.sync_alpha_state()
 
     use_alpha_blend: bpy.props.BoolProperty(
         name="Alpha Blend",
@@ -244,22 +275,14 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
     # Alpha Clip
     # ----------
     def get_use_alpha_clip(self):
-        if self.alpha_factor == 0.0:
-            return False
-        if self.material.blend_method == "CLIP":
-            return True
-        if self.material.blend_method != "BLEND":
-            return False
-        return (self.alpha_flags & 512) != 0
+        return (self.alpha_flags & 0x0200) != 0
 
     def set_use_alpha_clip(self, value):
-        self.alpha_factor = 1.0 if value else 0.0
-        if self.material.blend_method != "BLEND":
-            self.material.blend_method = "CLIP" if value else "OPAQUE"
         if value:
-            self.alpha_flags |= 512
+            self.alpha_flags |= 0x0200
         else:
-            self.alpha_flags &= ~512
+            self.alpha_flags &= ~0x0200
+        self.sync_alpha_state()
 
     use_alpha_clip: bpy.props.BoolProperty(
         name="Alpha Clip",

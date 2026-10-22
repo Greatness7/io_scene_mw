@@ -903,7 +903,7 @@ class Material(SceneNode):
         # Alpha Flags
         bl_prop.alpha_flags = ni_prop.flags
         # Alpha Threshold
-        bl_prop.material.alpha_threshold = float(ni_prop.test_ref / 255)
+        bl_prop.alpha_threshold = float(ni_prop.test_ref / 255)
         # Blending Method
         if ni_prop.alpha_blending:
             bl_prop.use_alpha_blend = True
