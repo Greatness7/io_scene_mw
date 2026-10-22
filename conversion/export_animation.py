@@ -329,7 +329,9 @@ class _ObjectAnimation:
             assert self.parent_world is not None
             return cast(Array, la.solve(self.parent_world, matrix))
         if self.parent_world is not None:
-            return cast(Array, la.inv(self.parent_world))
+            # keys live in blender's parent frame (parent or bone, then the parent inverse), which moves with the nif parent
+            parent_frame = np.asarray(self.source.matrix_world) @ la.inv(np.asarray(self.source.matrix_basis))
+            return cast(Array, la.solve(self.parent_world, parent_frame))
         return ID44
 
     def collect_keys(self, fcurves_dict, key, num_axes, key_type=None, sample=False):

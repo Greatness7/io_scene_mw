@@ -12,6 +12,7 @@ from es3.utils.math import ID44, decompose
 
 from .. import nif_switch
 from . import import_animation, import_geometry, import_materials, import_skeletons
+from .bone_axes import import_axis_correction
 from .options import ImportOptions
 from .records import (
     ImportCreationJob,
@@ -334,9 +335,6 @@ class Importer:
         output = next((self.outputs[root] for root in roots if root in self.outputs), None)
         return output.id_data if output is not None else None
 
-    def get_skeleton_for_bone(self, bone):
-        return next(skeleton for skeleton in self.skeletons if bone in skeleton.posed_world)
-
     def get_mesh_data(self, shape, name) -> bpy.types.Mesh:
         if shape.morph_targets or shape.bone_influences:
             # TODO: Support instancing of animated and skinned meshes.
@@ -393,8 +391,13 @@ class Importer:
             output.parent = bl_parent.id_data
             output.parent_type = "BONE"
             output.parent_bone = bl_parent.name
-            skeleton = self.get_skeleton_for_bone(node.parent)
-            output.matrix_world = (skeleton.posed_world[node.parent] @ node.matrix_local).T
+            # blender places bone children at the axis-corrected bone's tail; undoing both in the parent inverse keeps
+            # matrix_basis, and the raw animation keys, in the node's own space without reading the evaluated pose
+            axis = import_axis_correction(node.parent.source.name)
+            tail = np.eye(4)
+            tail[1, 3] = bl_parent.bone.length
+            output.matrix_parent_inverse = la.inv(axis @ tail).T
+            output.matrix_basis = (axis @ node.matrix_local).T
         else:
             # parent is an empty or None
             output.matrix_local = node.matrix_local.T
