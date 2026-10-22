@@ -31,11 +31,14 @@ class MaterialPanel(bpy.types.Panel, MaterialPanelBase):
         material = context.material
         try:
             material.mw.validate()
-            material.mw.upgrade()
-            MaterialPanelBase.is_active = True
         except (AttributeError, TypeError):
             MaterialPanelBase.is_active = False
             self.layout.operator("material.mw_create_shader")
+            return
+        # draw() may not write ID data, so an unmigrated material (e.g. appended from an old file) gets a button
+        MaterialPanelBase.is_active = not material.mw.needs_upgrade
+        if material.mw.needs_upgrade:
+            self.layout.operator("material.mw_upgrade_materials")
 
 
 class MaterialPanelSettings(bpy.types.Panel, MaterialSubPanelBase):

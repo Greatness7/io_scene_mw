@@ -717,6 +717,7 @@ class Mesh(SceneNode):
         skin_data = self.get_skin_data(bl_data, ni_data)
         morph_data = self.get_morph_data(bl_data, ni_data)
         material_data = self.get_material_data(bl_object, bl_data)
+        bl_object.to_mesh_clear()  # bl_data is freed here
 
         if len(material_data) == 1:
             outputs = [Empty(self).create(ni_data)]
@@ -1170,7 +1171,10 @@ class Material(SceneNode):
         ni_object.properties.append(ni_prop)
 
     def create_alpha_property(self, ni_object, bl_prop):
-        bl_prop.upgrade()
+        if bl_prop.needs_upgrade:  # export must not migrate the author's material
+            raise nif_switch.SwitchError(
+                f"Material '{bl_prop.material.name}' is from an older addon version; run Upgrade Morrowind Materials"
+            )
         if not (bl_prop.use_alpha_blend or bl_prop.use_alpha_clip):
             return
         ni_prop = nif.NiAlphaProperty()
@@ -1225,12 +1229,12 @@ class Material(SceneNode):
         if not bl_slot.use_repeat:
             ni_slot.clamp_mode = 0  # CLAMP_S_CLAMP_T
 
-        # use mipmaps
-        if not bl_slot.use_mipmaps:
-            bl_slot.use_mipmaps = 0  # NO
-
         # source image
         ni_slot.source = nif.NiSourceTexture()
+
+        # use mipmaps
+        if not bl_slot.use_mipmaps:
+            ni_slot.source.use_mipmaps = nif.NiSourceTexture.UseMipMaps.NO
 
         if (bl_slot.image.source == "GENERATED") or bl_slot.image.packed_file:
             include_alpha = bl_prop.use_alpha_blend or bl_prop.use_alpha_clip

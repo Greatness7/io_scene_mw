@@ -3,6 +3,22 @@ import bpy
 from ..nif_shader import NodeTreeWrapper, get_current_mw_shader_tree
 
 
+def upgrade_materials():
+    """Migrate every editable Morrowind material; the panel and export never migrate on their own."""
+    for material in bpy.data.materials:
+        if material.library is not None:
+            continue
+        try:
+            material.mw.validate().upgrade()
+        except TypeError:
+            continue  # not a Morrowind material
+
+
+@bpy.app.handlers.persistent
+def upgrade_on_load(*args):
+    upgrade_materials()
+
+
 class TextureProperties(bpy.types.PropertyGroup):
 
     node_tree: bpy.props.PointerProperty(type=bpy.types.NodeTree)
@@ -186,14 +202,21 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
     @staticmethod
     def register():
         bpy.types.Material.mw = bpy.props.PointerProperty(type=MaterialProperties)
+        if upgrade_on_load not in bpy.app.handlers.load_post:
+            bpy.app.handlers.load_post.append(upgrade_on_load)
 
     @staticmethod
     def unregister():
-        pass
+        if upgrade_on_load in bpy.app.handlers.load_post:
+            bpy.app.handlers.load_post.remove(upgrade_on_load)
+
+    @property
+    def needs_upgrade(self):
+        return "Alpha Clip Threshold" not in self.inputs
 
     def upgrade(self):
         """One-time migration for materials saved before the alpha-clip node rework."""
-        if "Alpha Clip Threshold" in self.inputs:
+        if not self.needs_upgrade:
             return
 
         self.shader.node_tree = get_current_mw_shader_tree()
