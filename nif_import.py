@@ -70,10 +70,12 @@ class Importer:
         data.merge_properties()
 
         # fix roots list
-        data.root = next(data.roots_of_type(nif.NiAVObject), nif.NiNode())
+        # every AV root is kept: the engine attaches them all under a container it synthesizes
+        data.roots = list(data.roots_of_type(nif.NiAVObject)) or [nif.NiNode()]
 
         # fix transforms
-        if self.discard_root_transforms:
+        # several roots sit under the engine's container, so their transforms are real placement
+        if self.discard_root_transforms and len(data.roots) == 1:
             if isinstance(data.root, nif.NiNode):
                 data.root.matrix = ID44
 
@@ -82,8 +84,9 @@ class Importer:
             self.import_keyframe_data(data)
 
         # copy file name
-        if data.root.name == "":
-            data.root.name = self.filepath.name
+        for root in data.roots:
+            if root.name == "":
+                root.name = self.filepath.name
 
         # scale correction
         data.apply_scale(self.scale_correction)
@@ -201,35 +204,39 @@ class Importer:
             self.warn(f"NiLODNode '{name}' has {len(levels)} ranges for {len(slots)} children; the rest use the default range")
 
     def resolve_armatures(self):
-        """ TODO
-            support for multiple skeleton roots
+        """One armature per skeleton: every root merges into the outermost root that contains it.
+
+        Roots are skin roots plus the nodes named "Bip01" or "Root Bone", so limb-rooted skins (e.g. separate
+        "Bip01 L UpperArm" and "Bip01 R UpperArm" skins) join their Bip01's armature, while disjoint skeletons,
+        such as several actors in one scene, stay separate armatures.
         """
-        orphan_bones = self.armatures.pop(None, {})
+        orphan_bones = self.armatures.pop(None, set())
 
-        # sort roots via heirarchy
-        roots = list(map(self.get, self.armatures))
-        roots.sort(key=lambda r: len([*r.parents]))
+        merged = collections.defaultdict(set)
+        for root, bones in self.armatures.items():
+            outer = [n.source for n in self.get(root).parents if n.source in self.armatures]
+            merged[outer[-1] if outer else root].update(bones, {root})
 
-        # select the top-most root
-        root = roots[0].source
-        bones = self.armatures[root]
+        # hierarchical order, so armatures are created and corrected in a stable order
+        self.armatures.clear()
+        for node in self.nodes:
+            if node.source in merged and node.source not in self.armatures:
+                self.resolve_armature(node.source, merged[node.source], orphan_bones)
 
-        # collect all orphan bones
-        bones.update(orphan_bones)
+    def resolve_armature(self, root, bones, orphan_bones):
+        root_node = self.get(root)
+        ancestors = {node.source for node in (root_node, *root_node.parents)}
 
-        # collect all others bones
-        for other_root in self.armatures.keys() - {root}:
-            other_bones = self.armatures.pop(other_root)
-            bones.add(other_root)
-            bones.update(other_bones)
+        # named bones join the skeleton they sit in
+        for bone in orphan_bones:
+            if any(n.source is root for n in self.get(bone).parents):
+                bones.add(bone)
 
         # only descendants of root
-        root_node = self.get(root)
-        bones -= {node.source for node in (root_node, *root_node.parents)}
+        bones -= ancestors
 
         # bail if no bones present
         if len(bones) == 0:
-            self.armatures.clear()
             return
 
         # consider any descendants which are animated to be bones
@@ -281,10 +288,10 @@ class Importer:
         regards to location and scale, but has had its rotation about all axes
         aligned to the nearest 90 degree angle.
         """
-        if not self.armatures:
-            return
+        for root in map(self.get, self.armatures):
+            self.correct_rest_position(root)
 
-        root = self.get_armature_node()
+    def correct_rest_position(self, root):
         root_bone = next(self.iter_bones(root))
 
         # calculate corrected transformation matrix
@@ -298,7 +305,7 @@ class Importer:
 
         # correct the rest matrix of skinned meshes
         inverse = la.inv(root_bone.matrix_world)
-        for node in self.get_skinned_meshes():
+        for node in self.get_skinned_meshes(root):
             if root_bone not in node.parents:
                 node.matrix_world = corrected_matrix @ (inverse @ node.matrix_world)
 
@@ -306,10 +313,10 @@ class Importer:
         root_bone.matrix_world = corrected_matrix
 
     def apply_axis_corrections(self):
-        if not self.armatures:
-            return
+        for root in map(self.get, self.armatures):
+            self.apply_axis_correction(root)
 
-        root = self.get_armature_node()
+    def apply_axis_correction(self, root):
         bones = list(self.iter_bones(root))
 
         # apply bone axis corrections
@@ -367,15 +374,12 @@ class Importer:
         Usually this occurs when a file contains nested armatures.
         See `Tri Hand01` in the vanilla `r/skeleton.nif` model for example.
         """
-        if not self.armatures:
-            return
-
-        armature = self.get_armature_node()
-        for node in self.get_skinned_meshes():
-            if node.parent != armature:
-                matrix_world = node.matrix_world
-                node.parent = armature
-                node.matrix_world = matrix_world
+        for armature in map(self.get, self.armatures):
+            for node in self.get_skinned_meshes(armature):
+                if node.parent != armature:
+                    matrix_world = node.matrix_world
+                    node.parent = armature
+                    node.matrix_world = matrix_world
 
     # -------
     # PROCESS
@@ -443,15 +447,18 @@ class Importer:
 
     def get_root_output(self, roots):
         # a root may legitimately have no output: an ignored RootCollisionNode
-        output = roots[0].output if roots else None
+        output = next((root.output for root in roots if root.output is not None), None)
         return output.id_data if output is not None else None
 
-    def get_armature_node(self):
-        return self.get(*self.armatures)
+    def get_armature_node(self, source):
+        """The armature node deforming with `source`: itself or its nearest ancestor that is an armature."""
+        node = self.get(source)
+        return next((n for n in (node, *node.parents) if n.source in self.armatures), None)
 
-    def get_skinned_meshes(self):
+    def get_skinned_meshes(self, armature):
         for node in self.nodes:
-            if getattr(node.source, "skin", None):
+            skin = getattr(node.source, "skin", None)
+            if skin and skin.root and self.get_armature_node(skin.root) is armature:
                 yield node
 
     def get_mesh_data(self, shape, name) -> bpy.types.Mesh:

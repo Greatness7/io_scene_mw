@@ -118,6 +118,58 @@ def quaternion_mul(a: FloatArray, b: FloatArray, out: FloatArray | None = None) 
     return np.stack(result, axis=-1, out=out)  # pyright: ignore[reportUnknownMemberType]
 
 
+# Quaternion interpolation as Morrowind.exe performs it. Quaternions are (w, x, y, z) along the last axis and
+# every function is vectorized over the leading axes. Below this sine, the engine takes its degenerate branch.
+QUATERNION_SIN_THRESHOLD = 0.001
+
+
+def quaternion_conjugate(q: Array) -> Array:
+    return q * np.array((1, -1, -1, -1), q.dtype)
+
+
+def quaternion_exp(q: Array) -> Array:
+    """exp of a pure quaternion; w is ignored."""
+    angle = la.norm(q[..., 1:], axis=-1)  # pyright: ignore[reportUnknownMemberType]
+    sin = np.sin(angle)
+    ratio = np.divide(sin, angle, out=np.ones_like(angle), where=np.abs(sin) >= QUATERNION_SIN_THRESHOLD)
+    out = q * ratio[..., None]
+    out[..., 0] = np.cos(angle)
+    return out
+
+
+def quaternion_log(q: Array) -> Array:
+    """log of a unit quaternion; the result is pure (w = 0)."""
+    angle = np.arccos(np.clip(q[..., 0], -1.0, 1.0))  # pyright: ignore[reportUnknownMemberType]
+    sin = np.sin(angle)
+    ratio = np.divide(angle, sin, out=np.ones_like(angle), where=np.abs(sin) >= QUATERNION_SIN_THRESHOLD)
+    out = q * ratio[..., None]
+    out[..., 0] = 0.0
+    return out
+
+
+def quaternion_slerp(q0: Array, q1: Array, s: Array) -> Array:
+    """NiQuaternion Slerp (0x6fb7f0): no shortest-path flip, and q0 itself when the angle's sine is tiny."""
+    angle = np.arccos(np.clip(einsum("...i,...i->...", q0, q1), -1.0, 1.0))  # pyright: ignore[reportUnknownMemberType]
+    sin = np.sin(angle)
+    exact = sin >= QUATERNION_SIN_THRESHOLD
+    inverse = np.divide(1.0, sin, out=np.zeros_like(sin), where=exact)
+    k0 = np.where(exact, np.sin((1.0 - s) * angle) * inverse, 1.0)  # pyright: ignore[reportUnknownMemberType]
+    k1 = np.sin(s * angle) * inverse
+    return k0[..., None] * q0 + k1[..., None] * q1
+
+
+def quaternion_squad(p: Array, a: Array, b: Array, q: Array, s: Array) -> Array:
+    """NiQuaternion Squad (0x6fbab0): p to q with controls a (leaving p) and b (arriving at q)."""
+    return quaternion_slerp(quaternion_slerp(p, q, s), quaternion_slerp(a, b, s), 2.0 * s * (1.0 - s))
+
+
+def quaternion_squad_control(prev: Array, current: Array, next: Array) -> Array:
+    """NiQuaternion computeSquadControlPoint (0x6fb900)."""
+    inverse = quaternion_conjugate(current)
+    logs = quaternion_log(quaternion_mul(inverse, prev)) + quaternion_log(quaternion_mul(inverse, next))
+    return quaternion_mul(current, quaternion_exp(-0.25 * logs))
+
+
 def get_exact_center_radius(vertices: Array) -> tuple[FloatArray, float]:
     if len(vertices) == 0:
         return np.zeros(3, dtype=np.float32), 0.0

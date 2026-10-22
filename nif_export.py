@@ -102,6 +102,7 @@ class Exporter:
 
         data = nif.NiStream()
         data.root = self.get_root_output(roots)
+        self.widen_controller_ranges(data)
         data.apply_scale(self.scale_correction)
         data.apply_time_scale(1 / bpy.context.scene.render.fps)
         data.merge_properties(ignore={"name", "shine", "specular_color"})
@@ -161,10 +162,11 @@ class Exporter:
                 node.output.active_index = nif_switch.active_index(node.source, targets)
 
     def resolve_armatures(self):
-        """ TODO
-            support multiple armatures
-        """
-        root, = self.armatures
+        # insertion order puts an armature before any armature parented to its bones
+        for root in self.armatures:
+            self.resolve_armature(root)
+
+    def resolve_armature(self, root):
         root_node = self.get(root)
         root_matrix = root_node.matrix_world
 
@@ -181,11 +183,13 @@ class Exporter:
                     node.matrix_world = np.array(node.source.matrix_world)
 
     def apply_axis_corrections(self):
+        for root in self.armatures:
+            self.apply_axis_correction(self.get(root))
+
+    def apply_axis_correction(self, root_node):
         """ TODO
-            support multiple armatures
             only apply on 'Bip01' nodes
         """
-        root_node = self.get(*self.armatures)
         root_matrix = root_node.matrix_world
         root_inverse = la.inv(root_matrix)
 
@@ -459,6 +463,17 @@ class Exporter:
     @property
     def cycle_type(self):
         return "CLAMP" if self.extract_keyframe_data else "CYCLE"
+
+    @staticmethod
+    def widen_controller_ranges(data):
+        # The engine loops each controller over its own [start_time, stop_time] and holds the end keys
+        # outside them, so covering the scene range keeps every loop in step with the Blender timeline.
+        # CLAMP controllers already hold their end keys, and keep the range of their own keys.
+        scene = bpy.context.scene
+        for obj in data.objects():
+            if isinstance(obj, nif.NiTimeController) and obj.cycle_type != "CLAMP":
+                obj.start_time = min(obj.start_time, scene.frame_start)
+                obj.stop_time = max(obj.stop_time, scene.frame_end)
 
 
 class SceneNode:
@@ -933,15 +948,15 @@ class Mesh(SceneNode):
         animation = self.animation
         data_paths = {fc.data_path: fc for fc in fcurves}
 
-        # isolate unmuted layers
+        # isolate unmuted layers (a target without keys never contributes in the engine)
         fcurves_dict = {None: basis}
         for sk in shape_keys.key_blocks:
             fc = data_paths.get(sk.path_from_id('value'))
-            if fc and not (fc.mute or sk.mute):
+            if fc and len(fc.keyframe_points) and not (fc.mute or sk.mute):
                 fcurves_dict[fc] = sk
                 assert sk.relative_key == basis, "Shape keys must be relative to basis."
 
-        # bail if all were muted
+        # bail if all were muted or empty
         if not len(fcurves_dict) > 1:
             return morph_data
 
@@ -1339,12 +1354,8 @@ class Animation(SceneNode):
         return True
 
     def create_vis_controller(self, fcurves_dict):
-        fcurves = self.collect_fcurves(fcurves_dict, "hide_viewport", num_axes=1)
-        if len(fcurves) == 0:
-            return False
-
         key_type = nif.NiFloatData.KeyType.LIN_KEY
-        keys = self.collect_keyframe_points(fcurves, key_type)
+        _, keys = self.collect_keys(fcurves_dict, "hide_viewport", num_axes=1, key_type=key_type)
         if len(keys) == 0:
             return False
 
@@ -1365,16 +1376,7 @@ class Animation(SceneNode):
         return True
 
     def create_translations(self, fcurves_dict):
-        fcurves = self.collect_fcurves(fcurves_dict, "location", num_axes=3)
-        if len(fcurves) == 0:
-            return False
-
-        key_type = self.get_interpolation_type(fcurves)
-        if key_type is None:
-            return False
-
-        # collect keyframe points
-        keys = self.collect_keyframe_points(fcurves, key_type)
+        key_type, keys = self.collect_keys(fcurves_dict, "location", num_axes=3)
         if len(keys) == 0:
             return False
 
@@ -1408,12 +1410,8 @@ class Animation(SceneNode):
         return has_euler or has_quats
 
     def create_euler_rotations(self, fcurves_dict):
-        fcurves = self.collect_fcurves(fcurves_dict, "rotation_euler", num_axes=3)
-        if len(fcurves) == 0:
-            return False
-
-        key_type = self.get_interpolation_type(fcurves)
-        if key_type is None:
+        key_type, keys = self.collect_keys(fcurves_dict, "rotation_euler", num_axes=3)
+        if len(keys) == 0:
             return False
 
         if isinstance(self.source, bpy.types.PoseBone):
@@ -1425,24 +1423,15 @@ class Animation(SceneNode):
         # prepare euler rotations
         rotations = controller.data.rotations
         rotations.key_type = rotations.KeyType.EULER_KEY
-        rotations.euler_data = tuple(nif.NiFloatData(key_type=key_type) for _ in range(3))
+        if key_type.name == 'LIN_KEY':
+            axis_columns = [(0, 1 + i) for i in range(3)]  # time, value
+        else:
+            axis_columns = [(0, 1 + i, 4 + i, 7 + i) for i in range(3)]  # time, value, in_tan, out_tan
+        rotations.euler_data = tuple(nif.NiFloatData(key_type=key_type, keys=keys[:, c]) for c in axis_columns)
 
-        for i, euler_data in enumerate(rotations.euler_data):
-            axis_fcurves = [fc for fc in fcurves if fc.array_index == i]
-            if len(axis_fcurves) == 0:
-                continue
-
-            # collect keyframe points
-            keys = self.collect_keyframe_points(axis_fcurves, key_type)
-            if len(keys) == 0:
-                continue
-
-            # set the controller keys
-            euler_data.keys = keys
-
-            # update start/stop times
-            controller.start_time = min(keys[0, 0], controller.start_time)
-            controller.stop_time = max(keys[-1, 0], controller.stop_time)
+        # update start/stop times
+        controller.start_time = min(keys[0, 0], controller.start_time)
+        controller.stop_time = max(keys[-1, 0], controller.stop_time)
 
         # convert to local space
         offset = self.to_local_space()
@@ -1456,15 +1445,11 @@ class Animation(SceneNode):
         return True
 
     def create_quaternion_rotations(self, fcurves_dict):
-        fcurves = self.collect_fcurves(fcurves_dict, "rotation_quaternion", num_axes=4)
-        if len(fcurves) == 0:
-            return False
-
         # TODO: TCB interpolation
         key_type = nif.NiRotData.KeyType.LIN_KEY
 
-        # collect keyframe points
-        keys = self.collect_keyframe_points(fcurves, key_type)
+        # components are sampled from Blender, which interpolates them independently
+        _, keys = self.collect_keys(fcurves_dict, "rotation_quaternion", num_axes=4, key_type=key_type, sample=True)
         if len(keys) == 0:
             return False
 
@@ -1498,16 +1483,7 @@ class Animation(SceneNode):
         return True
 
     def create_scales(self, fcurves_dict):
-        fcurves = self.collect_fcurves(fcurves_dict, "scale", num_axes=3)
-        if len(fcurves) == 0:
-            return False
-
-        key_type = self.get_interpolation_type(fcurves)
-        if key_type is None:
-            return False
-
-        # collect keyframe points
-        keys = self.collect_keyframe_points(fcurves, key_type)
+        key_type, keys = self.collect_keys(fcurves_dict, "scale", num_axes=3)
         if len(keys) == 0:
             return False
 
@@ -1720,45 +1696,58 @@ class Animation(SceneNode):
 
         return fcurves_dict
 
-    def collect_fcurves(self, fcurves_dict, key, num_axes):
-        assert num_axes != 0
+    def collect_keys(self, fcurves_dict, key, num_axes, key_type=None, sample=False):
+        """Return (key_type, keys) for an animated property: one row per key time, one column per axis.
 
+        Read-only: the author's action is never modified. Axes keyed at different times are aligned by
+        inserting keys that leave each axis's curve unchanged; with `sample`, inserted values come from
+        Blender's own evaluation instead. An axis without keyframes holds the property's current value.
+        """
         # correct data path for pose bones
         if isinstance(self.source, bpy.types.PoseBone):
             data_path = f'pose.bones["{self.name}"].{key}'
         else:
             data_path = self.source.path_from_id(key)
 
-        # skip invalid data paths
-        if data_path not in fcurves_dict:
-            return ()
+        fcurves = {fc.array_index: fc for fc in fcurves_dict.get(data_path, ()) if len(fc.keyframe_points)}
+        if len(fcurves) == 0:
+            return None, ()
 
-        # collect defined fcurves
-        fcurves = fcurves_dict[data_path]
+        if key_type is None:
+            key_type = self.get_interpolation_type([fcurves[i] for i in sorted(fcurves)])
 
-        # fill in missing fcurves
-        if len(fcurves) != num_axes:
-            group_name = fcurves[0].group.name
-            action = self.source.id_data.animation_data.action
-            for i in set(range(num_axes)).difference(fc.array_index for fc in fcurves):
-                fc = action.fcurves.new(data_path, index=i, action_group=group_name)
+        axes = {
+            i: nif.NiFloatData(key_type=key_type, keys=self.collect_keyframe_points([fc], key_type))
+            for i, fc in fcurves.items()
+        }
 
-        # fill in missing keyframes
-        scene = bpy.context.scene
-        frames_per_axis = [{kp.co[0] for kp in fc.keyframe_points} for fc in fcurves]
-        required_frames = {scene.frame_start, scene.frame_end}.union(*frames_per_axis)
-        for fc, frames in zip(fcurves, frames_per_axis):
-            for frame in (required_frames - frames):
-                fc.keyframe_points.insert(frame, fc.evaluate(frame), options={'FAST'})
+        # the union of every axis's key times, merging times closer than the insertion tolerance
+        times = np.unique(np.concatenate([axis.times for axis in axes.values()]))
+        times = times[np.concatenate(([True], np.diff(times) > 1e-6))]
 
-        # ensure fcurves are sorted
-        fcurves.sort(key=lambda fc: fc.array_index)
+        values, in_tans, out_tans = [], [], []
+        for i in range(num_axes):
+            axis = axes.get(i)
+            if axis is None:
+                static = getattr(self.source, key)[i]
+                values.append(np.full(len(times), static))
+                in_tans.append(np.zeros(len(times)))
+                out_tans.append(np.zeros(len(times)))
+                continue
+            if sample:
+                values.append([fcurves[i].evaluate(t) for t in times])
+                continue
+            axis.evaluate_and_insert(times)
+            assert len(axis.keys) == len(times)
+            values.append(axis.values)
+            if key_type.name == 'BEZ_KEY':
+                in_tans.append(axis.in_tans)
+                out_tans.append(axis.out_tans)
 
-        # ensure fcurves are updated
-        for fc in fcurves:
-            fc.update()
-
-        return fcurves
+        columns = [times, *values]
+        if key_type.name == 'BEZ_KEY':
+            columns += [*in_tans, *out_tans]
+        return key_type, np.column_stack(columns).astype(np.float32)
 
     def create_keyframe_controller(self):
         result = self.output.controllers.find_type_with_owner(nif.NiKeyframeController)
