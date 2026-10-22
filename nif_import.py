@@ -51,7 +51,7 @@ class Importer:
         self.nodes = {}
         self.materials = {}
         self.mesh_data = {}
-        self.history = collections.defaultdict(set)
+        self.history = collections.defaultdict(list)
         self.armatures = collections.defaultdict(set)
         self.colliders = collections.defaultdict(set)
         self.active_collection = bpy.context.view_layer.active_layer_collection.collection
@@ -124,7 +124,7 @@ class Importer:
         while queue:
             node = queue.popleft()
             if self.process(node):
-                self.history[node.source].add(node)
+                self.history[node.source].append(node)
                 if hasattr(node.source, "children"):
                     queue.extend(SceneNode(self, child, node) for child in node.source.children_of_type(nif.NiAVObject))
 
@@ -314,7 +314,11 @@ class Importer:
     @nif_utils.dispatcher
     def process(self, node):
         print(f"Warning: Unhandled Type: {node.source.type}")
-        return False
+        # containment: an unsupported type becomes a placeholder rather than terminating
+        # traversal, so its supported descendants survive. Returning True is what lets
+        # resolve_nodes keep walking; deliberate skips (collision) still return False.
+        self.nodes[node] = Empty
+        return True
 
     @process.register("NiNode")
     @process.register("NiLODNode")
@@ -358,13 +362,15 @@ class Importer:
     # -------
 
     def get(self, source):
-        return next(iter(self.history[source]))
+        return self.history[source][0]
 
     def iter_bones(self, root):
         yield from map(self.get, self.armatures[root.source])
 
     def get_root_output(self, roots):
-        return roots[0].output.id_data if roots else None
+        # a root may legitimately have no output: an ignored RootCollisionNode
+        output = roots[0].output if roots else None
+        return output.id_data if output is not None else None
 
     def get_armature_node(self):
         return self.get(*self.armatures)
@@ -1379,7 +1385,10 @@ class Animation(SceneNode):
 
     @staticmethod
     def create_interpolation_data(ni_data, fcurves, axis=...):
-        if ni_data.key_type.name  == 'LIN_KEY':
+        if ni_data.key_type.name == 'NO_INTERP':
+            for kp in fcurves.keyframe_points:
+                kp.interpolation = 'CONSTANT'
+        elif ni_data.key_type.name == 'LIN_KEY':
             for kp in fcurves.keyframe_points:
                 kp.interpolation = 'LINEAR'
         else:

@@ -56,7 +56,7 @@ class Exporter:
         self.nodes = {}
         self.materials = {}
         self.pixel_datas = {}
-        self.history = collections.defaultdict(set)
+        self.history = collections.defaultdict(list)
         self.armatures = collections.defaultdict(set)
         self.colliders = collections.defaultdict(set)
         self.depsgraph = None
@@ -90,7 +90,10 @@ class Exporter:
         data.apply_scale(self.scale_correction)
         data.apply_time_scale(1 / bpy.context.scene.render.fps)
         data.merge_properties(ignore={"name", "shine", "specular_color"})
+        child_orders = [(node, list(node.children)) for node in data.objects_of_type(nif.NiNode)]
         data.sort()
+        for node, children in child_orders:
+            node.children = children
         self.setup_markers(data)
         data.save(self.filepath)
 
@@ -109,13 +112,9 @@ class Exporter:
         while queue:
             node = queue.popleft()
             if self.process(node):
-                self.history[node.source].add(node)
+                self.history[node.source].append(node)
                 if hasattr(node.source, "children"):
-                    queue.extend(
-                        SceneNode(self, child, node)
-                        for child in node.source.children
-                        if child in bl_objects
-                    )
+                    queue.extend(SceneNode(self, child, node) for child in bl_objects if child.parent == node.source)
 
         return roots
 
@@ -224,7 +223,7 @@ class Exporter:
 
         if node.source.instance_type == 'COLLECTION':
             collection = node.source.instance_collection
-            self.resolve_nodes(set(collection.objects), parent=node)
+            self.resolve_nodes(list(collection.objects), parent=node)
 
         if (not self.colliders) and node.name.lower().startswith("collision"):
             self.colliders[node.source].update(nif.NiAVObject.descendants(node.source))
@@ -239,8 +238,9 @@ class Exporter:
     @process.register("ARMATURE")
     def process_armature(self, node):
         self.nodes[node] = Armature
-        self.armatures[node.source].update(node.source.pose.bones)
-        self.resolve_nodes(self.armatures[node.source], parent=node)
+        bones = list(node.source.pose.bones)
+        self.armatures[node.source] = bones
+        self.resolve_nodes(bones, parent=node)
         return True
 
     @process.register("NONE")
@@ -253,24 +253,34 @@ class Exporter:
     # -------
 
     def get(self, source):
-        return next(iter(self.history[source]))
+        return self.history[source][0]
 
     def get_source_objects(self):
         if self.use_active_collection:
-            objects = set(bpy.context.view_layer.active_layer_collection.collection.all_objects)
+            base_objects = list(bpy.context.view_layer.active_layer_collection.collection.all_objects)
         else:
-            objects = set(bpy.context.view_layer.objects)
+            base_objects = list(bpy.context.view_layer.objects)
 
         if self.use_selection:
-            objects &= set(bpy.context.selected_objects)
+            allowed = set(bpy.context.selected_objects)
         else:
-            objects &= set(bpy.context.visible_objects)
+            allowed = set(bpy.context.visible_objects)
 
-        # ensure all objects have a valid path to the scene root
-        for ob in objects.copy():
-            while (ob.parent is not None) and (ob.parent not in objects):
-                objects.add(ob.parent)
-                ob = ob.parent
+        # Preserve Blender's sequence, while ensuring every included object has a
+        # deterministic, top-down path to the scene root.
+        objects = []
+        seen = set()
+        for ob in base_objects:
+            if ob not in allowed or ob in seen:
+                continue
+            chain = []
+            current = ob
+            while current is not None and current not in seen:
+                chain.append(current)
+                current = current.parent
+            for current in reversed(chain):
+                seen.add(current)
+                objects.append(current)
 
         # show a useful error message if no valid objects were discovered
         if len(objects) == 0:

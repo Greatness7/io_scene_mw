@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from ..utils.flags import bool_property
 from ..utils.typing import *
 
+from .NiAVObject import NiAVObject
 from .NiBinaryStream import NiBinaryStream
 from .NiNode import NiNode
 
@@ -20,3 +24,10 @@ class NiSwitchNode(NiNode):
     def save(self, stream: NiBinaryStream) -> None:
         super().save(stream)
         stream.write_uint(self.active_index)
+
+    def sort(self, key: Callable[[Any], Any] = lambda value: value) -> None:
+        """Canonicalize non-positional fields without reordering children.
+
+        The key is accepted for signature compatibility and intentionally ignored.
+        """
+        NiAVObject.sort(self)
