@@ -1,3 +1,4 @@
+import dataclasses
 import timeit
 
 from es3.utils.geometry import GeometryError
@@ -8,8 +9,11 @@ from .conversion.options import export_options_from_mapping
 from .conversion.runtime import ExportRuntime
 from .preferences import Preferences
 
-def save(context, filepath, report=None, **config):
-    """save the scene to a nif file"""
+def save(context, filepath, report=None, scale_correction=None, **config):
+    """save the scene to a nif file
+
+    `scale_correction` overrides the add-on preference, for callers that need a fixed scale.
+    """
 
     print(f"Export File: {filepath}")
     time = timeit.default_timer()
@@ -21,6 +25,8 @@ def save(context, filepath, report=None, **config):
 
     options = export_options_from_mapping(config)
     runtime = ExportRuntime.from_context(context, Preferences.from_context(context))
+    if scale_correction is not None:
+        runtime = dataclasses.replace(runtime, scale_correction=1 / scale_correction)
     exporter = Exporter(filepath, options, runtime)
     try:
         exporter.execute()
