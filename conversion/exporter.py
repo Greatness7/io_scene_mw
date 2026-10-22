@@ -259,7 +259,7 @@ class Exporter:
             collection = node.source.instance_collection
             self.resolve_nodes(list(collection.objects), parent=node, scope=ExportScope(node.scope))
 
-        if nif_switch.is_switch(node.source):
+        if node.source.mw.node_type not in (nif_switch.NODE, nif_switch.COLLISION):
             return  # an explicit type outranks name conventions
 
         if nif_switch.is_collision(node.source):
@@ -469,7 +469,8 @@ class Exporter:
                 if node.controller:
                     needs_animation_node = True
 
-        if needs_animation_node:
+        # an authored animation root keeps its own flags
+        if needs_animation_node and not isinstance(root, nif.NiBSAnimationNode):
             replaced_root = None
             # if conditions are met we can update in-place rather than using a wrapper
             in_place = type(root) is nif.NiNode and root.name not in ("Bip01", "Root Bone")
@@ -552,20 +553,26 @@ class Exporter:
 
     def create_node(self, node, data=None):
         """Create the NIF node of `node` and attach it to its parent's; `data` makes it a shape."""
+        mw = node.source.mw
         output: Any
         if isinstance(data, nif.NiTriShapeData):
             output = nif.NiTriShape(data=data)
-        elif nif_switch.is_switch_node(node.source):
-            output = nif.NiSwitchNode()
-        elif nif_switch.is_lod(node.source):
-            output = nif.NiLODNode()
         elif (node.scope, node.source) in self.colliders:
-            output = nif.RootCollisionNode(app_culled=True)
-        elif node.name == "PickProxy":
-            output = nif.NiCollisionSwitch(propagate=True)
+            output = nif.RootCollisionNode()
         else:
-            output = nif.NiNode()
+            # node type names are the es3 class names; a type on a bone or non-Empty is an export error
+            is_empty = getattr(node.source, "type", None) == "EMPTY"
+            output = getattr(nif, mw.node_type if is_empty else nif_switch.NODE)()
         self.outputs[node] = output
+
+        # set payload
+        if isinstance(output, nif.NiFltAnimationNode):
+            output.period = mw.flt_period
+        elif isinstance(output, nif.NiSortAdjustNode):
+            output.sorting_mode = nif.NiSortAdjustNode.SortingMode["SORTING_" + mw.sorting_mode]
+            if mw.sorting_mode == "SUBSORT":
+                # Subsort without an accumulator only turns sorting off
+                output.sub_sorter = nif.NiAlphaAccumulator()
 
         # set fields
         output.name = node.name
@@ -575,11 +582,9 @@ class Exporter:
         if node.parent:
             self.outputs[node.parent].attach_child(output)
 
-        # set flags
-        output.flags |= node.source.mw.object_flags
-
-        # set hidden
-        if output.is_shadow:
+        # set flags: the author's, except that shadows and collision roots are never drawn
+        output.flags = mw.object_flags
+        if output.is_shadow or isinstance(output, nif.RootCollisionNode):
             output.app_culled = True
 
         # set bounds

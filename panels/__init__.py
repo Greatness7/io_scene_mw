@@ -27,6 +27,7 @@ from .object_panel import (
     LODSortByDistance,
     OBJECT_MT_mw_lod_range,
     ObjectPanel,
+    ObjectRawFlagsPanel,
     SwitchAddNullSlot,
     SwitchRemoveNullSlot,
     SwitchNodeSetActive,
@@ -58,6 +59,7 @@ classes = (
     LODSortByDistance,
     OBJECT_MT_mw_lod_range,
     ObjectPanel,
+    ObjectRawFlagsPanel,
 )
 
 register, unregister = bpy.utils.register_classes_factory(classes)

@@ -148,8 +148,7 @@ class Importer:
 
             self.nodes.append(node)
             self.history[node.source].append(node)
-            # exact types: NiFltAnimationNode stays an ordinary node
-            if type(node.source) in (nif.NiSwitchNode, nif.NiLODNode):
+            if type(node.source) in (nif.NiSwitchNode, nif.NiLODNode, nif.NiFltAnimationNode):
                 # null links are slots too: queue them in place so markers link in source order
                 slots = tuple(
                     new_node(child, node) if isinstance(child, nif.NiAVObject) else ImportNullSlot(node)
@@ -175,7 +174,6 @@ class Importer:
                 continue
 
             output = cast(Any, output)
-            output.mw.node_type = node_type
             slots = [self.slot_output(node, slot) for slot in plan.slots]
             if None in slots:
                 self.warn(f"{node_type} '{name}' lost a child to skeleton or collision handling; its indices shifted")
@@ -233,8 +231,13 @@ class Importer:
             nif.NiNode,
             nif.NiLODNode,
             nif.NiSwitchNode,
+            nif.NiFltAnimationNode,
+            nif.AvoidNode,
+            nif.NiBillboardNode,
             nif.NiBSAnimationNode,
+            nif.NiBSParticleNode,
             nif.NiCollisionSwitch,
+            nif.NiSortAdjustNode,
         ):
             return self.process_empty(node)
         if source_type is nif.NiTriShape:
@@ -377,6 +380,9 @@ class Importer:
         output: Any = self.create_object(node.name, bl_data)
         self.outputs[node] = output
         output.empty_display_size *= self.runtime.scale_correction
+        if getattr(output, "type", None) == "EMPTY":
+            # before the flags: picking a type resets its type-specific bits
+            self.set_node_type(node.source, output)
         output.mw.object_flags = node.source.flags
 
         bl_parent = cast(Any, self.outputs.get(node.parent))
@@ -396,8 +402,6 @@ class Importer:
         if node.source in self.colliders:
             output.name = "Collision"
             output.display_type = "WIRE"
-            if getattr(output, "type", None) == "EMPTY":
-                output.mw.node_type = nif_switch.COLLISION
 
         if node.source.is_bounding_box:
             output.empty_display_size = 1.0
@@ -412,6 +416,19 @@ class Importer:
         )
 
         return output
+
+    @staticmethod
+    def set_node_type(source, output):
+        """Type an Empty after its source class and fill that type's payload; unsupported types stay NiNode."""
+        node_type = type(source).__name__
+        if node_type not in nif_switch.NODE_TYPE_FLAGS:
+            return
+        output.mw.node_type = node_type
+        if isinstance(source, nif.NiFltAnimationNode):
+            output.mw.flt_period = source.period
+        elif isinstance(source, nif.NiSortAdjustNode):
+            # the accumulator link carries no data; export recreates it for Subsort
+            output.mw.sorting_mode = nif.NiSortAdjustNode.SortingMode(source.sorting_mode).name.removeprefix("SORTING_")
 
     def create_object(self, name, bl_data=None):
         bl_object = bpy.data.objects.new(name, bl_data)

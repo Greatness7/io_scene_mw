@@ -11,7 +11,7 @@ class BillboardMode(IntEnum):
     ALWAYS_FACE_CAMERA = 0
     ROTATE_ABOUT_UP = 1
     RIGID_FACE_CAMERA = 2
-    ALWAYS_FACE_CENTER = 3
+    # Morrowind has no mode 3: the value matches no branch and the node does not turn
 
 
 class NiBillboardNode(NiNode):

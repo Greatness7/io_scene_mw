@@ -1,7 +1,7 @@
 """Node type authoring rules shared by the object panel and both translators.
 
 `mw.node_type` names the NIF class an Empty exports as. Only the switch family has rules beyond the type test.
-A switch-family node is an Empty whose `mw.node_type` is NiSwitchNode or NiLODNode. Its variants are its direct children, ordered by
+A switch-family node is an Empty whose `mw.node_type` is NiSwitchNode, NiLODNode or NiFltAnimationNode. Its variants are its direct children, ordered by
 the scene's collection-link sequence (never `Object.children`, which is alphabetical). An Empty child
 flagged `mw.is_switch_null` stands for an intentional null link. The selection is an object reference,
 so it follows its target through renames and reordering; the numeric index exists only in the file.
@@ -11,6 +11,24 @@ A LOD's distance ranges are rows on the LOD Empty, each owned by its child throu
 import bpy
 
 NODE, SWITCH_NODE, LOD, COLLISION = "NiNode", "NiSwitchNode", "NiLODNode", "RootCollisionNode"
+FLT_ANIMATION = "NiFltAnimationNode"
+
+# Bits 5-7 of `flags` mean something different in each node type. Picking a type resets them to its
+# default (the common vanilla value) and the panel shows only that type's flag views.
+TYPE_FLAGS_MASK = 0x00E0
+NODE_TYPE_FLAGS = {
+    NODE: (0x00, ()),
+    SWITCH_NODE: (0x20, ("flag_update_only_active",)),
+    LOD: (0x00, ("flag_update_only_active",)),
+    FLT_ANIMATION: (0x20, ("flag_update_only_active", "flag_bounce")),
+    COLLISION: (0x00, ()),
+    "AvoidNode": (0x00, ()),
+    "NiBillboardNode": (0x00, ("billboard_mode",)),
+    "NiBSAnimationNode": (0x20, ("flag_animated", "flag_not_random")),
+    "NiBSParticleNode": (0xA0, ("flag_animated", "flag_not_random", "flag_follow")),
+    "NiCollisionSwitch": (0x20, ("flag_collision",)),
+    "NiSortAdjustNode": (0x00, ()),
+}
 
 NULL_SLOT_NAME = "Empty Slot"
 
@@ -28,8 +46,8 @@ def _node_type(ob):
 
 
 def is_switch_node(ob):
-    """An author-selected NiSwitchNode."""
-    return _node_type(ob) == SWITCH_NODE
+    """A NiSwitchNode, or a NiFltAnimationNode whose selection is the child it starts on."""
+    return _node_type(ob) in (SWITCH_NODE, FLT_ANIMATION)
 
 
 def is_lod(ob):
@@ -38,8 +56,8 @@ def is_lod(ob):
 
 
 def is_switch(ob):
-    """A switch in the NIF sense: NiSwitchNode or its subclass NiLODNode."""
-    return _node_type(ob) in (SWITCH_NODE, LOD)
+    """A switch in the NIF sense: NiSwitchNode or its subclasses NiLODNode and NiFltAnimationNode."""
+    return _node_type(ob) in (SWITCH_NODE, LOD, FLT_ANIMATION)
 
 
 def is_collision(ob):

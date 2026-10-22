@@ -1,22 +1,29 @@
-"""Live viewport preview of NiSwitchNode and NiLODNode selections.
+"""Live viewport preview of NiSwitchNode and NiLODNode selections, and of NiBillboardNode rotation.
 
 A timer reads the navigated 3D view's eye position, applies the engine's selection rule to every switch and
 LOD Empty, and hides the subtrees of inactive children with `hide_set`. It only ever un-hides what it hid itself, and the
 file on disk never keeps a preview's hide state. All state here is runtime-only.
+
+Billboards turn through their delta rotation, which this preview owns while it runs: the author's own delta is
+stashed and written back on restore, on save and before export. Editing a billboard's delta rotation while
+previewing is overwritten.
 """
 
+import math
 import time
 import traceback
 
 import bpy
 from bpy.app.handlers import persistent
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 from . import nif_switch
 
 INTERVAL = 0.1
 FULL_REFRESH = 1.0  # also re-evaluate a still view, to pick up range edits and undo
+BILLBOARD = "NiBillboardNode"
 
+_rotated = {}  # billboard name -> its author's (delta_rotation_euler, delta_rotation_quaternion)
 _hidden = set()  # names of the objects this preview hid
 _layer = None  # (scene name, view layer name) that `_hidden` applies to
 _views = {}  # (window index, area index) -> last seen view matrix
@@ -50,6 +57,13 @@ def select_child(lod, children, eye):
     return -1
 
 
+def _depth(ob):
+    n = 0
+    while ob.parent is not None:
+        ob, n = ob.parent, n + 1
+    return n
+
+
 def desired_hidden(scene, view_layer, eye):
     """Names of every object an inactive switch child or LOD level would hide from `eye`."""
     # one pass over the scene: Object.children scans every object in the file on each call
@@ -61,12 +75,6 @@ def desired_hidden(scene, view_layer, eye):
             if ob not in siblings:
                 siblings.append(ob)
 
-    def depth(ob):
-        n = 0
-        while ob.parent is not None:
-            ob, n = ob.parent, n + 1
-        return n
-
     def subtree(ob):
         stack = [ob]
         while stack:
@@ -76,7 +84,7 @@ def desired_hidden(scene, view_layer, eye):
 
     hidden = set()
     nodes = [ob for ob in in_layer if nif_switch.is_switch(ob)]
-    for node in sorted(nodes, key=depth):  # parents first, so a hidden node skips its own choice
+    for node in sorted(nodes, key=_depth):  # parents first, so a hidden node skips its own choice
         if node.name in hidden:
             _active.pop(node.name, None)
             continue
@@ -90,6 +98,98 @@ def desired_hidden(scene, view_layer, eye):
             if i != index:
                 hidden.update(ob.name for ob in subtree(child))
     return hidden
+
+
+def billboard_rotation(mode, world, view):
+    """The engine's turn `m` for a billboard (NiBillboardNode::RotateToCamera); its world rotation becomes `W @ m`.
+
+    `world` is the node's world matrix before turning and `view` the camera's world matrix.
+    """
+    inverse = world.to_3x3().normalized().transposed()
+    right = inverse @ view.col[0].xyz  # a Blender view looks down its -Z with +Y up
+    up = inverse @ view.col[1].xyz
+    forward = inverse @ -view.col[2].xyz
+    if mode == 0:  # always face camera: local Z toward the camera, local Y as upright as the view allows
+        length = math.hypot(up.y, right.y)
+        if length > 1e-6:
+            c, s = up.y / length, -right.y / length
+            return Matrix((right * c + up * s, up * c - right * s, -forward)).transposed()
+    elif mode == 1:  # rotate about up: local Z toward the eye, turning only about local Y
+        eye = inverse @ (view.translation - world.translation)
+        length = math.hypot(eye.z, eye.x)
+        if length >= 1e-12:
+            c, s = eye.z / length, eye.x / length
+            return Matrix(((c, 0, s), (0, 1, 0), (-s, 0, c)))
+    elif mode == 2:  # rigid face camera: local X and Y take the camera's right and up
+        # the engine writes +forward, which also mirrors local Z; a delta rotation can only show the turn
+        return Matrix((right, up, -forward)).transposed()
+    return Matrix.Identity(3)  # a raw value of 3 matches no branch in the engine and does not turn
+
+
+def _authored_delta(ob, stash):
+    euler, quaternion = stash
+    if ob.rotation_mode == "QUATERNION":
+        return quaternion.normalized().to_matrix()
+    euler = euler.copy()
+    euler.order = ob.rotation_mode
+    return euler.to_matrix()
+
+
+def _own_rotation(ob):
+    if ob.rotation_mode == "QUATERNION":
+        return ob.rotation_quaternion.normalized().to_matrix()
+    return ob.rotation_euler.to_matrix()
+
+
+def _unrotate(name):
+    euler, quaternion = _rotated.pop(name)
+    ob = bpy.data.objects.get(name)
+    if ob:
+        ob.delta_rotation_euler = euler
+        ob.delta_rotation_quaternion = quaternion
+
+
+def unrotate():
+    """Write back every billboard's own delta rotation. True if there was any to write."""
+    names = list(_rotated)
+    for name in names:
+        _unrotate(name)
+    return bool(names)
+
+
+def orient(view_layer, view):
+    """Turn every billboard in `view_layer` toward `view`, a camera world matrix, through its delta rotation."""
+    billboards = {
+        ob.name: ob
+        for ob in view_layer.objects
+        # Blender has no delta rotation for axis-angle in its Python API
+        if nif_switch._node_type(ob) == BILLBOARD and ob.rotation_mode != "AXIS_ANGLE"
+    }
+    for name in list(_rotated):
+        if name not in billboards:
+            _unrotate(name)
+    # parents first; a billboard below another reads its parent as of the last evaluation, one tick behind
+    for name, ob in sorted(billboards.items(), key=lambda item: _depth(item[1])):
+        stash = _rotated.setdefault(name, (ob.delta_rotation_euler.copy(), ob.delta_rotation_quaternion.copy()))
+        own = _own_rotation(ob)
+        authored = _authored_delta(ob, stash)
+        basis = Matrix.LocRotScale(
+            ob.location + ob.delta_location,
+            authored @ own,
+            Vector([a * b for a, b in zip(ob.scale, ob.delta_scale)]),
+        )
+        # everything above the node, bone parents included, as of the last evaluation
+        world = ob.matrix_world @ ob.matrix_basis.inverted_safe() @ basis
+        m = billboard_rotation((ob.mw.object_flags >> 5) & 3, world, view)
+        # Blender applies the delta before the object's rotation, so conjugate `basis @ m` into it
+        delta = authored @ own @ m @ own.transposed()
+        current = _authored_delta(ob, (ob.delta_rotation_euler, ob.delta_rotation_quaternion))
+        if max(abs(a - b) for row_a, row_b in zip(delta, current) for a, b in zip(row_a, row_b)) < 1e-6:
+            continue  # an unchanged write would still tag a redraw
+        if ob.rotation_mode == "QUATERNION":
+            ob.delta_rotation_quaternion = delta.to_quaternion()
+        else:
+            ob.delta_rotation_euler = delta.to_euler(ob.rotation_mode, ob.delta_rotation_euler)
 
 
 def _get_layer(key):
@@ -128,8 +228,9 @@ def _set_hidden(state):
 
 
 def restore():
-    """Un-hide everything this preview hid and forget it."""
+    """Un-hide everything this preview hid, un-turn its billboards, and forget it."""
     global _layer
+    unrotate()
     _set_hidden(False)
     _hidden.clear()
     _active.clear()
@@ -137,7 +238,7 @@ def restore():
 
 
 def find_eye():
-    """The focused window, its view's eye position (or None), and whether any view moved since last call."""
+    """The focused window, its view's camera world matrix (or None), and whether any view moved since last call."""
     global _focus
     moved = False
     found = {}
@@ -162,7 +263,7 @@ def find_eye():
     if _focus not in found:
         _focus = next(iter(found))
     window, rv3d = found[_focus]
-    return window, rv3d.view_matrix.inverted().translation, moved
+    return window, rv3d.view_matrix.inverted(), moved
 
 
 def _stop():
@@ -180,9 +281,10 @@ def tick():
         if not bpy.context.window_manager.mw_node_preview:
             restore()
             return None
-        window, eye, moved = find_eye()
-        if eye is not None and (moved or time.monotonic() - _last_full > FULL_REFRESH):
-            apply(window.view_layer, desired_hidden(window.scene, window.view_layer, eye))
+        window, view, moved = find_eye()
+        if view is not None and (moved or time.monotonic() - _last_full > FULL_REFRESH):
+            apply(window.view_layer, desired_hidden(window.scene, window.view_layer, view.translation))
+            orient(window.view_layer, view)
             _last_full = time.monotonic()
         return INTERVAL
     except Exception:
@@ -214,18 +316,21 @@ def update_toggle(self, context):
 
 @persistent
 def save_pre(*args):
-    _set_hidden(False)  # the file on disk never keeps a preview's hide state
+    _set_hidden(False)  # the file on disk never keeps a preview's hide state or turn
+    unrotate()
 
 
 @persistent
 def save_post(*args):
     _set_hidden(True)
+    refresh()  # the next tick turns the billboards again
 
 
 @persistent
 def load_pre(*args):
     global _layer, _focus
     _hidden.clear()  # the names belong to the old file
+    _rotated.clear()
     _views.clear()
     _active.clear()
     _layer = _focus = None
@@ -249,8 +354,8 @@ _handlers = (
 def register():
     bpy.types.WindowManager.mw_node_preview = bpy.props.BoolProperty(
         name="Enable Preview",
-        description="Hide inactive switch children, and LOD levels the way the game would at the current "
-        "viewport distance. Not saved",
+        description="Hide inactive switch children and LOD levels, and turn billboards, the way the game would "
+        "from the current viewport. Not saved",
         default=False,
         update=update_toggle,
     )

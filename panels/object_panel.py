@@ -234,11 +234,18 @@ class ObjectPanel(bpy.types.Panel):
         ob = context.active_object
         if ob is None:
             return
-        self.layout.prop(ob.mw, "object_flags")
-
+        node_type = ob.mw.node_type if ob.type == "EMPTY" else nif_switch.NODE
         if ob.type == "EMPTY":
             self.layout.prop(ob.mw, "node_type")
+        elif ob.type == "MESH":
+            # the same row as an Empty's, locked: a mesh always exports as NiTriShape
+            row = self.layout.row()
+            row.enabled = False
+            row.prop(ob.mw, "mesh_node_type")
+        self.draw_flags(ob, node_type)
 
+        if node_type == nif_node_preview.BILLBOARD:
+            self.draw_options(context, self.layout)
         if nif_switch.is_switch_node(ob):
             self.draw_switch_node(context, ob)
         elif nif_switch.is_lod(ob):
@@ -246,6 +253,22 @@ class ObjectPanel(bpy.types.Panel):
         elif nif_switch.is_null_slot(ob):
             for problem in nif_switch.null_slot_problems(ob, nif_switch.scene_objects(context.scene)):
                 self.layout.label(text=problem, icon="ERROR")
+
+    def draw_flags(self, ob, node_type):
+        # label-left property split, as in the Transform panel
+        column = self.layout.column(heading="Flags")
+        column.use_property_split = True
+        column.use_property_decorate = False
+        row = column.row()
+        row.enabled = node_type != nif_switch.COLLISION  # export always hides collision roots
+        row.prop(ob.mw, "flag_hidden")
+        column.prop(ob.mw, "flag_collision_mode")
+        for name in nif_switch.NODE_TYPE_FLAGS[node_type][1]:
+            column.prop(ob.mw, name)
+        if node_type == nif_switch.FLT_ANIMATION:
+            column.prop(ob.mw, "flt_period")
+        elif node_type == "NiSortAdjustNode":
+            column.prop(ob.mw, "sorting_mode")
 
     def draw_switch_node(self, context, switch):
         children = nif_switch.ordered_children(switch, nif_switch.scene_objects(context.scene))
@@ -367,3 +390,18 @@ class ObjectPanel(bpy.types.Panel):
                 line.operator(LODRemoveRange.bl_idname, text="", icon="X").index = index
 
         box.operator(SwitchAddNullSlot.bl_idname, icon="ADD")
+
+
+class ObjectRawFlagsPanel(bpy.types.Panel):
+    bl_idname = "OBJECT_PT_MW_ObjectRawFlagsPanel"
+    bl_parent_id = ObjectPanel.bl_idname
+    bl_space_type = "PROPERTIES"
+    bl_region_type = "WINDOW"
+    bl_context = "object"
+    bl_label = "Raw Flags"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        ob = context.active_object
+        if ob is not None:
+            self.layout.prop(ob.mw, "object_flags")
