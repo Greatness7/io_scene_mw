@@ -136,7 +136,7 @@ def create_pixel_data(image, include_alpha, pixel_datas) -> nif.NiPixelData:
         width, height = image.size
         for size in (width, height):
             if (size == 0) or (size & (size - 1) != 0):
-                raise ValueError("Image dimensions must be a power of 2")
+                raise nif_switch.SwitchError("Image dimensions must be a power of 2")
         if include_alpha:
             pixel_format = nif.NiPixelFormat.RGBA()
             pixel_stride = 4
