@@ -89,58 +89,6 @@ class LODRange(bpy.types.PropertyGroup):
 
 
 class ObjectProperties(bpy.types.PropertyGroup):
-    object_flags: bpy.props.IntProperty(
-        name="Flags",
-        description="The raw NIF flags. The labeled flags above edit bits of this value",
-        min=0,
-        max=65535,
-        default=2,
-    )
-
-    # views of `object_flags`; bits 0x08 and 0x10 are recomputed by the engine at runtime and have none
-    flag_hidden: flag_bit(
-        0x0001,
-        "Hidden",
-        "Never drawn (app culled). Collision still applies. Collision roots and shadows are always hidden",
-        forced=lambda self: self.node_type == nif_switch.COLLISION,
-    )
-    flag_collision_mode: flag_field(
-        0x0006,
-        1,
-        "Collision Mode",
-        "How NetImmerse collision tests descend here. Morrowind's actor and projectile collision ignores it",
-        [
-            ("NONE", "None", "Stop here", 0),
-            ("TRIANGLES", "Triangles", "Test children down to their triangles", 1),
-            ("OBBS", "Bounding Boxes", "Test the bounding volume first, children only on a hit", 2),
-            ("CONTINUE", "Continue", "Descend to child nodes without testing geometry here", 3),
-        ],
-    )
-    flag_update_only_active: flag_bit(
-        0x0020, "Update Only Active", "Only the active child's controllers are updated and bounded"
-    )
-    flag_bounce: flag_bit(0x0040, "Bounce", "Cycle back and forth through the children instead of looping")
-    flag_animated: flag_bit(
-        0x0020, "Animated", "The engine updates the controllers below. Without it animations and particles stay still"
-    )
-    flag_not_random: flag_bit(0x0040, "Not Random", "Controllers start in phase instead of at a random time")
-    flag_follow: flag_bit(
-        0x0080, "Follow Parent", "The subtree follows its parent. Off anchors it in world space where it spawned"
-    )
-    flag_collision: flag_bit(0x0020, "Collision", "Collision and picking reach the children. Off blocks both")
-    billboard_mode: flag_field(
-        0x0060,
-        5,
-        "Billboard Mode",
-        "How the node turns toward the camera",
-        [
-            ("ALWAYS_FACE_CAMERA", "Always Face Camera", "Turn fully toward the camera", 0),
-            ("ROTATE_ABOUT_UP", "Rotate About Up", "Turn only about the local up axis", 1),
-            ("RIGID_FACE_CAMERA", "Rigid Face Camera", "Face the camera without rolling", 2),
-            # Morrowind has no mode 3: the value matches no branch and the node does not turn
-        ],
-    )
-
     node_type: bpy.props.EnumProperty(
         name="Node Type",
         description="The NIF node type this Empty exports as",
@@ -161,7 +109,6 @@ class ObjectProperties(bpy.types.PropertyGroup):
         update=update_node_type,
     )
 
-    # drawn locked on meshes so they show the same row as Empties; stores nothing
     mesh_node_type: bpy.props.EnumProperty(
         name="Node Type",
         description="A mesh always exports as NiTriShape",
@@ -170,23 +117,37 @@ class ObjectProperties(bpy.types.PropertyGroup):
         options=set(),
     )
 
-    flt_period: bpy.props.FloatProperty(
-        name="Period",
-        description="Frames to show every child once",
-        min=0.0,
-        default=0.0,
+    object_flags: bpy.props.IntProperty(
+        name="Flags",
+        description="The raw NIF flags. The labeled flags above edit bits of this value",
+        min=0,
+        max=65535,
+        default=2,
     )
 
-    sorting_mode: bpy.props.EnumProperty(
-        name="Sorting",
-        description="How the alpha geometry below is sorted",
-        items=[
-            ("INHERIT", "Inherit", "Sort as the parent does", 0),
-            ("OFF", "Off", "No sorting; draw in scene order", 1),
-            ("SUBSORT", "Subsort", "Sort this subtree on its own", 2),
-            ("GROUPED", "Grouped (MWSE)", "Sort the subtree as one object. Without MWSE this acts as Inherit", 64),
+    flag_app_culled: flag_bit(
+        0x0001,
+        "App Culled",
+        "Never drawn. Collision still applies. Collision roots and shadows are always app culled",
+        forced=lambda self: self.node_type == nif_switch.COLLISION,
+    )
+
+    flag_collision_mode: flag_field(
+        0x0006,
+        1,
+        "Collision Mode",
+        "How NetImmerse collision tests descend here. Morrowind's actor and projectile collision ignores it",
+        [
+            ("NONE", "None", "Stop here", 0),
+            ("TRIANGLES", "Triangles", "Test children down to their triangles", 1),
+            ("OBBS", "Bounding Boxes", "Test the bounding volume first, children only on a hit", 2),
+            ("CONTINUE", "Continue", "Descend to child nodes without testing geometry here", 3),
         ],
-        default="OFF",
+    )
+
+    # NiSwitchNode
+    flag_update_only_active: flag_bit(
+        0x0020, "Update Only Active", "Only the active child's controllers are updated and bounded"
     )
 
     switch_active_child: bpy.props.PointerProperty(
@@ -209,6 +170,17 @@ class ObjectProperties(bpy.types.PropertyGroup):
         default=-1,
     )
 
+    # NiFltAnimationNode
+    flag_bounce: flag_bit(0x0040, "Bounce", "Cycle back and forth through the children instead of looping")
+
+    flt_period: bpy.props.FloatProperty(
+        name="Period",
+        description="Frames to show every child once",
+        min=0.0,
+        default=0.0,
+    )
+
+    # NiLODNode
     lod_center: bpy.props.FloatVectorProperty(
         name="LOD Center",
         description="The point distances are measured from, in this Empty's local space",
@@ -223,6 +195,48 @@ class ObjectProperties(bpy.types.PropertyGroup):
         name="Sync Ranges",
         description="Editing a far also sets the next child's near, and editing a near sets the previous child's far",
         default=True,
+    )
+
+    # NiBSAnimationNode
+    flag_animated: flag_bit(
+        0x0020, "Animated", "The engine updates the controllers below. Without it animations and particles stay still"
+    )
+
+    flag_not_random: flag_bit(0x0040, "Not Random", "Controllers start in phase instead of at a random time")
+
+    # NiBSParticleNode
+    flag_follow: flag_bit(
+        0x0080, "Follow Parent", "The subtree follows its parent. Off anchors it in world space where it spawned"
+    )
+
+    # NiCollisionSwitch
+    flag_collision: flag_bit(0x0020, "Collision", "Collision and picking reach the children. Off blocks both")
+
+    # NiBillboardNode
+    billboard_mode: flag_field(
+        0x0060,
+        5,
+        "Billboard Mode",
+        "How the node turns toward the camera",
+        [
+            ("ALWAYS_FACE_CAMERA", "Always Face Camera", "Turn fully toward the camera", 0),
+            ("ROTATE_ABOUT_UP", "Rotate About Up", "Turn only about the local up axis", 1),
+            ("RIGID_FACE_CAMERA", "Rigid Face Camera", "Face the camera without rolling", 2),
+            # Morrowind has no mode 3: the value matches no branch and the node does not turn
+        ],
+    )
+
+    # NiSortAdjustNode
+    sorting_mode: bpy.props.EnumProperty(
+        name="Sorting",
+        description="How the alpha geometry below is sorted",
+        items=[
+            ("INHERIT", "Inherit", "Sort as the parent does", 0),
+            ("OFF", "Off", "No sorting; draw in scene order", 1),
+            ("SUBSORT", "Subsort", "Sort this subtree on its own", 2),
+            ("GROUPED", "Grouped (MWSE)", "Sort the subtree as one object. Without MWSE this acts as Inherit", 64),
+        ],
+        default="OFF",
     )
 
     @staticmethod

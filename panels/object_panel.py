@@ -261,7 +261,7 @@ class ObjectPanel(bpy.types.Panel):
         column.use_property_decorate = False
         row = column.row()
         row.enabled = node_type != nif_switch.COLLISION  # export always hides collision roots
-        row.prop(ob.mw, "flag_hidden")
+        row.prop(ob.mw, "flag_app_culled")
         column.prop(ob.mw, "flag_collision_mode")
         for name in nif_switch.NODE_TYPE_FLAGS[node_type][1]:
             column.prop(ob.mw, name)
