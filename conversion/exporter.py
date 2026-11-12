@@ -456,6 +456,10 @@ class Exporter:
         return expanded
 
     def get_root_output(self, roots):
+        roots = [root for root in roots if root in self.outputs]
+        if not roots:
+            raise nif_switch.SwitchError("No supported objects found to export. Include a mesh, Empty, or armature.")
+
         file_name = self.filepath.name
         root = nif.NiNode(name=file_name, children=[self.outputs[r] for r in roots])
 
