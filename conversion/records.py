@@ -1,4 +1,4 @@
-"""Typed intermediate buffers used by the import and export pipelines."""
+"""Represent conversion state shared by the NIF import and export pipelines."""
 
 from __future__ import annotations
 

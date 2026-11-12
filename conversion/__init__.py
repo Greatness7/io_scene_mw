@@ -1,1 +1,1 @@
-"""Explicit inputs and records for NIF conversion."""
+"""Convert between NIF data and Blender scenes."""

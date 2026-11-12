@@ -1,3 +1,9 @@
+"""Resolve NIF bones and prepare their rest and posed transforms for Blender armatures.
+
+This stage updates conversion nodes and the loaded NIF skeleton and animation data before Blender objects
+are created. It does not import bpy.
+"""
+
 from __future__ import annotations
 
 import collections

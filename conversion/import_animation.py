@@ -1,3 +1,8 @@
+"""Create Blender animation curves and markers from NIF controllers and text keys.
+
+The importer scales controller times to scene frames before this module creates animation data.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable

@@ -1,3 +1,10 @@
+"""Coordinate Blender scene export and write the resulting NIF and optional keyframe files.
+
+Collection instances have separate export records and NIF outputs. The exporter resolves skeletons and
+transforms, then copies evaluated meshes into owned buffers before creating NIF objects. It creates
+armatures before dependent skins and assigns switch children after all outputs exist.
+"""
+
 import bpy
 
 import pathlib

@@ -1,3 +1,9 @@
+"""Load a NIF file and build its Blender scene objects.
+
+Each Importer owns the conversion state and caches for one file. It resolves the node hierarchy and skeletons
+before creating objects in the collection supplied by the runtime.
+"""
+
 import bpy
 
 import pathlib

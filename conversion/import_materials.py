@@ -1,3 +1,9 @@
+"""Create or reuse Blender materials for imported NIF shapes.
+
+Materials use the addon's Morrowind shader. The import context holds the material cache shared across shapes
+in one import and supplies the texture search paths.
+"""
+
 from __future__ import annotations
 
 import pathlib

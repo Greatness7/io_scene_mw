@@ -1,3 +1,8 @@
+"""Validate operator option mappings and hold immutable import and export settings.
+
+This module does not depend on bpy. Option names must match the corresponding Blender operator properties.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

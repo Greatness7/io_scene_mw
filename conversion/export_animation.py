@@ -1,3 +1,9 @@
+"""Build NIF animation controllers from Blender F-curves and action markers.
+
+Transform keys are converted into the exported parent's coordinate space, with bone axis corrections
+where needed. Key times remain in Blender frames until the exporter scales the completed stream.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable

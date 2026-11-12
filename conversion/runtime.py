@@ -1,3 +1,10 @@
+"""Capture Blender context and manage temporary conversion state.
+
+Runtime records hold the scene, view layer, and preferences used by one conversion.
+Context managers restore the current frame and temporary export settings and release evaluated
+meshes on exit, even if conversion fails.
+"""
+
 from __future__ import annotations
 
 import contextlib

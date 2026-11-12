@@ -1,4 +1,4 @@
-"""Shared import/export bone-axis conventions."""
+"""Define bone-axis corrections for NIF import and export."""
 
 import numpy as np
 import numpy.linalg as la

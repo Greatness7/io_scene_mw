@@ -1,17 +1,13 @@
-"""Blender mesh geometry to NIF shape data.
+"""Convert Blender meshes into NIF shape, skin, and morph data.
 
-Export runs in three steps:
+Capture reads shape-key eligibility, keys, and coordinates before export evaluation changes the source.
+Extraction copies each evaluated mesh into owned, corner-aligned `ExportMeshBuffers` within
+`runtime.export_evaluation_scope`, before `runtime.evaluated_mesh` releases the mesh. Emission runs after
+the scope restores the source. It selects material partitions, welds equivalent corners, optimizes the
+vertex cache, and writes the NIF data.
 
-1. Capture: author state that export evaluation would disturb (shape-key eligibility, keys, and
-   coordinates) is read from the untouched source.
-2. Extraction: inside `runtime.export_evaluation_scope`, each evaluated mesh is copied into owned,
-   corner-aligned `ExportMeshBuffers` before `runtime.evaluated_mesh` releases it.
-3. Emission: after the scope restores the source, each material partition is selected, its equivalent corners
-   are welded into vertices, the vertex cache is optimized, and `NiTriShapeData`, skin, and morph data are
-   written.
-
-The numeric work goes through `es3.utils.geometry`, so every aligned field shares each selection and remap.
-Nothing here keeps an evaluated object, evaluated mesh, or dependency graph.
+The numeric work uses `es3.utils.geometry` to apply the same selections and remaps to every aligned field.
+This module retains no evaluated objects, evaluated meshes, or dependency graphs.
 """
 
 from __future__ import annotations

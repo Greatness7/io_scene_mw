@@ -1,9 +1,11 @@
-"""NIF shape geometry to Blender mesh data.
+"""Convert NIF shape geometry into Blender mesh data.
 
-Preparation validates a shape's arrays, then builds owned buffers: vertex-aligned positions, skin weights, and
-morph targets, welded and with shared faces duplicated through `es3.utils.geometry`; and corner-aligned
-normals, UVs, and colors. The source NIF arrays are never modified, so shapes that share `NiTriShapeData` stay
-intact. Emission then writes those buffers into a new Blender mesh and its object.
+Preparation validates the shape's arrays and builds owned buffers. Positions, skin weights, and morph
+targets align with vertices. Normals, UVs, and colors align with triangle corners. The remaps in
+`es3.utils.geometry` keep vertex data aligned during welding and shared-face duplication.
+
+Source NIF arrays remain unchanged, so shapes that share `NiTriShapeData` stay intact.
+Emission writes the buffers into a Blender mesh and its object.
 """
 
 from __future__ import annotations

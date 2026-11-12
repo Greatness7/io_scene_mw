@@ -1,3 +1,10 @@
+"""Resolve exported armature hierarchies and convert bone transforms to NIF axes.
+
+Transform and parenting changes affect export records rather than the Blender source hierarchy.
+Bind matrices are kept relative to each armature root for skin export, while axis corrections compensate
+child transforms to preserve their placement.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable

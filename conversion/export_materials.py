@@ -1,3 +1,9 @@
+"""Convert Blender materials and textures into NIF properties.
+
+The caller supplies caches that share material properties and embedded image pixels across an export.
+UV animation controllers belong to individual shapes, including those that reuse cached properties.
+"""
+
 from __future__ import annotations
 
 import pathlib
