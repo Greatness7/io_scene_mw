@@ -3,7 +3,7 @@ import bpy
 from es3.nif.NiAlphaProperty import AlphaBlendFunction, AlphaTestFunction
 from es3.utils.flags import get_bit_field, set_bit_field
 
-from ..nif_shader import NodeTreeWrapper, get_current_mw_shader_tree
+from ..nif_shader import NodeTreeWrapper, clamp_factor_sockets, get_current_mw_shader_tree
 
 # the blend, test and no-sort fields of NiAlphaProperty.flags, and the modes a new material starts with:
 # SRC_ALPHA / INV_SRC_ALPHA blending and GREATER testing, both disabled
@@ -28,6 +28,7 @@ ALPHA_TEST_ITEMS = enum_items(AlphaTestFunction)
 
 def upgrade_materials():
     """Migrate every editable Morrowind material; the panel and export never migrate on their own."""
+    clamp_factor_sockets(bpy.data.node_groups.get("MW Shader"))
     for material in bpy.data.materials:
         if material.library is not None:
             continue

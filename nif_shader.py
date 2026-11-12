@@ -48,7 +48,7 @@ def get_base_texture_image(mat):
         return None
 
 
-def new_socket(node_tree, in_out, socket_type, name, default=None):
+def new_socket(node_tree, in_out, socket_type, name, default=None, min_value=None, max_value=None):
     if bpy.app.version >= (4, 0, 0):
         base_type, subtype = socket_type, None
         if socket_type == 'NodeSocketFloatFactor':
@@ -59,6 +59,10 @@ def new_socket(node_tree, in_out, socket_type, name, default=None):
     else:
         sockets = node_tree.inputs if in_out == 'INPUT' else node_tree.outputs
         socket = sockets.new(socket_type, name)
+    if min_value is not None:
+        socket.min_value = min_value
+    if max_value is not None:
+        socket.max_value = max_value
     if default is not None:
         socket.default_value = default
     return socket
@@ -102,13 +106,35 @@ def tree_has_input(tree, name):
     return name in tree.inputs
 
 
+def clamp_factor_sockets(tree):
+    """Ensure slider-exposed alpha factor inputs are clamped to 0-1 even on pre-fix MW Shader trees."""
+    if tree is None or tree.library is not None:
+        return
+
+    names = ("Diffuse Alpha", "Alpha Clip Threshold")
+
+    if bpy.app.version >= (4, 0, 0):
+        sockets = [it for it in tree.interface.items_tree if it.in_out == 'INPUT' and it.name in names]
+        for socket in sockets:
+            socket.subtype = 'FACTOR'
+    else:
+        sockets = [socket for name in names if (socket := tree.inputs.get(name)) is not None]
+
+    for socket in sockets:
+        socket.min_value = 0.0
+        socket.max_value = 1.0
+
+
 def get_current_mw_shader_tree():
     """Keep stale groups aside until MaterialProperties.upgrade() migrates their users."""
     tree = bpy.data.node_groups.get("MW Shader")
     if tree and (not tree_has_input(tree, "Alpha Test Function") or not tree_has_input(tree, "Use Vertex Colors")):
         tree.name = "MW Shader.legacy"
         tree = None
-    return tree or build_mw_shader_tree()
+    if tree is not None:
+        clamp_factor_sockets(tree)
+        return tree
+    return build_mw_shader_tree()
 
 
 def build_srgb_encode_tree():
@@ -210,7 +236,7 @@ def build_mw_shader_tree():
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Decal 2 Texture", default=(1, 1, 1, 1))
     new_socket(tree, 'INPUT', 'NodeSocketFloatFactor', "Decal 3 Alpha")
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Decal 3 Texture", default=(1, 1, 1, 1))
-    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Diffuse Alpha", default=1.0)
+    new_socket(tree, 'INPUT', 'NodeSocketFloatFactor', "Diffuse Alpha", default=1.0, min_value=0.0, max_value=1.0)
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Ambient Color", default=(1, 1, 1, 1))
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Diffuse Color", default=(1, 1, 1, 1))
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Specular Color", default=(0, 0, 0, 1))
@@ -222,7 +248,15 @@ def build_mw_shader_tree():
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Base Alpha", default=1.0)
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Dark Alpha", default=1.0)
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Alpha Clip Enabled")
-    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Alpha Clip Threshold", default=133 / 255)
+    new_socket(
+        tree,
+        'INPUT',
+        'NodeSocketFloatFactor',
+        "Alpha Clip Threshold",
+        default=133 / 255,
+        min_value=0.0,
+        max_value=1.0,
+    )
     # New sockets must remain after the legacy interface prefix; see the index note above.
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Additive Blend Enabled")
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Alpha Test Function", default=4.0)
