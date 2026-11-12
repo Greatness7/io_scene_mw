@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 import bpy
 
 
@@ -68,36 +70,47 @@ def new_socket(node_tree, in_out, socket_type, name, default=None, min_value=Non
     return socket
 
 
-def build_alpha_blend_tree():
-    """Mixes Color1/Color2 by (Vector1 * Vector2), used for the 4 decal layers."""
-    tree = bpy.data.node_groups.new("MW Alpha Blend", 'ShaderNodeTree')
-    nodes, links = tree.nodes, tree.links
+def new_node(tree, node_type, location, label=""):
+    node = tree.nodes.new(node_type)
+    node.location = location
+    if label:
+        node.name = node.label = label
+    return node
 
-    new_socket(tree, 'OUTPUT', 'NodeSocketColor', "Color")
-    new_socket(tree, 'INPUT', 'NodeSocketVector', "Vector")
-    new_socket(tree, 'INPUT', 'NodeSocketVector', "Vector")
-    new_socket(tree, 'INPUT', 'NodeSocketColor', "Color1", default=(1, 1, 1, 1))
-    new_socket(tree, 'INPUT', 'NodeSocketColor', "Color2", default=(1, 1, 1, 1))
 
-    group_input = nodes.new('NodeGroupInput')
-    group_output = nodes.new('NodeGroupOutput')
+def new_group_node(tree, group_tree, location, label=""):
+    node = new_node(tree, 'ShaderNodeGroup', location, label)
+    node.node_tree = group_tree
+    return node
 
-    factor = nodes.new('ShaderNodeVectorMath')
-    factor.operation = 'MULTIPLY'
-    factor.location = 200, 0
 
-    mix = nodes.new('ShaderNodeMix')
-    mix.data_type, mix.blend_type = 'RGBA', 'MIX'
-    mix.location = 400, 0
+@contextmanager
+def framed(tree, label):
+    """Collect the nodes created inside the block into a labelled frame."""
+    existing = {node.name for node in tree.nodes}
+    yield
+    created = [node for node in tree.nodes if node.name not in existing]
+    # The frame stays at the origin, so parenting keeps each node's location as assigned.
+    frame = new_node(tree, 'NodeFrame', (0, 0))
+    frame.label = label
+    for node in created:
+        node.parent = frame
 
-    links.new(group_input.outputs[0], factor.inputs[0])
-    links.new(group_input.outputs[1], factor.inputs[1])
-    links.new(factor.outputs[0], mix.inputs[0])  # Vector -> Factor
-    links.new(group_input.outputs[2], mix.inputs[6])  # Color1 -> A
-    links.new(group_input.outputs[3], mix.inputs[7])  # Color2 -> B
-    links.new(mix.outputs[2], group_output.inputs[0])  # Result(Color) -> Color
 
-    return tree
+def new_input_portal(tree, name, location):
+    """A collapsed Group Input for one socket, placed beside the node that consumes it."""
+    node = new_node(tree, 'NodeGroupInput', location)
+    node.label = name
+    node.hide = True
+    return node.outputs[name]
+
+
+def hide_unlinked_outputs(tree):
+    """Trim source nodes down to the sockets in use, so each section can have its own Group Input."""
+    for node in tree.nodes:
+        if node.bl_idname in {'NodeGroupInput', 'ShaderNodeAttribute', 'ShaderNodeLightPath'}:
+            for socket in node.outputs:
+                socket.hide = not socket.is_linked
 
 
 def tree_has_input(tree, name):
@@ -218,12 +231,293 @@ def build_srgb_decode_tree():
     return tree
 
 
+def new_preview_raw_factor(tree, location):
+    """1 while the object previews raw NIF colors, 0 for display colors."""
+    attribute = new_node(tree, 'ShaderNodeAttribute', location)
+    attribute.name = "PreviewRawColor"
+    attribute.label = "Preview Raw"
+    attribute.attribute_type = 'OBJECT'
+    attribute.attribute_name = "tes3_preview_raw"
+    return attribute.outputs["Fac"]
+
+
+def build_preview_encode_tree():
+    """Texture and vertex colors: linear for display, sRGB encoded for raw preview."""
+    encode_tree = bpy.data.node_groups.get("MW sRGB Encode") or build_srgb_encode_tree()
+
+    tree = bpy.data.node_groups.new("MW Preview Encode", 'ShaderNodeTree')
+    links = tree.links
+
+    new_socket(tree, 'INPUT', 'NodeSocketColor', "Color", default=(1, 1, 1, 1))
+    # Usually the same source as Color; only Detail's unlinked neutral differs between modes.
+    new_socket(tree, 'INPUT', 'NodeSocketColor', "Raw Color", default=(1, 1, 1, 1))
+    new_socket(tree, 'OUTPUT', 'NodeSocketColor', "Color")
+
+    group_input = new_node(tree, 'NodeGroupInput', (0, 0))
+    preview_raw = new_preview_raw_factor(tree, (200, 220))
+    encoded = new_group_node(tree, encode_tree, (200, -160))
+
+    mix = new_node(tree, 'ShaderNodeMixRGB', (400, 0))
+    links.new(preview_raw, mix.inputs[0])
+    links.new(group_input.outputs["Color"], mix.inputs[1])
+    links.new(group_input.outputs["Raw Color"], encoded.inputs["Color"])
+    links.new(encoded.outputs["Color"], mix.inputs[2])
+
+    group_output = new_node(tree, 'NodeGroupOutput', (600, 0))
+    links.new(mix.outputs[0], group_output.inputs["Color"])
+
+    hide_unlinked_outputs(tree)
+    return tree
+
+
+def build_preview_decode_tree():
+    """Material colors: sRGB decoded for display, the raw NIF constant for raw preview."""
+    decode_tree = bpy.data.node_groups.get("MW sRGB Decode") or build_srgb_decode_tree()
+
+    tree = bpy.data.node_groups.new("MW Preview Decode", 'ShaderNodeTree')
+    links = tree.links
+
+    new_socket(tree, 'INPUT', 'NodeSocketColor', "Color", default=(1, 1, 1, 1))
+    new_socket(tree, 'OUTPUT', 'NodeSocketColor', "Color")
+
+    group_input = new_node(tree, 'NodeGroupInput', (0, 0))
+    preview_raw = new_preview_raw_factor(tree, (200, 220))
+    decoded = new_group_node(tree, decode_tree, (200, 80))
+
+    mix = new_node(tree, 'ShaderNodeMixRGB', (400, 0))
+    links.new(preview_raw, mix.inputs[0])
+    links.new(group_input.outputs["Color"], decoded.inputs["Color"])
+    links.new(decoded.outputs["Color"], mix.inputs[1])
+    links.new(group_input.outputs["Color"], mix.inputs[2])
+
+    group_output = new_node(tree, 'NodeGroupOutput', (600, 0))
+    links.new(mix.outputs[0], group_output.inputs["Color"])
+
+    hide_unlinked_outputs(tree)
+    return tree
+
+
+def build_decal_layer_tree():
+    """Blends one decal texture over Color by (Decal Alpha * Diffuse Alpha).
+
+    Diffuse alpha is part of the engine's decal blend, not a preview shortcut: landscape textures
+    transition on vertex alpha, and NiMaterialColorController can animate one texture into another.
+    """
+    preview_encode_tree = bpy.data.node_groups.get("MW Preview Encode") or build_preview_encode_tree()
+
+    tree = bpy.data.node_groups.new("MW Decal Layer", 'ShaderNodeTree')
+    links = tree.links
+
+    new_socket(tree, 'INPUT', 'NodeSocketColor', "Color", default=(1, 1, 1, 1))
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Decal Alpha")
+    new_socket(tree, 'INPUT', 'NodeSocketColor', "Decal Texture", default=(1, 1, 1, 1))
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Diffuse Alpha", default=1.0)
+    new_socket(tree, 'OUTPUT', 'NodeSocketColor', "Color")
+
+    group_input = new_node(tree, 'NodeGroupInput', (0, 0))
+
+    factor = new_node(tree, 'ShaderNodeMath', (200, 160))
+    factor.operation = 'MULTIPLY'
+    links.new(group_input.outputs["Decal Alpha"], factor.inputs[0])
+    links.new(group_input.outputs["Diffuse Alpha"], factor.inputs[1])
+
+    decal = new_group_node(tree, preview_encode_tree, (200, -200), "Decal Texture")
+    decal.hide = True
+    links.new(group_input.outputs["Decal Texture"], decal.inputs["Color"])
+    links.new(group_input.outputs["Decal Texture"], decal.inputs["Raw Color"])
+
+    mix = new_node(tree, 'ShaderNodeMix', (400, 0))
+    mix.data_type, mix.blend_type = 'RGBA', 'MIX'
+    links.new(factor.outputs[0], mix.inputs[0])  # Factor
+    links.new(group_input.outputs["Color"], mix.inputs[6])  # A
+    links.new(decal.outputs["Color"], mix.inputs[7])  # B
+
+    group_output = new_node(tree, 'NodeGroupOutput', (600, 0))
+    links.new(mix.outputs[2], group_output.inputs["Color"])  # Result(Color)
+
+    hide_unlinked_outputs(tree)
+    return tree
+
+
+def build_alpha_test_tree():
+    """NiAlphaProperty's alpha test: 1 where Alpha passes Function against Threshold, else 0.
+
+    AlphaTestFunction mirrors about its middle: function 7 - N is the negation of function N.
+    So only ALWAYS, LESS, EQUAL and LESS_EQUAL are selected between, then negated for 4-7.
+    """
+    tree = bpy.data.node_groups.new("MW Alpha Test", 'ShaderNodeTree')
+    links = tree.links
+
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Alpha", default=1.0)
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Enabled")
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Threshold", default=133 / 255)
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Function", default=4.0)
+    new_socket(tree, 'OUTPUT', 'NodeSocketFloat', "Pass")
+
+    def math(operation, location, label, hide=False):
+        node = new_node(tree, 'ShaderNodeMath', location, label)
+        node.operation = operation
+        node.hide = hide
+        return node
+
+    def switch(location, label):
+        node = new_node(tree, 'ShaderNodeMix', location, label)
+        node.data_type = 'FLOAT'
+        node.clamp_factor = True
+        return node
+
+    alpha_inputs = new_node(tree, 'NodeGroupInput', (0, 0))
+
+    less = math('LESS_THAN', (200, 0), "Less")
+    equal = math('COMPARE', (200, -170), "Equal")
+    equal.inputs[2].default_value = 0.5 / 255
+    greater = math('GREATER_THAN', (200, -360), "Greater")
+    for predicate in (less, equal, greater):
+        links.new(alpha_inputs.outputs["Alpha"], predicate.inputs[0])
+        links.new(alpha_inputs.outputs["Threshold"], predicate.inputs[1])
+
+    less_equal = math('SUBTRACT', (400, -360), "Less Equal")
+    less_equal.inputs[0].default_value = 1.0
+    links.new(greater.outputs[0], less_equal.inputs[1])
+
+    function_inputs = new_node(tree, 'NodeGroupInput', (400, 300))
+
+    # Start from ALWAYS, then each step replaces the result for a narrower band of functions.
+    passed = None
+    for step, predicate in enumerate((less, equal, less_equal), 1):
+        x = 400 + step * 200
+
+        in_band = math('COMPARE', (x, 10 + step * 50), f"Function {step}-{7 - step}", hide=True)
+        in_band.inputs[1].default_value = 3.5
+        in_band.inputs[2].default_value = 4 - step
+        links.new(function_inputs.outputs["Function"], in_band.inputs[0])
+
+        select = switch((x + 200, 40 - step * 40), f"Select {predicate.label}")
+        select.inputs[2].default_value = 1.0
+        links.new(in_band.outputs[0], select.inputs[0])
+        if passed is not None:
+            links.new(passed, select.inputs[2])
+        links.new(predicate.outputs[0], select.inputs[3])
+        passed = select.outputs[0]
+
+    upper_half = math('GREATER_THAN', (1200, 210), "Function 4-7", hide=True)
+    upper_half.inputs[1].default_value = 3.5
+    links.new(function_inputs.outputs["Function"], upper_half.inputs[0])
+
+    negated = math('SUBTRACT', (1400, -230), "Negated", hide=True)
+    negated.inputs[0].default_value = 1.0
+    links.new(passed, negated.inputs[1])
+
+    negate = switch((1600, -80), "Negate 4-7")
+    links.new(upper_half.outputs[0], negate.inputs[0])
+    links.new(passed, negate.inputs[2])
+    links.new(negated.outputs[0], negate.inputs[3])
+
+    enabled_input = new_node(tree, 'NodeGroupInput', (1600, 20))
+
+    test_pass = switch((1800, -80), "Enabled")
+    test_pass.inputs[2].default_value = 1.0
+    links.new(enabled_input.outputs["Enabled"], test_pass.inputs[0])
+    links.new(negate.outputs[0], test_pass.inputs[3])
+
+    group_output = new_node(tree, 'NodeGroupOutput', (2000, -80))
+    links.new(test_pass.outputs[0], group_output.inputs["Pass"])
+
+    hide_unlinked_outputs(tree)
+    return tree
+
+
+def build_blend_mode_tree():
+    """Composites Shader over the background as NiAlphaProperty's blending and testing would."""
+    tree = bpy.data.node_groups.new("MW Blend Mode", 'ShaderNodeTree')
+    links = tree.links
+
+    new_socket(tree, 'INPUT', 'NodeSocketShader', "Shader")
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Opacity", default=1.0)
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Test Pass", default=1.0)
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Blend Enabled")
+    new_socket(tree, 'INPUT', 'NodeSocketFloat', "Additive")
+    new_socket(tree, 'OUTPUT', 'NodeSocketShader', "Shader")
+
+    def group_input(name, location):
+        return new_input_portal(tree, name, location)
+
+    def background(location):
+        """Whatever is behind the surface, passed through untouched."""
+        node = new_node(tree, 'ShaderNodeBsdfTransparent', location, "Background")
+        node.inputs["Color"].default_value = (1, 1, 1, 1)
+        return node.outputs[0]
+
+    def mix_shader(location, label, factor, shader1, shader2):
+        node = new_node(tree, 'ShaderNodeMixShader', location, label)
+        links.new(factor, node.inputs[0])
+        links.new(shader1, node.inputs[1])
+        links.new(shader2, node.inputs[2])
+        return node.outputs[0]
+
+    # Standard: Shader * Opacity + Background * (1 - Opacity)
+    standard = mix_shader(
+        (200, 0),
+        "Standard",
+        group_input("Opacity", (0, 20)),
+        background((0, -30)),
+        group_input("Shader", (0, -130)),
+    )
+
+    # Additive: Shader * Opacity + Background
+    # An unlinked shader input contributes nothing, so mixing against it scales Shader by Opacity.
+    scaled = new_node(tree, 'ShaderNodeMixShader', (200, -300), "Scaled")
+    links.new(group_input("Opacity", (0, -340)), scaled.inputs[0])
+    links.new(group_input("Shader", (0, -390)), scaled.inputs[2])
+
+    additive = new_node(tree, 'ShaderNodeAddShader', (400, -300), "Additive")
+    links.new(scaled.outputs[0], additive.inputs[0])
+    links.new(background((200, -460)), additive.inputs[1])
+
+    blended = mix_shader(
+        (600, -150),
+        "Blend Mode",
+        group_input("Additive", (400, 40)),
+        standard,
+        additive.outputs[0],
+    )
+    surface = mix_shader(
+        (800, -150),
+        "Blend Enabled",
+        group_input("Blend Enabled", (600, 20)),
+        group_input("Shader", (600, -30)),
+        blended,
+    )
+    # A failed alpha test leaves only the background.
+    tested = mix_shader(
+        (1000, -150),
+        "Alpha Test",
+        group_input("Test Pass", (800, 60)),
+        background((800, -10)),
+        surface,
+    )
+
+    group_output = new_node(tree, 'NodeGroupOutput', (1200, -150))
+    links.new(tested, group_output.inputs["Shader"])
+
+    hide_unlinked_outputs(tree)
+    return tree
+
+
 def build_mw_shader_tree():
-    """Procedural equivalent of the old assets/shader.blend 'MW Shader' node group."""
-    alpha_blend_tree = bpy.data.node_groups.get("MW Alpha Blend") or build_alpha_blend_tree()
+    """Procedural equivalent of the old assets/shader.blend 'MW Shader' node group.
+
+    Reads left to right: Textures -> Decals -> Diffuse / Emission -> Surface -> Blending, with
+    Alpha underneath. Each section has its own Group Input showing only the sockets it uses.
+    """
+    preview_encode_tree = bpy.data.node_groups.get("MW Preview Encode") or build_preview_encode_tree()
+    preview_decode_tree = bpy.data.node_groups.get("MW Preview Decode") or build_preview_decode_tree()
+    decal_layer_tree = bpy.data.node_groups.get("MW Decal Layer") or build_decal_layer_tree()
+    alpha_test_tree = bpy.data.node_groups.get("MW Alpha Test") or build_alpha_test_tree()
+    blend_mode_tree = bpy.data.node_groups.get("MW Blend Mode") or build_blend_mode_tree()
 
     tree = bpy.data.node_groups.new("MW Shader", 'ShaderNodeTree')
-    nodes, links = tree.nodes, tree.links
+    links = tree.links
 
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Base Texture", default=(1, 1, 1, 1))
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Detail Texture", default=(0.5, 0.5, 0.5, 1))
@@ -269,256 +563,131 @@ def build_mw_shader_tree():
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Vertex Color", default=(1, 1, 1, 1))
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Use Vertex Colors")
 
-    group_input = nodes.new('NodeGroupInput')
-    attribute = nodes.new('ShaderNodeAttribute')
-    attribute.name = "PreviewRawColor"
-    attribute.attribute_type = 'OBJECT'
-    attribute.attribute_name = "tes3_preview_raw"
-    attribute.location = -600, 200
-    encode_tree = bpy.data.node_groups.get("MW sRGB Encode") or build_srgb_encode_tree()
-    colors = {}
-    color_names = ["Base Texture", "Detail Texture", "Dark Texture"]
-    color_names += [f"Decal {i} Texture" for i in range(4)]
-    color_names += ["Vertex Color", "Glow Texture"]
-    for index, name in enumerate(color_names):
-        source = group_input.outputs[name]
-        raw_source = group_input.outputs["Raw Detail Texture"] if name == "Detail Texture" else source
-        encoded = nodes.new('ShaderNodeGroup')
-        encoded.name = encoded.label = f"{name} Encode"
-        encoded.node_tree = encode_tree
-        encoded.location = -400, -index * 200
-        mix = nodes.new('ShaderNodeMixRGB')
-        mix.name = mix.label = f"{name} Preview"
-        mix.blend_type = 'MIX'
-        mix.location = -200, -index * 200
-        links.new(raw_source, encoded.inputs["Color"])
-        links.new(attribute.outputs["Fac"], mix.inputs[0])
-        links.new(source, mix.inputs[1])
-        links.new(encoded.outputs["Color"], mix.inputs[2])
-        colors[name] = mix.outputs[0]
+    def texture_color(inputs, name, location, raw_name=None):
+        """Texture and vertex colors are linear here; raw preview shows them sRGB encoded."""
+        node = new_group_node(tree, preview_encode_tree, location, name)
+        node.hide = True
+        links.new(inputs.outputs[name], node.inputs["Color"])
+        links.new(inputs.outputs[raw_name or name], node.inputs["Raw Color"])
+        return node.outputs["Color"]
 
-    decode_tree = bpy.data.node_groups.get("MW sRGB Decode") or build_srgb_decode_tree()
-    for index, name in enumerate(["Diffuse Color", "Emissive Color"]):
-        source = group_input.outputs[name]
-        decoded = nodes.new('ShaderNodeGroup')
-        decoded.name = decoded.label = f"{name} Decode"
-        decoded.node_tree = decode_tree
-        decoded.location = -400, -2000 - index * 200
-        mix = nodes.new('ShaderNodeMixRGB')
-        mix.name = mix.label = f"{name} Preview"
-        mix.location = -200, -2000 - index * 200
-        links.new(source, decoded.inputs["Color"])
-        links.new(attribute.outputs["Fac"], mix.inputs[0])
-        links.new(decoded.outputs["Color"], mix.inputs[1])
-        links.new(source, mix.inputs[2])
-        colors[name] = mix.outputs[0]
+    def material_color(inputs, name, location):
+        """Material constants are raw NIF values; display shows them sRGB decoded."""
+        node = new_group_node(tree, preview_decode_tree, location, name)
+        node.hide = True
+        links.new(inputs.outputs[name], node.inputs["Color"])
+        return node.outputs["Color"]
 
-    def gi(name):
-        return colors[name] if name in colors else group_input.outputs[name]
+    def vector_math(operation, location):
+        node = new_node(tree, 'ShaderNodeVectorMath', location)
+        node.operation = operation
+        return node
 
-    # Base, Detail, Dark: (Base * Detail * 2) * Dark
-    base_detail = nodes.new('ShaderNodeVectorMath')
-    base_detail.operation = 'MULTIPLY'
-    base_detail.location = 200, 200
-    links.new(gi("Base Texture"), base_detail.inputs[0])
-    links.new(gi("Detail Texture"), base_detail.inputs[1])
+    with framed(tree, "Textures"):
+        inputs = new_node(tree, 'NodeGroupInput', (0, 0))
+        base = texture_color(inputs, "Base Texture", (200, 5))
+        detail = texture_color(inputs, "Detail Texture", (200, -40), raw_name="Raw Detail Texture")
+        dark = texture_color(inputs, "Dark Texture", (600, -190))
 
-    base_detail_x2 = nodes.new('ShaderNodeVectorMath')
-    base_detail_x2.operation = 'ADD'
-    base_detail_x2.location = 400, 200
-    links.new(base_detail.outputs[0], base_detail_x2.inputs[0])
-    links.new(base_detail.outputs[0], base_detail_x2.inputs[1])
+        # Base, Detail, Dark: (Base * Detail * 2) * Dark
+        base_detail = vector_math('MULTIPLY', (400, 0))
+        links.new(base, base_detail.inputs[0])
+        links.new(detail, base_detail.inputs[1])
 
-    base_combined = nodes.new('ShaderNodeVectorMath')
-    base_combined.operation = 'MULTIPLY'
-    base_combined.location = 600, 200
-    links.new(base_detail_x2.outputs[0], base_combined.inputs[0])
-    links.new(gi("Dark Texture"), base_combined.inputs[1])
+        base_detail_x2 = vector_math('SCALE', (600, 0))
+        base_detail_x2.inputs["Scale"].default_value = 2.0
+        links.new(base_detail.outputs[0], base_detail_x2.inputs[0])
 
-    # Decal: 4x shared Alpha Blend subgroup, chained
-    color = base_combined.outputs[0]
-    for i, decal in enumerate(["Decal 0", "Decal 1", "Decal 2", "Decal 3"]):
-        blend = nodes.new('ShaderNodeGroup')
-        blend.name = blend.label = "Alpha Blend" if i == 0 else f"Alpha Blend.{i:03d}"
-        blend.node_tree = alpha_blend_tree
-        blend.location = 800, 200 - i * 200
-        links.new(gi(f"{decal} Alpha"), blend.inputs[0])
-        links.new(gi("Diffuse Alpha"), blend.inputs[1])
-        links.new(color, blend.inputs[2])
-        links.new(gi(f"{decal} Texture"), blend.inputs[3])
-        color = blend.outputs[0]
+        base_combined = vector_math('MULTIPLY', (800, 0))
+        links.new(base_detail_x2.outputs[0], base_combined.inputs[0])
+        links.new(dark, base_combined.inputs[1])
 
-    # V is either decoded material diffuse or the separately converted vertex color.
-    vertex_or_material = nodes.new('ShaderNodeMixRGB')
-    vertex_or_material.name = vertex_or_material.label = "Diffuse Source"
-    vertex_or_material.location = 800, 400
-    links.new(gi("Use Vertex Colors"), vertex_or_material.inputs[0])
-    links.new(gi("Diffuse Color"), vertex_or_material.inputs[1])
-    links.new(gi("Vertex Color"), vertex_or_material.inputs[2])
+    with framed(tree, "Decals"):
+        # Decal: 4x shared Decal Layer subgroup, chained
+        color = base_combined.outputs[0]
+        for i in range(4):
+            inputs = new_node(tree, 'NodeGroupInput', (1100 + i * 200, -220))
+            layer = new_group_node(tree, decal_layer_tree, (1300 + i * 200, 0), f"Decal {i}")
+            links.new(color, layer.inputs["Color"])
+            links.new(inputs.outputs[f"Decal {i} Alpha"], layer.inputs["Decal Alpha"])
+            links.new(inputs.outputs[f"Decal {i} Texture"], layer.inputs["Decal Texture"])
+            links.new(inputs.outputs["Diffuse Alpha"], layer.inputs["Diffuse Alpha"])
+            color = layer.outputs[0]
 
-    # Diffuse = T × V, under Blender lighting.
-    diffuse_color = nodes.new('ShaderNodeVectorMath')
-    diffuse_color.operation = 'MULTIPLY'
-    diffuse_color.location = 1000, 400
-    links.new(color, diffuse_color.inputs[0])
-    links.new(vertex_or_material.outputs[0], diffuse_color.inputs[1])
+    with framed(tree, "Diffuse"):
+        inputs = new_node(tree, 'NodeGroupInput', (2200, 340))
 
-    diffuse_bsdf = nodes.new('ShaderNodeBsdfDiffuse')
-    diffuse_bsdf.location = 1200, 400
-    links.new(diffuse_color.outputs[0], diffuse_bsdf.inputs["Color"])
+        # V is either decoded material diffuse or the separately converted vertex color.
+        vertex_or_material = new_node(tree, 'ShaderNodeMixRGB', (2600, 340), "Diffuse Source")
+        links.new(inputs.outputs["Use Vertex Colors"], vertex_or_material.inputs[0])
+        links.new(material_color(inputs, "Diffuse Color", (2400, 340)), vertex_or_material.inputs[1])
+        links.new(texture_color(inputs, "Vertex Color", (2400, 295)), vertex_or_material.inputs[2])
 
-    # Self-illumination = T × E + G, keeping emissive RGB and texture modulation.
-    emissive_color = nodes.new('ShaderNodeVectorMath')
-    emissive_color.operation = 'MULTIPLY'
-    emissive_color.location = 1000, 100
-    links.new(color, emissive_color.inputs[0])
-    links.new(gi("Emissive Color"), emissive_color.inputs[1])
-    glow = nodes.new('ShaderNodeVectorMath')
-    glow.operation = 'ADD'
-    glow.location = 1200, 100
-    links.new(emissive_color.outputs[0], glow.inputs[0])
-    links.new(gi("Glow Texture"), glow.inputs[1])
+        # Diffuse = T × V, under Blender lighting.
+        diffuse_color = vector_math('MULTIPLY', (2800, 160))
+        links.new(vertex_or_material.outputs[0], diffuse_color.inputs[0])
+        links.new(color, diffuse_color.inputs[1])
 
-    emission = nodes.new('ShaderNodeEmission')
-    emission.location = 1400, 100
-    links.new(glow.outputs[0], emission.inputs["Color"])
-    # Game emission is visible, but does not become a light source for other objects.
-    gate = nodes.new('ShaderNodeLightPath')
-    gate.name = gate.label = "Emission Gate"
-    gate.location = 1200, -100
-    links.new(gate.outputs["Is Camera Ray"], emission.inputs["Strength"])
+        diffuse_bsdf = new_node(tree, 'ShaderNodeBsdfDiffuse', (3000, 160))
+        links.new(diffuse_color.outputs[0], diffuse_bsdf.inputs["Color"])
 
-    surface = nodes.new('ShaderNodeAddShader')
-    surface.location = 1600, 300
-    links.new(emission.outputs[0], surface.inputs[0])
-    links.new(diffuse_bsdf.outputs[0], surface.inputs[1])
+    with framed(tree, "Emission"):
+        inputs = new_node(tree, 'NodeGroupInput', (2200, -240))
 
-    # Alpha: opacity = Base Alpha * Dark Alpha * Diffuse Alpha
-    base_dark_alpha = nodes.new('ShaderNodeMix')
-    base_dark_alpha.data_type, base_dark_alpha.blend_type = 'RGBA', 'MULTIPLY'
-    base_dark_alpha.location = 1000, -200
-    base_dark_alpha.inputs[0].default_value = 1.0  # Factor
-    links.new(gi("Base Alpha"), base_dark_alpha.inputs[6])
-    links.new(gi("Dark Alpha"), base_dark_alpha.inputs[7])
+        # Self-illumination = T × E + G, keeping emissive RGB and texture modulation.
+        emissive_color = vector_math('MULTIPLY', (2800, -160))
+        links.new(color, emissive_color.inputs[0])
+        links.new(material_color(inputs, "Emissive Color", (2400, -255)), emissive_color.inputs[1])
 
-    opacity = nodes.new('ShaderNodeMix')
-    opacity.data_type, opacity.blend_type = 'RGBA', 'MULTIPLY'
-    opacity.location = 1200, -200
-    opacity.inputs[0].default_value = 1.0  # Factor
-    links.new(base_dark_alpha.outputs[2], opacity.inputs[6])
-    links.new(gi("Diffuse Alpha"), opacity.inputs[7])
+        glow = vector_math('ADD', (3000, -160))
+        links.new(emissive_color.outputs[0], glow.inputs[0])
+        links.new(texture_color(inputs, "Glow Texture", (2800, -330)), glow.inputs[1])
 
-    # Alpha test predicates, in AlphaTestFunction enum order.
-    always = nodes.new('ShaderNodeValue')
-    always.outputs[0].default_value = 1.0
-    never = nodes.new('ShaderNodeValue')
-    never.outputs[0].default_value = 0.0
+        emission = new_node(tree, 'ShaderNodeEmission', (3200, -160))
+        links.new(glow.outputs[0], emission.inputs["Color"])
 
-    less = nodes.new('ShaderNodeMath')
-    less.operation = 'LESS_THAN'
-    links.new(opacity.outputs[2], less.inputs[0])
-    links.new(gi("Alpha Clip Threshold"), less.inputs[1])
+        # Game emission is visible, but does not become a light source for other objects.
+        gate = new_node(tree, 'ShaderNodeLightPath', (3000, -330), "Emission Gate")
+        links.new(gate.outputs["Is Camera Ray"], emission.inputs["Strength"])
 
-    equal = nodes.new('ShaderNodeMath')
-    equal.operation = 'COMPARE'
-    equal.inputs[2].default_value = 0.5 / 255
-    links.new(opacity.outputs[2], equal.inputs[0])
-    links.new(gi("Alpha Clip Threshold"), equal.inputs[1])
+    surface = new_node(tree, 'ShaderNodeAddShader', (3400, 20), "Surface")
+    links.new(diffuse_bsdf.outputs[0], surface.inputs[0])
+    links.new(emission.outputs[0], surface.inputs[1])
 
-    greater = nodes.new('ShaderNodeMath')
-    greater.operation = 'GREATER_THAN'
-    links.new(opacity.outputs[2], greater.inputs[0])
-    links.new(gi("Alpha Clip Threshold"), greater.inputs[1])
+    with framed(tree, "Alpha"):
+        # Alpha: opacity = Base Alpha * Dark Alpha * Diffuse Alpha
+        inputs = new_node(tree, 'NodeGroupInput', (2800, -520))
+        base_dark_alpha = new_node(tree, 'ShaderNodeMath', (3000, -520))
+        base_dark_alpha.operation = 'MULTIPLY'
+        links.new(inputs.outputs["Base Alpha"], base_dark_alpha.inputs[0])
+        links.new(inputs.outputs["Dark Alpha"], base_dark_alpha.inputs[1])
 
-    def invert(value):
-        node = nodes.new('ShaderNodeMath')
-        node.operation = 'SUBTRACT'
-        node.inputs[0].default_value = 1.0
-        links.new(value, node.inputs[1])
-        return node.outputs[0]
+        inputs = new_node(tree, 'NodeGroupInput', (3000, -720))
+        opacity = new_node(tree, 'ShaderNodeMath', (3200, -520), "Opacity")
+        opacity.operation = 'MULTIPLY'
+        links.new(base_dark_alpha.outputs[0], opacity.inputs[0])
+        links.new(inputs.outputs["Diffuse Alpha"], opacity.inputs[1])
 
-    predicates = (
-        always.outputs[0],
-        less.outputs[0],
-        equal.outputs[0],
-        invert(greater.outputs[0]),
-        greater.outputs[0],
-        invert(equal.outputs[0]),
-        invert(less.outputs[0]),
-        never.outputs[0],
-    )
+        alpha_test = new_group_node(tree, alpha_test_tree, (3400, -640), "Alpha Test")
+        links.new(opacity.outputs[0], alpha_test.inputs["Alpha"])
+        links.new(inputs.outputs["Alpha Clip Enabled"], alpha_test.inputs["Enabled"])
+        links.new(inputs.outputs["Alpha Clip Threshold"], alpha_test.inputs["Threshold"])
+        links.new(inputs.outputs["Alpha Test Function"], alpha_test.inputs["Function"])
 
-    # Select predicate N by successively replacing the result when mode >= N.
-    selected_test = predicates[0]
-    for mode, predicate in enumerate(predicates[1:], 1):
-        select_mode = nodes.new('ShaderNodeMath')
-        select_mode.operation = 'GREATER_THAN'
-        select_mode.inputs[1].default_value = mode - 0.5
-        links.new(gi("Alpha Test Function"), select_mode.inputs[0])
+    with framed(tree, "Blending"):
+        inputs = new_node(tree, 'NodeGroupInput', (3660, -700))
+        inputs.width = 180  # "Additive Blend Enabled"
+        blend = new_group_node(tree, blend_mode_tree, (3900, -420), "Blend Mode")
+        links.new(surface.outputs[0], blend.inputs["Shader"])
+        links.new(opacity.outputs[0], blend.inputs["Opacity"])
+        links.new(alpha_test.outputs[0], blend.inputs["Test Pass"])
+        links.new(inputs.outputs["Alpha Blend Enabled"], blend.inputs["Blend Enabled"])
+        links.new(inputs.outputs["Additive Blend Enabled"], blend.inputs["Additive"])
 
-        select_predicate = nodes.new('ShaderNodeMix')
-        select_predicate.data_type = 'FLOAT'
-        select_predicate.clamp_factor = True
-        links.new(select_mode.outputs[0], select_predicate.inputs[0])
-        links.new(selected_test, select_predicate.inputs[2])
-        links.new(predicate, select_predicate.inputs[3])
-        selected_test = select_predicate.outputs[0]
+        material_output = new_node(tree, 'ShaderNodeOutputMaterial', (4100, -420))
+        links.new(blend.outputs[0], material_output.inputs[0])
 
-    test_pass = nodes.new('ShaderNodeMix')
-    test_pass.data_type = 'FLOAT'
-    test_pass.clamp_factor = True
-    test_pass.inputs[2].default_value = 1.0
-    links.new(gi("Alpha Clip Enabled"), test_pass.inputs[0])
-    links.new(selected_test, test_pass.inputs[3])
-
-    transparent = nodes.new('ShaderNodeBsdfTransparent')
-    transparent.inputs["Color"].default_value = (1, 1, 1, 1)
-    transparent.location = 1800, -500
-
-    zero = nodes.new('ShaderNodeBsdfTransparent')
-    zero.inputs["Color"].default_value = (0, 0, 0, 1)
-    zero.location = 1800, -700
-
-    transparency_weight = nodes.new('ShaderNodeMath')
-    transparency_weight.operation = 'SUBTRACT'
-    transparency_weight.use_clamp = True
-    transparency_weight.inputs[0].default_value = 1.0
-    links.new(opacity.outputs[2], transparency_weight.inputs[1])
-
-    standard = nodes.new('ShaderNodeMixShader')
-    links.new(transparency_weight.outputs[0], standard.inputs[0])
-    links.new(surface.outputs[0], standard.inputs[1])
-    links.new(transparent.outputs[0], standard.inputs[2])
-
-    scaled_source = nodes.new('ShaderNodeMixShader')
-    links.new(opacity.outputs[2], scaled_source.inputs[0])
-    links.new(zero.outputs[0], scaled_source.inputs[1])
-    links.new(surface.outputs[0], scaled_source.inputs[2])
-
-    additive = nodes.new('ShaderNodeAddShader')
-    links.new(transparent.outputs[0], additive.inputs[0])
-    links.new(scaled_source.outputs[0], additive.inputs[1])
-
-    blend_mode = nodes.new('ShaderNodeMixShader')
-    links.new(gi("Additive Blend Enabled"), blend_mode.inputs[0])
-    links.new(standard.outputs[0], blend_mode.inputs[1])
-    links.new(additive.outputs[0], blend_mode.inputs[2])
-
-    blend_or_opaque = nodes.new('ShaderNodeMixShader')
-    links.new(gi("Alpha Blend Enabled"), blend_or_opaque.inputs[0])
-    links.new(surface.outputs[0], blend_or_opaque.inputs[1])
-    links.new(blend_mode.outputs[0], blend_or_opaque.inputs[2])
-
-    mix_shader = nodes.new('ShaderNodeMixShader')
-    mix_shader.location = 2200, 100
-    links.new(test_pass.outputs[0], mix_shader.inputs[0])
-    links.new(transparent.outputs[0], mix_shader.inputs[1])
-    links.new(blend_or_opaque.outputs[0], mix_shader.inputs[2])
-
-    material_output = nodes.new('ShaderNodeOutputMaterial')
-    material_output.location = 2400, 100
-    links.new(mix_shader.outputs[0], material_output.inputs[0])
-
+    hide_unlinked_outputs(tree)
     return tree
 
 
