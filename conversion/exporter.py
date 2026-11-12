@@ -110,9 +110,7 @@ class Exporter:
         if self.options.extract_keyframe_data:
             self.export_keyframe_data(data)
 
-    # -------
     # RESOLVE
-    # -------
 
     def resolve_nodes(self, bl_objects, parent=None, sequence=None, scope=None):
         if scope is None:
@@ -216,9 +214,7 @@ class Exporter:
         data.extract_keyframe_data().save(xkf_path)
         data.save(xnif_path)
 
-    # -------
     # PROCESS
-    # -------
 
     def process(self, node):
         if isinstance(node.source, bpy.types.PoseBone):
@@ -272,9 +268,7 @@ class Exporter:
         self.armature_candidates[node.scope, node.source] = bones
         self.resolve_nodes(bones, parent=node, scope=node.scope)
 
-    # -------
     # UTILITY
-    # -------
 
     def build_creation_schedule(self):
         owned_bones = set()
@@ -519,9 +513,7 @@ class Exporter:
                 obj.start_time = min(obj.start_time, self.runtime.frame_start)
                 obj.stop_time = max(obj.stop_time, self.runtime.frame_end)
 
-    # ------
     # CREATE
-    # ------
 
     def create_job(self, job):
         target = job.target

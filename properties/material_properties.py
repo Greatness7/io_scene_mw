@@ -55,9 +55,7 @@ class TextureProperties(bpy.types.PropertyGroup):
     texture_node = property(lambda self: self.nodes[self.name])
     mapping_node = property(lambda self: self.get_chain_from_tx(self.texture_node)[2])
 
-    # -------------
     # Texture Image
-    # -------------
     def update_image(self, context):
         tx_node, image = self.texture_node, self.image
 
@@ -75,9 +73,7 @@ class TextureProperties(bpy.types.PropertyGroup):
         update=update_image,
     )
 
-    # ------------
     # UV Map Layer
-    # ------------
     def update_layer(self, context):
         tx_node, layer = self.texture_node, self.layer
 
@@ -90,9 +86,7 @@ class TextureProperties(bpy.types.PropertyGroup):
         update=update_layer,
     )
 
-    # -----------
     # Use Mipmaps
-    # -----------
     def get_use_mipmaps(self):
         return self.texture_node.interpolation != "Closest"
 
@@ -107,9 +101,7 @@ class TextureProperties(bpy.types.PropertyGroup):
         options=set(),
     )
 
-    # ----------
     # Use Repeat
-    # ----------
     def get_use_repeat(self):
         return self.texture_node.extension == "REPEAT"
 
@@ -124,9 +116,7 @@ class TextureProperties(bpy.types.PropertyGroup):
         options=set(),
     )
 
-    # -------------
     # Utility Funcs
-    # -------------
     def create_chain(self):
         # create nodes
         uv_node = self.nodes.new("ShaderNodeUVMap")
@@ -289,9 +279,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         self.alpha_threshold = alpha_threshold
         self.sync_alpha_state()
 
-    # -------------
     # Vertex Colors
-    # -------------
     def get_use_vertex_colors(self):
         try:
             # Stale materials are still readable until the explicit/load upgrade runs.
@@ -319,9 +307,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         options=set(),
     )
 
-    # ------------------------------
     # Alpha Flags (source of truth)
-    # ------------------------------
     def apply_render_method(self):
         blending = bool(self.alpha_flags & 0x0001)
         if bpy.app.version >= (4, 2, 0):
@@ -352,9 +338,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
             return "ADDITIVE"
         return "UNSUPPORTED"
 
-    # -----------
     # Alpha Blend
-    # -----------
     def get_use_alpha_blend(self):
         return (self.alpha_flags & 0x0001) != 0
 
@@ -373,9 +357,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         options=set(),
     )
 
-    # -----------------
     # Alpha Blend Modes
-    # -----------------
     def get_src_blend_mode(self):
         return get_bit_field(self.alpha_flags, 0x001E, 1)
 
@@ -406,9 +388,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         options=set(),
     )
 
-    # ----------
     # Alpha Clip
-    # ----------
     def get_use_alpha_clip(self):
         return (self.alpha_flags & 0x0200) != 0
 
@@ -427,9 +407,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         options=set(),
     )
 
-    # -------------------
     # Alpha Test Function
-    # -------------------
     def get_test_mode(self):
         return get_bit_field(self.alpha_flags, 0x1C00, 10)
 
@@ -445,9 +423,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         options=set(),
     )
 
-    # -------
     # No Sort
-    # -------
     def get_no_sort(self):
         return (self.alpha_flags & 0x2000) != 0
 

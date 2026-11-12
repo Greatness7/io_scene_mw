@@ -129,9 +129,7 @@ class Importer:
             # Include the active-object change in the frame-restoration evaluation.
             self.runtime.view_layer.objects.active = self.get_root_output(roots)
 
-    # -------
     # RESOLVE
-    # -------
 
     def resolve_nodes(self, ni_roots, parent=None):
         root_nodes = [new_node(root, parent) for root in ni_roots]
@@ -222,9 +220,7 @@ class Importer:
                 f"NiLODNode '{name}' has {len(levels)} ranges for {len(slots)} children; the rest use the default range"
             )
 
-    # -------
     # PROCESS
-    # -------
 
     def process(self, node):
         source_type = type(node.source)
@@ -284,9 +280,7 @@ class Importer:
         self.colliders[node.source].update(node.source.descendants())
         return True
 
-    # -------
     # UTILITY
-    # -------
 
     def get(self, source):
         return self.history[source][0]
@@ -356,9 +350,7 @@ class Importer:
             kf_data.load(kf_path)
             data.attach_keyframe_data(kf_data)
 
-    # ------
     # CREATE
-    # ------
 
     def create_job(self, job):
         target = job.target

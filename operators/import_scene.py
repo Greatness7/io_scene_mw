@@ -11,12 +11,12 @@ class ImportScene(bpy.types.Operator, ImportHelper):
     bl_options = {"PRESET", "UNDO"}
     bl_label = "Import NIF"
 
-    # -- import helper --
+    # import helper
 
     filename_ext = ".nif"
     filter_glob: bpy.props.StringProperty(default="*.nif", options={"HIDDEN"})
 
-    # -- user config --
+    # user config
 
     vertex_precision: bpy.props.FloatProperty(
         name="Vertex Precision",

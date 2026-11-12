@@ -78,9 +78,7 @@ def with_payload(buffers: ExportMeshBuffers, values: VertexPayload, triangles: A
     )
 
 
-# -------
 # CAPTURE
-# -------
 
 
 def capture_metadata(source: Any, options: ExportOptions) -> ExportMeshMetadata:
@@ -147,9 +145,7 @@ def skin_binding(source: Any, armature: Any, skeleton: ResolvedExportSkeleton) -
     )
 
 
-# ----------
 # EXTRACTION
-# ----------
 
 
 def extract_mesh_buffers(
@@ -326,9 +322,7 @@ def read_morphs(
     )
 
 
-# --------
 # EMISSION
-# --------
 
 
 def select_partition(buffers: ExportMeshBuffers, partition: MaterialPartition, name: str) -> ExportMeshBuffers:

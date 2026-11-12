@@ -11,12 +11,12 @@ class ExportScene(bpy.types.Operator, ExportHelper):
     bl_options = {"PRESET", "UNDO"}
     bl_label = "Export NIF"
 
-    # -- export helper --
+    # export helper
 
     filename_ext = ".nif"
     filter_glob: bpy.props.StringProperty(default="*.nif", options={"HIDDEN"})
 
-    # -- user config --
+    # user config
 
     vertex_precision: bpy.props.FloatProperty(
         name="Vertex Precision",

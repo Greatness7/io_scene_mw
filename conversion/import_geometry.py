@@ -26,9 +26,7 @@ from .records import Array, ImportMeshBuffers, ImportMorphBuffers, ImportSkinBuf
 MAX_UV_LAYERS = 8
 
 
-# -----------
 # PREPARATION
-# -----------
 
 
 def validate_shape(shape: Any, name: str) -> None:
@@ -107,9 +105,7 @@ def prepare_buffers(shape: Any, scale: Array, precision: float, name: str) -> Im
     )
 
 
-# --------
 # EMISSION
-# --------
 
 
 def create_vertices(ob: Any, vertices: Array) -> None:
