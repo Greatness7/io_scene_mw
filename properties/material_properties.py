@@ -351,7 +351,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         self.sync_alpha_state()
 
     use_alpha_blend: bpy.props.BoolProperty(
-        name="Enable Blending",
+        name="Alpha Blend",
         description="Enable alpha blending",
         get=get_use_alpha_blend,
         set=set_use_alpha_blend,
@@ -401,7 +401,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         self.sync_alpha_state()
 
     use_alpha_clip: bpy.props.BoolProperty(
-        name="Enable Testing",
+        name="Alpha Clip",
         description="Enable alpha testing",
         get=get_use_alpha_clip,
         set=set_use_alpha_clip,
