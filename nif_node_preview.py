@@ -1,8 +1,9 @@
 """Live viewport preview of NiSwitchNode and NiLODNode selections, and of NiBillboardNode rotation.
 
 A timer reads the navigated 3D view's eye position, applies the engine's selection rule to every switch and
-LOD Empty, and hides the subtrees of inactive children with `hide_set`. It only ever un-hides what it hid itself, and the
-file on disk never keeps a preview's hide state. All state here is runtime-only.
+LOD Empty, and hides the subtrees of inactive children with `hide_set`. It only ever un-hides what it hid itself.
+Explicit saves never keep a preview's hide state. Recovery state follows each changed object through undo and
+duplication; loading a file written without save handlers restores its authored values.
 
 Billboards turn through their delta rotation, which this preview owns while it runs: the author's own delta is
 stashed and written back on restore, on save and before export. Editing a billboard's delta rotation while
@@ -15,7 +16,7 @@ import traceback
 
 import bpy
 from bpy.app.handlers import persistent
-from mathutils import Matrix, Vector
+from mathutils import Euler, Matrix, Quaternion, Vector
 
 from . import nif_switch
 
@@ -23,9 +24,6 @@ INTERVAL = 0.1
 FULL_REFRESH = 1.0  # also re-evaluate a still view, to pick up range edits and undo
 BILLBOARD = "NiBillboardNode"
 
-_rotated = {}  # billboard name -> its author's (delta_rotation_euler, delta_rotation_quaternion)
-_hidden = set()  # names of the objects this preview hid
-_layer = None  # (scene name, view layer name) that `_hidden` applies to
 _views = {}  # (window index, area index) -> last seen view matrix
 _focus = None  # key of the most recently navigated view
 _active = {}  # switch or LOD name -> the shown child's name, or None
@@ -141,39 +139,45 @@ def _own_rotation(ob):
     return ob.rotation_euler.to_matrix()
 
 
-def _unrotate(name):
-    euler, quaternion = _rotated.pop(name)
-    ob = bpy.data.objects.get(name)
-    if ob:
-        ob.delta_rotation_euler = euler
-        ob.delta_rotation_quaternion = quaternion
+def _stash(ob):
+    if not ob.is_property_set("mw_preview_delta"):
+        ob.mw_preview_delta = (*ob.delta_rotation_euler, *ob.delta_rotation_quaternion)
+        ob.update_tag()  # undo only records objects flagged as changed; every state write must tag
+    values = ob.mw_preview_delta
+    return Euler(values[:3]), Quaternion(values[3:])
+
+
+def _unrotate(ob):
+    values = ob.mw_preview_delta
+    ob.delta_rotation_euler = values[:3]
+    ob.delta_rotation_quaternion = values[3:]
+    ob.property_unset("mw_preview_delta")
+    ob.update_tag()
 
 
 def unrotate():
     """Write back every billboard's own delta rotation. True if there was any to write."""
-    names = list(_rotated)
-    for name in names:
-        _unrotate(name)
-    return bool(names)
+    objects = [ob for ob in bpy.data.objects if ob.is_property_set("mw_preview_delta")]
+    for ob in objects:
+        _unrotate(ob)
+    return bool(objects)
 
 
 def orient(view_layer, view):
     """Turn every billboard in `view_layer` toward `view`, a camera world matrix, through its delta rotation."""
-    billboards = {
-        ob.name: ob
+    billboards = [
+        ob
         for ob in view_layer.objects
         # Blender has no delta rotation for axis-angle in its Python API
         if nif_switch.node_type(ob) == BILLBOARD and ob.rotation_mode != "AXIS_ANGLE"
-    }
-    for name in list(_rotated):
-        if name not in billboards:
-            _unrotate(name)
+    ]
+    for ob in bpy.data.objects:
+        if ob.is_property_set("mw_preview_delta") and ob not in billboards:
+            _unrotate(ob)
 
     # parents first; a billboard below another reads its parent as of the last evaluation, one tick behind
-    for name, ob in sorted(billboards.items(), key=lambda item: _depth(item[1])):
-        if name not in _rotated:
-            _rotated[name] = (ob.delta_rotation_euler.copy(), ob.delta_rotation_quaternion.copy())
-        stash = _rotated[name]
+    for ob in sorted(billboards, key=_depth):
+        stash = _stash(ob)
         own = _own_rotation(ob)
         authored = _authored_delta(ob, stash)
         basis = Matrix.LocRotScale(
@@ -196,51 +200,41 @@ def orient(view_layer, view):
             ob.delta_rotation_euler = delta.to_euler(ob.rotation_mode, ob.delta_rotation_euler)
 
 
-def _get_layer(key):
-    scene = bpy.data.scenes.get(key[0]) if key else None
-    return scene.view_layers.get(key[1]) if scene else None
+def _hide(ob, view_layer):
+    ob.hide_set(True, view_layer=view_layer)
+    ob.mw_preview_hidden = view_layer.name
+    ob.update_tag()
+
+
+def _unhide(ob):
+    for scene in ob.users_scene:
+        view_layer = scene.view_layers.get(ob.mw_preview_hidden)
+        if view_layer and view_layer.objects.get(ob.name) == ob and ob.hide_get(view_layer=view_layer):
+            ob.hide_set(False, view_layer=view_layer)
+    ob.property_unset("mw_preview_hidden")
+    ob.update_tag()
 
 
 def apply(view_layer, desired):
     """Hide `desired` and un-hide what this preview hid before but no longer wants hidden."""
-    global _layer
-    key = (view_layer.id_data.name, view_layer.name)
-    if _layer != key:
-        _set_hidden(False)  # un-hide in the old layer; `_active` is already this layer's
-        _hidden.clear()
-        _layer = key
+    for ob in bpy.data.objects:
+        if ob.is_property_set("mw_preview_hidden"):
+            if ob.mw_preview_hidden != view_layer.name or ob.name not in desired:
+                _unhide(ob)
 
     for name in desired:
-        ob = bpy.data.objects.get(name)  # by name every time: undo invalidates held references
+        ob = view_layer.objects.get(name)
         if ob and not ob.hide_get(view_layer=view_layer):  # a new hide, or undo un-hid one of ours
-            ob.hide_set(True, view_layer=view_layer)
-            _hidden.add(name)
-
-    for name in list(_hidden - desired):
-        ob = bpy.data.objects.get(name)
-        if ob and ob.hide_get(view_layer=view_layer):
-            ob.hide_set(False, view_layer=view_layer)
-        _hidden.discard(name)
-
-
-def _set_hidden(state):
-    view_layer = _get_layer(_layer)
-    if view_layer is None:
-        return
-    for name in _hidden:
-        ob = bpy.data.objects.get(name)
-        if ob and view_layer.objects.get(name) and ob.hide_get(view_layer=view_layer) != state:
-            ob.hide_set(state, view_layer=view_layer)
+            _hide(ob, view_layer)
 
 
 def restore():
     """Un-hide everything this preview hid, un-turn its billboards, and forget it."""
-    global _layer
     unrotate()
-    _set_hidden(False)
-    _hidden.clear()
+    for ob in bpy.data.objects:
+        if ob.is_property_set("mw_preview_hidden"):
+            _unhide(ob)
     _active.clear()
-    _layer = None
 
 
 def find_eye():
@@ -323,31 +317,37 @@ def update_toggle(self, context):
 
 @persistent
 def save_pre(*args):
-    _set_hidden(False)  # the file on disk never keeps a preview's hide state or turn
-    unrotate()
+    restore()  # the file on disk never keeps a preview's hide state or turn
 
 
 @persistent
 def save_post(*args):
-    _set_hidden(True)
-    refresh()  # the next tick turns the billboards again
+    refresh()  # the next tick hides inactive children and turns the billboards again
 
 
 @persistent
 def load_pre(*args):
-    global _layer, _focus
-    _hidden.clear()  # the names belong to the old file
-    _rotated.clear()
+    global _focus
     _views.clear()
     _active.clear()
-    _layer = _focus = None
+    _focus = None
 
 
 @persistent
 def load_post(*args):
+    restore()  # clipboard, autosave and library writes can bypass save_pre
     wm = bpy.context.window_manager
     if wm is not None and wm.mw_node_preview:
         wm.mw_node_preview = False
+
+
+@persistent
+def history_post(*args):
+    wm = bpy.context.window_manager
+    if wm is not None and wm.mw_node_preview:
+        refresh()  # the step may hold another moment's turn and hides; the next tick re-evaluates
+    else:
+        restore()  # a step recorded while previewing brought its turn and hides back
 
 
 _handlers = (
@@ -355,6 +355,8 @@ _handlers = (
     (bpy.app.handlers.save_post, save_post),
     (bpy.app.handlers.load_pre, load_pre),
     (bpy.app.handlers.load_post, load_post),
+    (bpy.app.handlers.undo_post, history_post),
+    (bpy.app.handlers.redo_post, history_post),
 )
 
 
@@ -366,6 +368,8 @@ def register():
         default=False,
         update=update_toggle,
     )
+    bpy.types.Object.mw_preview_delta = bpy.props.FloatVectorProperty(size=7, options={"HIDDEN", "SKIP_SAVE"})
+    bpy.types.Object.mw_preview_hidden = bpy.props.StringProperty(options={"HIDDEN", "SKIP_SAVE"})
     for handlers, handler in _handlers:
         if handler not in handlers:
             handlers.append(handler)
@@ -379,3 +383,5 @@ def unregister():
         if handler in handlers:
             handlers.remove(handler)
     del bpy.types.WindowManager.mw_node_preview
+    del bpy.types.Object.mw_preview_delta
+    del bpy.types.Object.mw_preview_hidden
