@@ -307,8 +307,6 @@ class ObjectPanel(bpy.types.Panel):
         if target is not None and active == -1:
             box.label(text=f"'{target.name}' is no longer a child; exports as None", icon="INFO")
 
-        box.operator(SwitchAddNullSlot.bl_idname, icon="ADD")
-
     @staticmethod
     def draw_options(context, box):
         """The Options block both switch types open with, so changing type keeps the top of the box stable."""
@@ -388,8 +386,6 @@ class ObjectPanel(bpy.types.Panel):
                 line.label(text=row.child.name if row.child else "(no child)")
                 line.label(text=f"{row.near:g} to {row.far:g}")
                 line.operator(LODRemoveRange.bl_idname, text="", icon="X").index = index
-
-        box.operator(SwitchAddNullSlot.bl_idname, icon="ADD")
 
 
 class ObjectRawFlagsPanel(bpy.types.Panel):
