@@ -139,6 +139,10 @@ class Exporter:
             self.nodes.append(node)
             self.history[node.scope, node.source].append(node)
 
+            # NIF meshes are leaves; Blender object children beneath them are deliberately ignored.
+            if node.role is ExportRole.MESH:
+                continue
+
             if node.role is ExportRole.EMPTY:
                 self.discover_empty(node)
             elif node.role is ExportRole.ARMATURE:
@@ -409,14 +413,14 @@ class Exporter:
         return objects
 
     def expand_switches(self, objects):
-        """Include the whole subtree of every included switch, whatever its selection or visibility."""
-        self.scene_objects = list(nif_switch.scene_objects(self.runtime.scene))
+        """Include each switch subtree, stopping at meshes, whatever its selection or visibility."""
+        self.scene_objects = [ob for ob in nif_switch.scene_objects(self.runtime.scene) if not is_mesh_descendant(ob)]
         layer_objects = set(self.runtime.view_layer.objects)
 
         expanded = []
         placed = set()
         for ob in objects:
-            if ob in placed:
+            if ob in placed or is_mesh_descendant(ob):
                 continue
             placed.add(ob)
             expanded.append(ob)
@@ -655,6 +659,10 @@ def iter_parents(node):
     while parent is not None:
         yield parent
         parent = parent.parent
+
+
+def is_mesh_descendant(source):
+    return any(parent.type == "MESH" for parent in iter_parents(source))
 
 
 def blender_descendants(source):
