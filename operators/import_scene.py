@@ -65,9 +65,14 @@ class ImportScene(bpy.types.Operator, ImportHelper):
 
     def execute(self, context):
         from .. import nif_import
+        from ..conversion.import_skeletons import SkinRootError
 
         kwargs = self.as_keywords(ignore=("filename_ext", "filter_glob", "check_existing"))
-        return nif_import.load(context, report=self.report, **kwargs)
+        try:
+            return nif_import.load(context, report=self.report, **kwargs)
+        except SkinRootError as error:
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
 
     @staticmethod
     def menu_func_import(menu, context) -> None:

@@ -21,6 +21,10 @@ from .bone_axes import export_axis_correction, import_axis_correction
 from .records import Array, ImportNode, ImportRole, ResolvedImportSkeleton
 
 
+class SkinRootError(ValueError):
+    """A skinned mesh lies outside its resolved skeleton root."""
+
+
 def evaluate_node_worlds(nodes: Iterable[ImportNode]) -> dict[ImportNode, Array]:
     return evaluate_world_matrices((node, node.parent, node.matrix_local) for node in nodes)
 
@@ -95,6 +99,15 @@ def resolve_armatures(
             if skeleton is not None:
                 skeletons.append(skeleton)
                 skeletons_by_source[node.source] = skeleton
+
+    # Skin corrections and creation order require meshes beneath the resolved root, not just a skin link to it.
+    for skeleton in skeletons:
+        for node in get_skinned_meshes(skeleton.root, nodes, get_node, skeletons_by_source):
+            if node is not skeleton.root and skeleton.root not in iter_parents(node):
+                raise SkinRootError(
+                    f"Skinned mesh '{node.name}' is outside skeleton root '{skeleton.root.name}'. "
+                    "External skinned meshes are not supported."
+                )
 
     rest_worlds = evaluate_node_worlds(nodes)
     for skeleton in skeletons:
