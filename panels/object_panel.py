@@ -148,10 +148,10 @@ def get_lod_range(context, index):
 
 
 class LODToggleNoLimit(bpy.types.Operator):
-    """Toggle whether this child shows at any distance beyond near (far = FLT_MAX)"""
+    """Toggle whether this child shows at every distance beyond its near"""
 
     bl_idname = "object.mw_lod_toggle_no_limit"
-    bl_label = "No Limit (FLT_MAX)"
+    bl_label = "No Limit"
     bl_options = {"REGISTER", "UNDO", "INTERNAL"}
 
     index: bpy.props.IntProperty(name="Index")
@@ -328,7 +328,7 @@ class ObjectPanel(bpy.types.Panel):
 
         box = self.layout.box()
         header = box.row()
-        header.label(text="LOD Levels")
+        header.label(text="LOD Children")
         header.operator(LODSortByDistance.bl_idname, text="", icon="SORTSIZE")
         self.draw_options(context, box).prop(lod.mw, "lod_sync")
         for problem in nif_switch.lod_problems(lod, children):
@@ -365,15 +365,15 @@ class ObjectPanel(bpy.types.Panel):
                 # parented after the LOD was set up: the default range, editable once the menu adds a row
                 fallback = line.row(align=True)
                 fallback.enabled = False
-                fallback.operator(LODAddRange.bl_idname, text="Near: 0").child = child.name
-                fallback.operator(LODAddRange.bl_idname, text="FLT_MAX").child = child.name
+                fallback.operator(LODAddRange.bl_idname, text="Near 0").child = child.name
+                fallback.operator(LODAddRange.bl_idname, text="No Limit").child = child.name
             else:
                 line.context_pointer_set("mw_lod_range", row)
                 line.prop(row, "near")
                 if nif_switch.is_no_limit(row.far):
                     far = line.row(align=True)
                     far.enabled = False  # set and cleared only through the menu
-                    far.operator(LODToggleNoLimit.bl_idname, text="FLT_MAX").index = -1
+                    far.operator(LODToggleNoLimit.bl_idname, text="No Limit").index = -1
                 else:
                     line.prop(row, "far")
             line.menu(OBJECT_MT_mw_lod_range.__name__, text="", icon="DOWNARROW_HLT")

@@ -11,19 +11,46 @@ ALPHA_MODE_MASK = 0x1DFE
 ALPHA_FLAGS_DEFAULT = 0x10EC
 
 
-def enum_items(enum):
-    return tuple(
-        (item.name, item.name.replace("_", " ").title(), "", item.value)
-        for item in enum
-    )
+def enum_items(enum, labels):
+    """Enum items keyed by member name; `labels` maps each member to its (label, description)."""
+    return tuple((item.name, *labels[item], item.value) for item in enum)
 
+
+# labels stay short for the narrow material panel; descriptions spell them out
+_BLEND_LABELS = {
+    AlphaBlendFunction.ONE: ("One", "Multiply by 1"),
+    AlphaBlendFunction.ZERO: ("Zero", "Multiply by 0"),
+    AlphaBlendFunction.SRC_COLOR: ("Src Color", "Multiply by the source color"),
+    AlphaBlendFunction.INV_SRC_COLOR: ("Inv Src Color", "Multiply by 1 minus the source color"),
+    AlphaBlendFunction.DST_COLOR: ("Dst Color", "Multiply by the destination color"),
+    AlphaBlendFunction.INV_DST_COLOR: ("Inv Dst Color", "Multiply by 1 minus the destination color"),
+    AlphaBlendFunction.SRC_ALPHA: ("Src Alpha", "Multiply by the source alpha"),
+    AlphaBlendFunction.INV_SRC_ALPHA: ("Inv Src Alpha", "Multiply by 1 minus the source alpha"),
+    AlphaBlendFunction.DST_ALPHA: ("Dst Alpha", "Multiply by the destination alpha"),
+    AlphaBlendFunction.INV_DST_ALPHA: ("Inv Dst Alpha", "Multiply by 1 minus the destination alpha"),
+    AlphaBlendFunction.SRC_ALPHA_SAT: (
+        "Src Alpha Saturate",
+        "Multiply by the source alpha or 1 minus the destination alpha, whichever is smaller",
+    ),
+}
+
+_TEST_LABELS = {
+    AlphaTestFunction.ALWAYS: ("Always", "Draw every pixel"),
+    AlphaTestFunction.LESS: ("Less", "Draw pixels whose alpha is below the threshold"),
+    AlphaTestFunction.EQUAL: ("Equal", "Draw pixels whose alpha equals the threshold"),
+    AlphaTestFunction.LESS_EQUAL: ("Less or Equal", "Draw pixels whose alpha is at or below the threshold"),
+    AlphaTestFunction.GREATER: ("Greater", "Draw pixels whose alpha is above the threshold"),
+    AlphaTestFunction.NOT_EQUAL: ("Not Equal", "Draw pixels whose alpha differs from the threshold"),
+    AlphaTestFunction.GREATER_EQUAL: ("Greater or Equal", "Draw pixels whose alpha is at or above the threshold"),
+    AlphaTestFunction.NEVER: ("Never", "Draw no pixels"),
+}
 
 # the blend fields are 4 bits wide but only 0-10 are defined; files do use the rest, so they get items too
-ALPHA_BLEND_ITEMS = enum_items(AlphaBlendFunction) + tuple(
-    (f"INVALID_{value}", f"Invalid ({value})", "Not a defined blend function; kept as imported", value)
+ALPHA_BLEND_ITEMS = enum_items(AlphaBlendFunction, _BLEND_LABELS) + tuple(
+    (f"INVALID_{value}", f"Invalid ({value})", "Not a defined blend function. Kept as imported", value)
     for value in range(len(AlphaBlendFunction), 16)
 )
-ALPHA_TEST_ITEMS = enum_items(AlphaTestFunction)
+ALPHA_TEST_ITEMS = enum_items(AlphaTestFunction, _TEST_LABELS)
 
 
 def upgrade_materials():
@@ -367,7 +394,8 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         self.sync_alpha_state()
 
     src_blend_mode: bpy.props.EnumProperty(
-        name="Source Blend Mode",
+        name="Src Blend Mode",
+        description="Factor the new pixel's color is multiplied by before it is added to the color already drawn",
         items=ALPHA_BLEND_ITEMS,
         get=get_src_blend_mode,
         set=set_src_blend_mode,
@@ -382,7 +410,8 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         self.sync_alpha_state()
 
     dst_blend_mode: bpy.props.EnumProperty(
-        name="Destination Blend Mode",
+        name="Dst Blend Mode",
+        description="Factor the color already drawn is multiplied by before the new pixel's color is added",
         items=ALPHA_BLEND_ITEMS,
         get=get_dst_blend_mode,
         set=set_dst_blend_mode,
@@ -401,7 +430,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         self.sync_alpha_state()
 
     use_alpha_clip: bpy.props.BoolProperty(
-        name="Alpha Clip",
+        name="Alpha Test",
         description="Enable alpha testing",
         get=get_use_alpha_clip,
         set=set_use_alpha_clip,
@@ -417,7 +446,8 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         self.sync_alpha_state()
 
     test_mode: bpy.props.EnumProperty(
-        name="Alpha Test Function",
+        name="Function",
+        description="Which pixels the alpha test draws, by comparing their alpha with the threshold",
         items=ALPHA_TEST_ITEMS,
         get=get_test_mode,
         set=set_test_mode,
@@ -436,7 +466,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
 
     no_sort: bpy.props.BoolProperty(
         name="No Sort",
-        description="Disable sorting for this alpha property",
+        description="Draw this material's geometry without sorting it against other transparent geometry",
         get=get_no_sort,
         set=set_no_sort,
         options=set(),

@@ -277,7 +277,7 @@ class _ObjectAnimation:
         try:
             data_path = self.target.path_from_id("hide_viewport")
         except AttributeError:
-            self.ctx.warn(f"NiVisController on bones are not supported ({self.source.name})")
+            self.ctx.warn(f"NiVisController on bone '{self.source.name}' is not supported")
             return
 
         fcurve = ensure_fcurve(action, data_path, index=0, group=self.target.name)

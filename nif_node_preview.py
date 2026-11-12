@@ -360,9 +360,9 @@ _handlers = (
 
 def register():
     bpy.types.WindowManager.mw_node_preview = bpy.props.BoolProperty(
-        name="Enable Preview",
-        description="Hide inactive switch children and LOD levels, and turn billboards, the way the game would "
-        "from the current viewport. Not saved",
+        name="Game Preview",
+        description="Hide the inactive children of switches and LODs and turn billboards, as the game would "
+        "for the current view. Not saved",
         default=False,
         update=update_toggle,
     )

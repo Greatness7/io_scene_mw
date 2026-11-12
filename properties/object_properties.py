@@ -93,17 +93,17 @@ class ObjectProperties(bpy.types.PropertyGroup):
         name="Node Type",
         description="The NIF node type this Empty exports as",
         items=[
-            ("AvoidNode", "AvoidNode", "Actors steer around its subtree instead of stopping at it", 5),
-            ("NiBillboardNode", "NiBillboardNode", "Turns toward the camera", 6),
-            ("NiBSAnimationNode", "NiBSAnimationNode", "The engine updates the animations below it", 7),
-            ("NiBSParticleNode", "NiBSParticleNode", "An animation node for particle systems", 8),
-            ("NiCollisionSwitch", "NiCollisionSwitch", "Its Collision flag lets collision and picking through", 9),
-            ("NiFltAnimationNode", "NiFltAnimationNode", "Shows each direct child in turn, over its period", 4),
-            ("NiLODNode", "NiLODNode", "At most one direct child is active, chosen by camera distance", 2),
-            ("NiNode", "NiNode", "An ordinary node", 0),
-            ("NiSortAdjustNode", "NiSortAdjustNode", "Changes how the alpha geometry below it is sorted", 10),
-            ("NiSwitchNode", "NiSwitchNode", "At most one direct child is active; the author picks it", 1),
-            ("RootCollisionNode", "RootCollisionNode", "Its subtree is the collision shape and is never rendered", 3),
+            ("AvoidNode", "AvoidNode", "Actors avoid pathfinding routes that touch the geometry below it", 5),
+            ("NiBillboardNode", "NiBillboardNode", "Turns to face the camera", 6),
+            ("NiBSAnimationNode", "NiBSAnimationNode", "Controls whether the animations and particles below it play", 7),
+            ("NiBSParticleNode", "NiBSParticleNode", "Can keep its subtree in world space instead of following its parent", 8),
+            ("NiCollisionSwitch", "NiCollisionSwitch", "Can turn off collision and raycasts for its subtree", 9),
+            ("NiFltAnimationNode", "NiFltAnimationNode", "Shows each direct child in turn", 4),
+            ("NiLODNode", "NiLODNode", "Shows at most one direct child, chosen by camera distance", 2),
+            ("NiNode", "NiNode", "Groups its children, with no special behavior", 0),
+            ("NiSortAdjustNode", "NiSortAdjustNode", "Changes how the geometry below it is sorted", 10),
+            ("NiSwitchNode", "NiSwitchNode", "Shows at most one direct child, chosen in this panel", 1),
+            ("RootCollisionNode", "RootCollisionNode", "Makes its subtree the collision shape, which is never rendered", 3),
         ],
         default="NiNode",
         update=update_node_type,
@@ -119,7 +119,7 @@ class ObjectProperties(bpy.types.PropertyGroup):
 
     object_flags: bpy.props.IntProperty(
         name="Flags",
-        description="The raw NIF flags. The labeled flags above edit bits of this value",
+        description="Raw flags bitfield. The labeled flags above edit bits of this value",
         min=0,
         max=65535,
         default=2,
@@ -128,7 +128,7 @@ class ObjectProperties(bpy.types.PropertyGroup):
     flag_app_culled: flag_bit(
         0x0001,
         "App Culled",
-        "Never drawn. Collision still applies. Collision roots and shadows are always app culled",
+        "Prevents the node and its descendants from being drawn",
         forced=lambda self: self.node_type == nif_switch.COLLISION,
     )
 
@@ -136,7 +136,7 @@ class ObjectProperties(bpy.types.PropertyGroup):
         0x0006,
         1,
         "Collision Mode",
-        "How NetImmerse collision tests descend here. Morrowind's actor and projectile collision ignores it",
+        "How collision tests descend through this node. Morrowind's actor and projectile collision ignores it",
         [
             ("NONE", "None", "Stop here", 0),
             ("TRIANGLES", "Triangles", "Test children down to their triangles", 1),
@@ -147,7 +147,7 @@ class ObjectProperties(bpy.types.PropertyGroup):
 
     # NiSwitchNode
     flag_update_only_active: flag_bit(
-        0x0020, "Update Only Active", "Only the active child's controllers are updated and bounded"
+        0x0020, "Update Only Active", "Only the active child's controllers are updated"
     )
 
     switch_active_child: bpy.props.PointerProperty(
@@ -175,7 +175,7 @@ class ObjectProperties(bpy.types.PropertyGroup):
 
     flt_period: bpy.props.FloatProperty(
         name="Period",
-        description="Frames to show every child once",
+        description="Seconds to cycle through every child once. With Bounce, seconds to go there and back",
         min=0.0,
         default=0.0,
     )
@@ -210,7 +210,7 @@ class ObjectProperties(bpy.types.PropertyGroup):
     )
 
     # NiCollisionSwitch
-    flag_collision: flag_bit(0x0020, "Collision", "Collision and picking reach the children. Off blocks both")
+    flag_collision: flag_bit(0x0020, "Collision", "Collision and raycasts reach the children. Off blocks both")
 
     # NiBillboardNode
     billboard_mode: flag_field(
@@ -219,9 +219,9 @@ class ObjectProperties(bpy.types.PropertyGroup):
         "Billboard Mode",
         "How the node turns toward the camera",
         [
-            ("ALWAYS_FACE_CAMERA", "Always Face Camera", "Turn fully toward the camera", 0),
+            ("ALWAYS_FACE_CAMERA", "Always Face Camera", "Face the camera while staying upright", 0),
             ("ROTATE_ABOUT_UP", "Rotate About Up", "Turn only about the local up axis", 1),
-            ("RIGID_FACE_CAMERA", "Rigid Face Camera", "Face the camera without rolling", 2),
+            ("RIGID_FACE_CAMERA", "Rigid Face Camera", "Match the camera's rotation, including roll", 2),
             # Morrowind has no mode 3: the value matches no branch and the node does not turn
         ],
     )
@@ -234,7 +234,7 @@ class ObjectProperties(bpy.types.PropertyGroup):
             ("INHERIT", "Inherit", "Sort as the parent does", 0),
             ("OFF", "Off", "No sorting; draw in scene order", 1),
             ("SUBSORT", "Subsort", "Sort this subtree on its own", 2),
-            ("GROUPED", "Grouped (MWSE)", "Sort the subtree as one object. Without MWSE this acts as Inherit", 64),
+            ("GROUPED", "Grouped", "Sort the subtree as one object", 64),
         ],
         default="OFF",
     )

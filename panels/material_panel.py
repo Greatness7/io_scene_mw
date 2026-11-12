@@ -87,8 +87,8 @@ class MaterialPanelSettings(bpy.types.Panel, MaterialSubPanelBase):
         column.prop(this, "dst_blend_mode")
         if this.use_alpha_blend and this.alpha_blend_preview_mode == "UNSUPPORTED":
             notice = self.layout.column(align=True)
-            notice.label(text="Custom factors export correctly.", icon="INFO")
-            notice.label(text="Viewport uses standard alpha blending.")
+            notice.label(text="The viewport shows standard blending.", icon="INFO")
+            notice.label(text="Export keeps these modes.")
 
         # Opacity
         column = self.layout.column(align=True)
@@ -109,16 +109,14 @@ class MaterialPanelSettings(bpy.types.Panel, MaterialSubPanelBase):
         column.prop(
             this.alpha_threshold_input,
             "default_value",
-            text="Alpha Test Threshold",
+            text="Threshold",
             slider=True,
         )
 
         # No Sort
         self.layout.prop(this, "no_sort")
         if this.no_sort:
-            notice = self.layout.column(align=True)
-            notice.label(text="No Sort exports correctly.", icon="INFO")
-            notice.label(text="No Blender viewport equivalent.")
+            self.layout.label(text="The viewport ignores No Sort.", icon="INFO")
 
 
 class MaterialPanelTemplate(bpy.types.Panel, MaterialSubPanelBase):

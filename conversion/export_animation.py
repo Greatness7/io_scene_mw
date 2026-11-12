@@ -244,7 +244,7 @@ class _ObjectAnimation:
         has_euler = self.create_euler_rotations(fcurves_dict)
         has_quats = self.create_quaternion_rotations(fcurves_dict)
         if has_euler and has_quats:
-            raise ValueError(f"'({self.name})' mixing euler and quaternion rotations in the same action is not supported")
+            raise ValueError(f"'{self.name}' mixes Euler and quaternion rotations in one action, which is not supported")
         return has_euler or has_quats
 
     def create_euler_rotations(self, fcurves_dict):
@@ -253,7 +253,7 @@ class _ObjectAnimation:
             return False
         assert key_type is not None
         if isinstance(self.source, bpy.types.PoseBone):
-            raise ValueError(f"({self.name}) bones euler animations are not currently supported.")
+            raise ValueError(f"Bone '{self.name}' has Euler rotation keys; bone rotations must be quaternions")
 
         controller = self.create_keyframe_controller()
         data = controller.data

@@ -99,11 +99,11 @@ def switch_node_problems(switch, children):
     """Why `switch` cannot be exported as-is. Empty when it can."""
     problems = []
     if switch.instance_type != "NONE":
-        problems.append(f"switch '{switch.name}' instances a collection, which a switch cannot do")
+        problems.append(f"Switch '{switch.name}' instances a collection, which a switch cannot do")
     invalid = switch.mw.switch_invalid_index
     if switch.mw.switch_active_child is None and invalid != -1:
         problems.append(
-            f"switch '{switch.name}' was imported with invalid selection {invalid} (of {len(children)} children);"
+            f"Switch '{switch.name}' was imported with invalid selection {invalid} (of {len(children)} children);"
             " pick a child or None in the object panel"
         )
     return problems
@@ -115,16 +115,16 @@ def null_slot_problems(marker, objects=None):
         objects = scene_objects()
     name = marker.name
     if marker.type != "EMPTY":
-        return [f"empty slot '{name}' must be an Empty"]
+        return [f"Empty slot '{name}' must be an Empty"]
     problems = []
     if not is_switch(marker.parent):
-        problems.append(f"empty slot '{name}' is not a direct child of a NiSwitchNode or NiLODNode")
+        problems.append(f"Empty slot '{name}' is not a direct child of a NiSwitchNode, NiLODNode or NiFltAnimationNode")
     if any(ob.parent == marker for ob in objects):
-        problems.append(f"empty slot '{name}' has children, which a null link cannot keep")
+        problems.append(f"Empty slot '{name}' has children, which an empty slot cannot keep")
     if marker.instance_type != "NONE":
-        problems.append(f"empty slot '{name}' instances a collection")
+        problems.append(f"Empty slot '{name}' instances a collection")
     if marker.animation_data and marker.animation_data.action:
-        problems.append(f"empty slot '{name}' is animated")
+        problems.append(f"Empty slot '{name}' is animated")
     return problems
 
 
@@ -183,7 +183,7 @@ def lod_warnings(lod, children):
     """Exportable but probably unintended ranges."""
     rows = _lod_rows(lod, children)
     return [
-        f"NiLODNode '{lod.name}': '{child.name}' has near {row.near:g} >= far {row.far:g} and can never show"
+        f"NiLODNode '{lod.name}': '{child.name}' has near {row.near:g} at or beyond far {row.far:g} and never shows"
         for child, row in rows.items()
         if row.near >= row.far  # near <= d < far is empty
     ]

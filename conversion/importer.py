@@ -166,7 +166,7 @@ class Importer:
             output = cast(Any, output)
             slots = [self.slot_output(node, slot) for slot in plan.slots]
             if None in slots:
-                self.warn(f"{node_type} '{name}' lost a child to skeleton or collision handling; its indices shifted")
+                self.warn(f"{node_type} '{name}' had a child moved into a skeleton or collision subtree; later child indices shifted")
 
             if node_type == nif_switch.LOD:
                 self.resolve_lod(node, output, slots)
