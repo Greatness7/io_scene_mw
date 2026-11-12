@@ -53,9 +53,11 @@ def create_uv_controller(bl_prop, bl_slot, source_object, target_shape, options:
         return False
     if not (bl_slot.image and bl_slot.layer):
         return False
+
     anims = fcurves_by_data_path(bl_prop.texture_group.node_tree)
     if len(anims) == 0:
         return False
+
     uv_data = nif.NiUVData()
     bl_node = bl_slot.mapping_node
     channels = {
@@ -64,6 +66,7 @@ def create_uv_controller(bl_prop, bl_slot, source_object, target_shape, options:
     }
     if not any(map(anims.get, channels.values())):
         return False
+
     for outputs, data_path in channels.items():
         for i, output in enumerate(outputs):
             fcurves = [fcurve for fcurve in anims[data_path] if fcurve.array_index == i]
@@ -72,11 +75,10 @@ def create_uv_controller(bl_prop, bl_slot, source_object, target_shape, options:
                 continue
             output.key_type = key_type
             output.keys = collect_keyframe_points(fcurves, key_type)
-    try:
-        uv_data.u_offset_data.keys[:, 1] *= -1
-        uv_data.v_offset_data.keys[:, 1] *= -1
-    except AttributeError:
-        pass
+
+    uv_data.u_offset_data.keys[:, 1] *= -1
+    uv_data.v_offset_data.keys[:, 1] *= -1
+
     controller = nif.NiUVController(cycle_type=cycle_type, target=target_shape, data=uv_data)
     controller.update_start_stop_times()
     for i, uv in enumerate(source_object.data.uv_layers):
@@ -108,6 +110,7 @@ def create_color_controller(fcurves_dict, ni_prop, bl_prop, cycle_type: str):
         keys = collect_keyframe_points(fcurves[:3], key_type)
         if len(keys) == 0:
             continue
+
         controller = nif.NiMaterialColorController(
             cycle_type=cycle_type,
             color_field=color_field,
@@ -128,6 +131,7 @@ def create_alpha_controller(fcurves_dict, ni_prop, bl_prop, cycle_type: str):
     keys = collect_keyframe_points(fcurves, key_type)
     if len(keys) == 0:
         return False
+
     controller = nif.NiAlphaController(
         cycle_type=cycle_type,
         target=ni_prop,
@@ -165,10 +169,12 @@ class _ObjectAnimation:
     def create(self) -> None:
         if not self.options.export_animations:
             return
+
         self.create_text_keys()
         fcurves_dict = fcurves_by_data_path(self.source.id_data)
         if len(fcurves_dict) == 0:
             return
+
         self.create_vis_controller(fcurves_dict)
         self.create_translations(fcurves_dict)
         self.create_rotations(fcurves_dict)
@@ -181,6 +187,7 @@ class _ObjectAnimation:
             return False
         if len(markers) == 0:
             return False
+
         text_data = nif.NiTextKeyExtraData()
         text_data.keys.resize(len(markers))
         for i, marker in enumerate(markers):
@@ -195,6 +202,7 @@ class _ObjectAnimation:
         _, keys = self.collect_keys(fcurves_dict, "hide_viewport", num_axes=1, key_type=key_type)
         if len(keys) == 0:
             return False
+
         controller = nif.NiVisController(
             cycle_type=self.cycle_type,
             target=self.target,
@@ -214,6 +222,7 @@ class _ObjectAnimation:
         if len(keys) == 0:
             return False
         assert key_type is not None
+
         controller = self.create_keyframe_controller()
         data = controller.data
         assert data is not None
@@ -221,6 +230,7 @@ class _ObjectAnimation:
         data.translations.keys = keys
         controller.start_time = min(keys[0, 0], controller.start_time)
         controller.stop_time = max(keys[-1, 0], controller.stop_time)
+
         offset = self.to_local_space()
         if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
             translations = data.translations
@@ -244,6 +254,7 @@ class _ObjectAnimation:
         assert key_type is not None
         if isinstance(self.source, bpy.types.PoseBone):
             raise ValueError(f"({self.name}) bones euler animations are not currently supported.")
+
         controller = self.create_keyframe_controller()
         data = controller.data
         assert data is not None
@@ -256,12 +267,13 @@ class _ObjectAnimation:
         rotations.euler_data = tuple(nif.NiFloatData(key_type=key_type, keys=keys[:, columns]) for columns in axis_columns)
         controller.start_time = min(keys[0, 0], controller.start_time)
         controller.stop_time = max(keys[-1, 0], controller.stop_time)
+
         offset = self.to_local_space()
         if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
             rotations.convert_to_quaternions()
             values = data.rotations.values
-            offset = quaternion_from_matrix(offset)
-            quaternion_mul(offset, values, out=values)
+            offset_quat = quaternion_from_matrix(offset)
+            quaternion_mul(offset_quat, values, out=values)
             values /= la.norm(values, axis=1)[:, None]
         return True
 
@@ -276,18 +288,21 @@ class _ObjectAnimation:
         )
         if len(keys) == 0:
             return False
+
         controller = self.create_keyframe_controller()
         data = controller.data
         assert data is not None
         values = keys[:, 1:]
+
         if isinstance(self.source, bpy.types.PoseBone):
-            offset = quaternion_from_matrix(self.axis_correction)
-            quaternion_mul(values, offset, out=values)
+            axis_quat = quaternion_from_matrix(self.axis_correction)
+            quaternion_mul(values, axis_quat, out=values)
         offset = self.to_local_space()
         if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
-            offset = quaternion_from_matrix(offset)
-            quaternion_mul(offset, values, out=values)
+            offset_quat = quaternion_from_matrix(offset)
+            quaternion_mul(offset_quat, values, out=values)
         values /= la.norm(values, axis=1)[:, None]
+
         data.rotations.keys = keys
         controller.start_time = min(keys[0, 0], controller.start_time)
         controller.stop_time = max(keys[-1, 0], controller.stop_time)
@@ -298,15 +313,18 @@ class _ObjectAnimation:
         if len(keys) == 0:
             return False
         assert key_type is not None
+
         scales_min = keys[:, 1:4].min(axis=1)
         scales_max = keys[:, 1:4].max(axis=1)
         if not np.allclose(scales_min, scales_max, rtol=0, atol=1e-4):
             self.warn(f"({self.name}) non-uniform scale animations are not supported")
             return False
+
         if key_type.name == "LIN_KEY":
             keys = keys[:, :2]
         else:
             keys = keys[:, (0, 1, 4, 7)]
+
         controller = self.create_keyframe_controller()
         data = controller.data
         assert data is not None
@@ -314,6 +332,7 @@ class _ObjectAnimation:
         data.scales.keys = keys
         controller.start_time = min(keys[0, 0], controller.start_time)
         controller.stop_time = max(keys[-1, 0], controller.stop_time)
+
         offset = self.to_local_space()
         if not np.allclose(offset, ID44, rtol=0, atol=1e-4):
             offset_scale = decompose(offset)[-1][-1]
@@ -345,18 +364,21 @@ class _ObjectAnimation:
             data_path = f'pose.bones["{self.name}"].{key}'
         else:
             data_path = self.source.path_from_id(key)
+
         fcurves = {fcurve.array_index: fcurve for fcurve in fcurves_dict.get(data_path, ()) if len(fcurve.keyframe_points)}
         if len(fcurves) == 0:
             return None, ()
         if key_type is None:
             key_type = get_interpolation_type([fcurves[i] for i in sorted(fcurves)])
         assert key_type is not None
+
         axes = {
             i: nif.NiFloatData(key_type=key_type, keys=collect_keyframe_points([fcurve], key_type))
             for i, fcurve in fcurves.items()
         }
         times = np.unique(np.concatenate([axis.times for axis in axes.values()]))
         times = times[np.concatenate(([True], np.diff(times) > 1e-6))]
+
         values, in_tans, out_tans = [], [], []
         for i in range(num_axes):
             axis = axes.get(i)
@@ -375,6 +397,7 @@ class _ObjectAnimation:
             if key_type.name == "BEZ_KEY":
                 in_tans.append(axis.in_tans)
                 out_tans.append(axis.out_tans)
+
         columns = [times, *values]
         if key_type.name == "BEZ_KEY":
             columns += [*in_tans, *out_tans]

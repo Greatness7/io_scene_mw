@@ -5,13 +5,12 @@ transforms, then copies evaluated meshes into owned buffers before creating NIF 
 armatures before dependent skins and assigns switch children after all outputs exist.
 """
 
-import bpy
-
-import pathlib
 import collections
 from dataclasses import replace
+import pathlib
 from typing import Any, cast
 
+import bpy
 import numpy as np
 import numpy.linalg as la
 
@@ -104,11 +103,13 @@ class Exporter:
         self.widen_controller_ranges(data)
         data.apply_scale(self.runtime.scale_correction)
         data.apply_time_scale(1 / self.runtime.fps)
+
         data.merge_properties(ignore={"name", "shine", "specular_color"})
         child_orders = [(node, list(node.children)) for node in data.objects_of_type(nif.NiNode)]
         data.sort()
         for node, children in child_orders:
             node.reorder_children(children)
+
         self.setup_collision(data)
         self.setup_markers(data)
         data.save(self.filepath)
@@ -128,32 +129,34 @@ class Exporter:
         queue = collections.deque(roots)
         while queue:
             node = queue.popleft()
-            if self.process(node):
-                self.nodes.append(node)
-                self.history[node.scope, node.source].append(node)
-
-                if node.role is ExportRole.EMPTY:
-                    self.discover_empty(node)
-                elif node.role is ExportRole.ARMATURE:
-                    self.discover_armature(node)
-
-                if nif_switch.is_switch(node.source):
-                    # slots follow the scene sequence; null-slot markers stay out of node creation
-                    children = nif_switch.ordered_children(node.source, sequence or bl_objects)
-                    slots = tuple(
-                        ExportNullSlot(child) if nif_switch.is_null_slot(child) else self.new_node(child, scope, node)
-                        for child in children
-                        if child in included
+            if not self.process(node):
+                if any(nif_switch.is_switch(p.source) for p in iter_parents(node)):
+                    self.errors.append(
+                        f"'{node.source.name}' is inside a switch-family node but its type ({node.source.type}) cannot be exported"
                     )
-                    plan = node.switch_plan = ExportSwitchPlan(node, slots)
-                    self.switches.append(plan)
-                    queue.extend(slot for slot in slots if isinstance(slot, ExportNode))
-                elif hasattr(node.source, "children"):
-                    queue.extend(self.new_node(child, scope, node) for child in bl_objects if child.parent == node.source)
-            elif any(nif_switch.is_switch(p.source) for p in iter_parents(node)):
-                self.errors.append(
-                    f"'{node.source.name}' is inside a switch-family node but its type ({node.source.type}) cannot be exported"
+                continue
+
+            self.nodes.append(node)
+            self.history[node.scope, node.source].append(node)
+
+            if node.role is ExportRole.EMPTY:
+                self.discover_empty(node)
+            elif node.role is ExportRole.ARMATURE:
+                self.discover_armature(node)
+
+            if nif_switch.is_switch(node.source):
+                # slots follow the scene sequence; null-slot markers stay out of node creation
+                children = nif_switch.ordered_children(node.source, sequence or bl_objects)
+                slots = tuple(
+                    ExportNullSlot(child) if nif_switch.is_null_slot(child) else self.new_node(child, scope, node)
+                    for child in children
+                    if child in included
                 )
+                plan = node.switch_plan = ExportSwitchPlan(node, slots)
+                self.switches.append(plan)
+                queue.extend(slot for slot in slots if isinstance(slot, ExportNode))
+            elif hasattr(node.source, "children"):
+                queue.extend(self.new_node(child, scope, node) for child in bl_objects if child.parent == node.source)
 
         return roots
 
@@ -392,17 +395,16 @@ class Exporter:
         objects = self.expand_switches(objects)
 
         # show a useful error message if no valid objects were discovered
-        if len(objects) == 0:
+        if not objects:
             if self.options.use_active_collection:
                 raise Exception(
                     "No valid objects found. Ensure you have an active collection when using the 'Only Active Collection' option."
                 )
-            elif self.options.use_selection:
+            if self.options.use_selection:
                 raise Exception(
                     "No valid objects found. Ensure you have at least one object selected when using the 'Only Selected' option."
                 )
-            else:
-                raise Exception("No valid objects found. Ensure you have at least one object present in your scene.")
+            raise Exception("No valid objects found. Ensure you have at least one object present in your scene.")
 
         return objects
 

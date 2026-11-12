@@ -4,12 +4,12 @@ Each Importer owns the conversion state and caches for one file. It resolves the
 before creating objects in the collection supplied by the runtime.
 """
 
-import bpy
-
-import pathlib
 import collections
+import contextlib
+import pathlib
 from typing import Any, cast
 
+import bpy
 import numpy as np
 import numpy.linalg as la
 
@@ -64,37 +64,26 @@ class Importer:
         data.load(self.filepath)
         data.merge_properties()
 
-        # fix roots list
         # every AV root is kept: the engine attaches them all under a container it synthesizes
         data.roots = list(data.roots_of_type(nif.NiAVObject)) or [nif.NiNode()]
 
-        # fix transforms
         # several roots sit under the engine's container, so their transforms are real placement
         if self.options.discard_root_transforms and len(data.roots) == 1:
             if isinstance(data.root, nif.NiNode):
                 data.root.matrix = ID44
 
-        # attach kf file
         if self.options.attach_keyframe_data:
             self.import_keyframe_data(data)
 
-        # copy file name
         for root in data.roots:
-            if not isinstance(root, nif.NiObjectNET):
-                continue
-            if root.name == "":
+            if isinstance(root, nif.NiObjectNET) and root.name == "":
                 root.name = self.filepath.name
 
-        # scale correction
         data.apply_scale(self.runtime.scale_correction)
-
-        # time correction
         data.apply_time_scale(self.runtime.fps)
 
-        # resolve heirarchy
         roots = self.resolve_nodes(data.roots_of_type(nif.NiAVObject))
 
-        # resolve armatures
         if any(self.bone_candidates):
             self.skeletons, self.skeletons_by_source = import_skeletons.resolve_armatures(
                 self.nodes,
@@ -116,19 +105,15 @@ class Importer:
             )
 
         self.world_matrices = import_skeletons.evaluate_node_worlds(self.nodes)
-
         creation_schedule = self.build_creation_schedule()
 
         # create at frame zero, then return to the current frame
         with scene_frame_scope(self.runtime.scene, 0):
-            # create bl objects
             for job in creation_schedule:
                 self.create_job(job)
 
-            # switch types and selections
             self.resolve_switches()
 
-            # unmute animations
             for skeleton in self.skeletons:
                 import_animation.set_mute(self.outputs[skeleton.root], False, self.animation_context)
 
@@ -209,14 +194,17 @@ class Importer:
         lod = output.mw
         lod.lod_center = tuple(map(float, node.source.lod_center))
         levels = node.source.lod_levels
+
         # every child gets a row; one without a level keeps the default range
         rows = nif_switch.ensure_lod_rows(output, [slot for slot in slots if slot is not None])
+
         # rows are filled with sync off: filling one row must not rewrite its neighbors
         lod.lod_sync = False
         for slot, (near, far) in zip(slots, levels):
             if slot is not None:
                 rows[slot].near, rows[slot].far = float(near), float(far)
         lod.lod_sync = len(levels) >= len(slots) and nif_switch.levels_chained(levels[: len(slots)])
+
         if len(levels) > len(slots):
             self.warn(
                 f"NiLODNode '{name}' has {len(levels)} ranges for {len(slots)} children; the extra ranges were dropped"
@@ -476,6 +464,7 @@ class Importer:
         for bone, name in bones.items():
             pose_bone = self.outputs[bone] = bl_object.pose.bones[name]
             cast(Any, pose_bone).mw.object_flags = bone.source.flags
+
             # the pose_bone.matrix setter reads the parent's evaluated pose, which would need a depsgraph
             # update per bone, so convert from the parent's known pose instead
             data_bone = pose_bone.bone
@@ -485,6 +474,7 @@ class Importer:
             pose_bone.matrix_basis = data_bone.convert_local_to_pose(
                 posed[bone], data_bone.matrix_local, invert=True, **parent
             )
+
             # create animations, preserve poses
             import_animation.import_object_animation(
                 bone.source,
@@ -550,11 +540,9 @@ class Importer:
             self.create_geometry(node, bl_object)
 
         if node.parent is not None:
-            try:
-                parent_output = cast(Any, self.outputs.get(node.parent))
+            parent_output = cast(Any, self.outputs.get(node.parent))
+            with contextlib.suppress(AttributeError):  # parent output may be a PoseBone or None
                 bl_object.display_type = parent_output.display_type
-            except AttributeError:
-                pass
 
         import_materials.import_material(
             node.source,
@@ -565,32 +553,32 @@ class Importer:
 
         return bl_object
 
-    def create_geometry(self, node, ob):
+    def create_geometry(self, node, bl_object):
         # the placement's world scale sizes the welding tolerance
         source = node.source
         placement = self.get(source)
         scale = decompose(self.world_matrices[placement])[-1]
         buffers = import_geometry.prepare_buffers(source, scale, self.options.vertex_precision, node.name)
 
-        import_geometry.create_vertices(ob, buffers.vertices)
-        import_geometry.create_triangles(ob, buffers.triangles)
+        import_geometry.create_vertices(bl_object, buffers.vertices)
+        import_geometry.create_triangles(bl_object, buffers.triangles)
 
-        import_geometry.create_vertex_colors(ob, buffers.vertex_colors)
-        import_geometry.create_uv_sets(ob, buffers.uv_sets)
+        import_geometry.create_vertex_colors(bl_object, buffers.vertex_colors)
+        import_geometry.create_uv_sets(bl_object, buffers.uv_sets)
 
         if buffers.skin is not None:
             root = self.outputs[self.get(source.skin.root)]
             bone_names = [self.outputs[self.get(bone)].name for bone in source.skin.bones]
-            import_geometry.create_vertex_weights(ob, buffers.skin, root.id_data, bone_names)
+            import_geometry.create_vertex_weights(bl_object, buffers.skin, root.id_data, bone_names)
         import_geometry.create_vertex_morphs(
-            ob,
+            bl_object,
             buffers.morphs,
             source.morph_targets,
             self.runtime.scene,
             source.controller,
         )
 
-        import_geometry.create_normals(ob, buffers.normals, self.options.ignore_custom_normals)
+        import_geometry.create_normals(bl_object, buffers.normals, self.options.ignore_custom_normals)
 
 
 def new_node(source, parent=None):

@@ -8,6 +8,9 @@ so it follows its target through renames and reordering; the numeric index exist
 A LOD's distance ranges are rows on the LOD Empty, each owned by its child through an object reference.
 """
 
+from collections import Counter
+from itertools import pairwise
+
 import bpy
 
 NODE, SWITCH_NODE, LOD, COLLISION = "NiNode", "NiSwitchNode", "NiLODNode", "RootCollisionNode"
@@ -40,29 +43,29 @@ class SwitchError(Exception):
     """An export precondition failed; nothing was written."""
 
 
-def _node_type(ob):
+def node_type(ob):
     # pose bones share `mw` but have no `type`; skeletal switches are deferred
     return ob.mw.node_type if getattr(ob, "type", None) == "EMPTY" else None
 
 
 def is_switch_node(ob):
     """A NiSwitchNode, or a NiFltAnimationNode whose selection is the child it starts on."""
-    return _node_type(ob) in (SWITCH_NODE, FLT_ANIMATION)
+    return node_type(ob) in (SWITCH_NODE, FLT_ANIMATION)
 
 
 def is_lod(ob):
     """A distance-selected NiLODNode."""
-    return _node_type(ob) == LOD
+    return node_type(ob) == LOD
 
 
 def is_switch(ob):
     """A switch in the NIF sense: NiSwitchNode or its subclasses NiLODNode and NiFltAnimationNode."""
-    return _node_type(ob) in (SWITCH_NODE, LOD, FLT_ANIMATION)
+    return node_type(ob) in (SWITCH_NODE, LOD, FLT_ANIMATION)
 
 
 def is_collision(ob):
     """An author-selected RootCollisionNode."""
-    return _node_type(ob) == COLLISION
+    return node_type(ob) == COLLISION
 
 
 def is_null_slot(ob):
@@ -78,13 +81,7 @@ def ordered_children(switch, objects=None):
     """Direct children of `switch` in collection-link order, including null-slot markers."""
     if objects is None:
         objects = scene_objects()
-    seen = set()
-    children = []
-    for ob in objects:
-        if ob.parent == switch and ob not in seen:
-            seen.add(ob)
-            children.append(ob)
-    return children
+    return list(dict.fromkeys(ob for ob in objects if ob.parent == switch))
 
 
 def active_index(switch, children):
@@ -175,10 +172,7 @@ def lod_problems(lod, children):
     problems = []
     if lod.instance_type != "NONE":
         problems.append(f"NiLODNode '{lod.name}' instances a collection, which a NiLODNode cannot do")
-    counts = {}
-    for row in lod.mw.lod_ranges:
-        if row.child is not None and row.child in children:
-            counts[row.child] = counts.get(row.child, 0) + 1
+    counts = Counter(row.child for row in lod.mw.lod_ranges if row.child is not None and row.child in children)
     for child, count in counts.items():
         if count > 1:
             problems.append(f"NiLODNode '{lod.name}' has {count} ranges for '{child.name}'; remove the extras")
@@ -230,8 +224,10 @@ def sync_lod_range(row, field):
             row.near, near_moved = row.far, True
         elif near_moved and row.near > row.far:
             row.far, far_moved = row.near, True
+
         if not lod.mw.lod_sync:
             return
+
         before = lod_neighbor(lod, row, -1) if near_moved else None
         if before is not None and before.far != row.near:
             before.far = row.near
@@ -244,4 +240,4 @@ def sync_lod_range(row, field):
 
 def levels_chained(levels):
     """Whether each level's far is the next level's near: the convention `lod_sync` maintains."""
-    return all(levels[i][1] == levels[i + 1][0] for i in range(len(levels) - 1))
+    return all(far == next_near for (_, far), (next_near, _) in pairwise(levels))

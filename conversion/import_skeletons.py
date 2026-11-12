@@ -120,14 +120,14 @@ def resolve_armature(
     if not bones:
         return None
 
-    for root_bone in filter(bones.__contains__, root.children):
-        if not isinstance(root_bone, nif.NiAVObject):
+    for root_bone in root.children:
+        if not isinstance(root_bone, nif.NiAVObject) or root_bone not in bones:
             continue
         for child in root_bone.descendants():
             if isinstance(child, nif.NiNode) and child.controllers.find_type(nif.NiKeyframeController):
                 bones.add(child)
 
-    for node in list(map(get_node, bones)):
+    for node in [get_node(bone) for bone in bones]:
         for parent in iter_parents(node):
             source = parent.source
             if source is root or source in bones:
@@ -166,7 +166,7 @@ def correct_rest_positions(
 
         inverse = la.inv(root_bone_world)
         for node in get_skinned_meshes(skeleton.root, nodes, get_node, skeletons_by_source):
-            if root_bone not in set(iter_parents(node)):
+            if root_bone not in iter_parents(node):
                 set_world_matrix(node, corrected_matrix @ (inverse @ worlds[node]), worlds)
         set_world_matrix(root_bone, corrected_matrix, worlds)
 

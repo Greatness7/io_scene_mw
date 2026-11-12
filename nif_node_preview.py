@@ -47,9 +47,9 @@ def refresh():
 def select_child(lod, children, eye):
     """The engine's choice: the highest index whose range holds the distance, or -1 for none."""
     ranges = nif_switch.lod_ranges(lod, children)
-    centre = lod.matrix_world @ Vector(lod.mw.lod_center)  # rotation, scale, translation, as UpdateWorldData
+    center = lod.matrix_world @ Vector(lod.mw.lod_center)  # rotation, scale, translation, as UpdateWorldData
     scale = lod.matrix_world.to_scale()[0]  # the engine assumes uniform scale
-    d2 = (centre - eye).length_squared  # fLODAdjust is 1
+    d2 = (center - eye).length_squared  # fLODAdjust is 1
     for i in reversed(range(len(children))):
         near, far = ranges[i]
         if (near * scale) ** 2 <= d2 < (far * scale) ** 2:  # Python floats do not overflow here
@@ -163,14 +163,17 @@ def orient(view_layer, view):
         ob.name: ob
         for ob in view_layer.objects
         # Blender has no delta rotation for axis-angle in its Python API
-        if nif_switch._node_type(ob) == BILLBOARD and ob.rotation_mode != "AXIS_ANGLE"
+        if nif_switch.node_type(ob) == BILLBOARD and ob.rotation_mode != "AXIS_ANGLE"
     }
     for name in list(_rotated):
         if name not in billboards:
             _unrotate(name)
+
     # parents first; a billboard below another reads its parent as of the last evaluation, one tick behind
     for name, ob in sorted(billboards.items(), key=lambda item: _depth(item[1])):
-        stash = _rotated.setdefault(name, (ob.delta_rotation_euler.copy(), ob.delta_rotation_quaternion.copy()))
+        if name not in _rotated:
+            _rotated[name] = (ob.delta_rotation_euler.copy(), ob.delta_rotation_quaternion.copy())
+        stash = _rotated[name]
         own = _own_rotation(ob)
         authored = _authored_delta(ob, stash)
         basis = Matrix.LocRotScale(
@@ -183,6 +186,7 @@ def orient(view_layer, view):
         m = billboard_rotation((ob.mw.object_flags >> 5) & 3, world, view)
         # Blender applies the delta before the object's rotation, so conjugate `basis @ m` into it
         delta = authored @ own @ m @ own.transposed()
+
         current = _authored_delta(ob, (ob.delta_rotation_euler, ob.delta_rotation_quaternion))
         if max(abs(a - b) for row_a, row_b in zip(delta, current) for a, b in zip(row_a, row_b)) < 1e-6:
             continue  # an unchanged write would still tag a redraw
@@ -205,11 +209,13 @@ def apply(view_layer, desired):
         _set_hidden(False)  # un-hide in the old layer; `_active` is already this layer's
         _hidden.clear()
         _layer = key
+
     for name in desired:
         ob = bpy.data.objects.get(name)  # by name every time: undo invalidates held references
         if ob and not ob.hide_get(view_layer=view_layer):  # a new hide, or undo un-hid one of ours
             ob.hide_set(True, view_layer=view_layer)
             _hidden.add(name)
+
     for name in list(_hidden - desired):
         ob = bpy.data.objects.get(name)
         if ob and ob.hide_get(view_layer=view_layer):
@@ -255,6 +261,7 @@ def find_eye():
                     _focus = key  # the last view that changed is the one being navigated
                 moved = True
                 _views[key] = matrix
+
     for key in list(_views):
         if key not in found:
             del _views[key]

@@ -39,7 +39,7 @@ def resolve_armatures(
     skeletons: list[ResolvedExportSkeleton] = []
     skeletons_by_source: dict[tuple[Any, Any], ResolvedExportSkeleton] = {}
 
-    for (scope, source), _bone_sources in armature_candidates.items():
+    for scope, source in armature_candidates:
         armature = get_node(source, scope)
         pose_bones = source.pose.bones
         bones = tuple(get_node(pose_bones[bone.name], scope) for bone in source.data.bones)

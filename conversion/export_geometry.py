@@ -323,13 +323,14 @@ def read_morphs(
 
 def select_partition(buffers: ExportMeshBuffers, partition: MaterialPartition, name: str) -> ExportMeshBuffers:
     """A new single-partition buffer holding copies of the partition's corners."""
-    count = geometry.validate_payload(payload(buffers), name)
+    values = payload(buffers)
+    count = geometry.validate_payload(values, name)
     corners = np.arange(count) if partition.corner_indices is None else partition.corner_indices
     if len(corners) % 3:
         raise GeometryError(f"{name}: a material partition must select whole triangles, got {len(corners)} corners")
-    values = geometry.select_vertices(payload(buffers), corners, name)
+    selected = geometry.select_vertices(values, corners, name)
     triangles = np.arange(len(corners)).reshape(-1, 3)
-    return with_payload(buffers, values, triangles, partitions=(replace(partition, corner_indices=None),))
+    return with_payload(buffers, selected, triangles, partitions=(replace(partition, corner_indices=None),))
 
 
 def uv_handedness(uv_set: Array, triangles: Array) -> Array:

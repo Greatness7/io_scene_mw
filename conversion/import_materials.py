@@ -6,6 +6,7 @@ in one import and supplies the texture search paths.
 
 from __future__ import annotations
 
+import contextlib
 import pathlib
 from dataclasses import dataclass
 from typing import Any, cast
@@ -28,8 +29,9 @@ class ImportMaterialContext:
 
 
 def import_material(source_shape, properties, target_object, ctx: ImportMaterialContext) -> None:
-    if len(properties) == 0:
+    if not properties:
         return
+
     ni_alpha = properties.get(nif.NiAlphaProperty)
     ni_material = properties.get(nif.NiMaterialProperty)
     ni_stencil = properties.get(nif.NiStencilProperty)
@@ -39,9 +41,11 @@ def import_material(source_shape, properties, target_object, ctx: ImportMaterial
         ni_texture = nif.NiTexturingProperty()
     if ni_wireframe and ni_wireframe.wireframe:
         target_object.display_type = "WIRE"
+
     name = calc_name_from_textures(ni_texture, ctx.options)
     if apply_existing_material(name, ni_alpha, source_shape, target_object, ctx.options):
         return
+
     props_hash = (
         *properties.values(),
         len(source_shape.data.vertex_colors),
@@ -58,6 +62,7 @@ def import_material(source_shape, properties, target_object, ctx: ImportMaterial
     finally:
         if ctx.options.use_existing_materials and bl_prop is not None:
             bl_prop.material.name = name
+
     assert bl_prop is not None
     if ni_alpha:
         create_alpha_property(bl_prop, ni_alpha)
@@ -86,6 +91,7 @@ def create_material_property(bl_prop, ni_prop, ctx: ImportMaterialContext) -> No
     bl_prop.emissive_color[:3] = ni_prop.emissive_color
     bl_prop.shine = ni_prop.shine
     bl_prop.alpha = ni_prop.alpha
+
     import_animation.create_color_controller(bl_prop, ni_prop, ctx.animation)
     import_animation.create_alpha_controller(bl_prop, ni_prop, ctx.animation)
 
@@ -93,11 +99,13 @@ def create_material_property(bl_prop, ni_prop, ctx: ImportMaterialContext) -> No
 def create_texturing_property(bl_prop, ni_prop, source_shape, target_object, ctx: ImportMaterialContext) -> None:
     for name in nif.NiTexturingProperty.texture_keys:
         create_texturing_property_map(bl_prop, ni_prop, name, target_object, ctx.texture_paths)
+
     if target_object.data.vertex_colors:
         bl_prop.vertex_color.layer_name = target_object.data.vertex_colors[0].name
         bl_prop.create_link(bl_prop.vertex_color, bl_prop.shader, "Color", "Vertex Color")
         bl_prop.create_link(bl_prop.vertex_color, bl_prop.shader, "Alpha", "Diffuse Alpha")
         bl_prop.inputs["Use Vertex Colors"].default_value = 1.0
+
     for controller in source_shape.controllers:
         if isinstance(controller, nif.NiUVController):
             import_animation.create_uv_controller(controller, target_object, ctx.animation)
@@ -120,21 +128,22 @@ def create_texturing_property_map(bl_prop, ni_prop, slot_name, target_object, te
         image = create_image(ni_slot.source.filename, texture_paths)
     except (AttributeError, LookupError):
         return
+
     bl_slot.image = image
     if ni_slot.clamp_mode.name == "CLAMP_S_CLAMP_T":
         bl_slot.use_repeat = False
     if ni_slot.source.use_mipmaps.name == "NO":
         bl_slot.use_mipmaps = False
-    try:
+
+    with contextlib.suppress(IndexError):
         bl_slot.layer = target_object.data.uv_layers[ni_slot.uv_set].name
-    except IndexError:
-        pass
 
 
 def create_image(filepath, texture_paths):
     abspath = resolve_texture_path(filepath, texture_paths)
     if abspath.exists():
         return bpy.data.images.load(str(abspath), check_existing=True)
+
     image = bpy.data.images.new(name=abspath.name, width=1, height=1)
     image.filepath = str(abspath)
     image.source = "FILE"
@@ -144,12 +153,12 @@ def create_image(filepath, texture_paths):
 def calc_name_from_textures(ni_prop, options: ImportOptions) -> str:
     if not options.use_existing_materials or ni_prop is None:
         return ""
+
     names = {}
     for tex_key, tex_map in zip(ni_prop.texture_keys, ni_prop.texture_maps):
-        try:
+        with contextlib.suppress(AttributeError):
             names[tex_key] = pathlib.Path(tex_map.source.filename).stem.lower()
-        except AttributeError:
-            pass
+
     if names.keys() == {"base_texture"}:
         return names["base_texture"]
     return " | ".join(f"{key.rpartition('_')[0]}:{value}" for key, value in names.items())
@@ -158,6 +167,7 @@ def calc_name_from_textures(ni_prop, options: ImportOptions) -> str:
 def apply_existing_material(name, ni_alpha, source_shape, target_object, options: ImportOptions):
     if not options.use_existing_materials:
         return
+
     use_vertex_colors = bool(len(source_shape.data.vertex_colors))
     base_name, index = name, 0
     while True:
@@ -166,9 +176,11 @@ def apply_existing_material(name, ni_alpha, source_shape, target_object, options
             bl_prop = material.mw.validate()
         except (LookupError, TypeError):
             break
+
         if bl_prop.use_vertex_colors == use_vertex_colors and alpha_matches(bl_prop, ni_alpha):
             link_object_material(target_object, bl_prop.material)
             return True
+
         index += 1
         name = f"{base_name}.{index:03}"
 
@@ -191,6 +203,7 @@ def link_object_material(bl_object, bl_material) -> None:
     else:
         bl_object.data.materials.append(None)
         slot = bl_object.material_slots[-1]
+
     slot.link = "OBJECT"
     slot.material = bl_material
 
@@ -201,6 +214,7 @@ def resolve_texture_path(relpath, texture_paths, case_insensitive=pathlib.Path(_
         path = path.relative_to("data files")
     if path.parts[0] == "textures":
         path = path.relative_to("textures")
+
     suffixes = {path.suffix, ".dds", ".tga", ".bmp"}
     for directory in texture_paths:
         abspath = directory / path
@@ -210,4 +224,5 @@ def resolve_texture_path(relpath, texture_paths, case_insensitive=pathlib.Path(_
                 abspath = pathlib.Path(bpy.path.resolve_ncase(str(abspath)))
             if abspath.exists():
                 return abspath
+
     return pathlib.Path("textures") / path

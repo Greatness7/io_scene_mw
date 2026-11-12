@@ -6,9 +6,9 @@ UV animation controllers belong to individual shapes, including those that reuse
 
 from __future__ import annotations
 
-import pathlib
+from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any, cast
+import pathlib
 
 import bpy
 import numpy as np
@@ -28,19 +28,18 @@ class ExportMaterialContext:
 
 
 def export_material(material, target_shape, source_object, ctx: ExportMaterialContext, *, is_collider):
-    if is_collider:
+    if is_collider or not (material and material.use_nodes):
         return
-    if not (material and material.use_nodes):
-        return
+
     try:
         bl_prop = material.mw.validate()
     except TypeError:
         bl_prop = None
-    try:
-        if not cast(Any, bl_prop).use_vertex_colors:
+
+    if bl_prop is not None and not bl_prop.use_vertex_colors:
+        with suppress(AttributeError):
             del target_shape.data.vertex_colors
-    except AttributeError:
-        pass
+
     if material in ctx.materials:
         target_shape.properties = list(ctx.materials[material])
         if bl_prop is not None:
@@ -49,6 +48,7 @@ def export_material(material, target_shape, source_object, ctx: ExportMaterialCo
                     bl_prop, slot, source_object, target_shape, ctx.options, ctx.cycle_type
                 )
         return
+
     if bl_prop is None:
         create_fallback_property(target_shape, material)
     else:
@@ -57,6 +57,7 @@ def export_material(material, target_shape, source_object, ctx: ExportMaterialCo
         create_texturing_property(target_shape, bl_prop, source_object, ctx)
         create_wireframe_property(target_shape, source_object, bl_prop)
         create_stencil_property(target_shape, bl_prop)
+
     ctx.materials[material] = target_shape.properties
 
 
@@ -100,26 +101,29 @@ def create_texturing_property_map(target_shape, bl_prop, ni_prop, name, source_o
         filepath = bl_slot.image.filepath
     except AttributeError:
         return
+
+    if not ctx.options.preserve_material_names and name == "base_texture" and filepath:
+        prop = target_shape.get_property(nif.NiMaterialProperty)
+        if prop is not None:
+            prop.name = pathlib.Path(filepath).stem
+
     ni_slot = nif.NiTexturingPropertyMap()
-    if not ctx.options.preserve_material_names:
-        if (name == "base_texture") and filepath:
-            prop = target_shape.get_property(nif.NiMaterialProperty)
-            if prop is not None:
-                prop.name = pathlib.Path(filepath).stem
     for i, uv in enumerate(source_object.data.uv_layers):
         if uv.name == bl_slot.layer:
             ni_slot.uv_set = i
             break
     if not bl_slot.use_repeat:
         ni_slot.clamp_mode = 0
+
     ni_slot.source = nif.NiSourceTexture()
     if not bl_slot.use_mipmaps:
         ni_slot.source.use_mipmaps = nif.NiSourceTexture.UseMipMaps.NO
-    if (bl_slot.image.source == "GENERATED") or bl_slot.image.packed_file:
+    if bl_slot.image.source == "GENERATED" or bl_slot.image.packed_file:
         include_alpha = bl_prop.use_alpha_blend or bl_prop.use_alpha_clip
         ni_slot.source.pixel_data = create_pixel_data(bl_slot.image, include_alpha, ctx.pixel_datas)
     else:
         ni_slot.source.filename = bpy.path.abspath(filepath)
+
     setattr(ni_prop, name, ni_slot)
     export_animation.create_uv_controller(bl_prop, bl_slot, source_object, target_shape, ctx.options, ctx.cycle_type)
 
@@ -137,41 +141,49 @@ def create_stencil_property(target_shape, bl_prop) -> None:
 def create_pixel_data(image, include_alpha, pixel_datas) -> nif.NiPixelData:
     if pixel_data := pixel_datas.get(image):
         assert pixel_data.pixel_format.has_alpha == include_alpha
+        return pixel_data
+
+    assert image.channels == 4
+    width, height = image.size
+    for size in (width, height):
+        if size == 0 or (size & (size - 1) != 0):
+            raise nif_switch.SwitchError("Image dimensions must be a power of 2")
+
+    if include_alpha:
+        pixel_format = nif.NiPixelFormat.RGBA()
+        pixel_stride = 4
     else:
-        assert image.channels == 4
-        width, height = image.size
-        for size in (width, height):
-            if (size == 0) or (size & (size - 1) != 0):
-                raise nif_switch.SwitchError("Image dimensions must be a power of 2")
-        if include_alpha:
-            pixel_format = nif.NiPixelFormat.RGBA()
-            pixel_stride = 4
-        else:
-            pixel_format = nif.NiPixelFormat.RGB()
-            pixel_stride = 3
-        pixel_data = nif.NiPixelData(pixel_format=pixel_format, pixel_stride=pixel_stride)
-        pixel_data.mipmap_levels.resize((1, 3))
-        pixel_data.mipmap_levels[:] = [width, height, 0]
-        pixel_floats = np.empty((width, height, 4), np.float32)
-        image.pixels.foreach_get(pixel_floats.ravel())
-        if pixel_stride == 3:
-            pixel_floats = pixel_floats[:, :, :3]
-        pixel_floats = np.flipud(pixel_floats)
-        pixel_data.pixel_data = (pixel_floats.ravel() * 255.0).round().astype(np.ubyte)
-        pixel_datas[image] = pixel_data
+        pixel_format = nif.NiPixelFormat.RGB()
+        pixel_stride = 3
+
+    pixel_data = nif.NiPixelData(pixel_format=pixel_format, pixel_stride=pixel_stride)
+    pixel_data.mipmap_levels.resize((1, 3))
+    pixel_data.mipmap_levels[:] = [width, height, 0]
+
+    pixel_floats = np.empty((width, height, 4), np.float32)
+    image.pixels.foreach_get(pixel_floats.ravel())
+    if pixel_stride == 3:
+        pixel_floats = pixel_floats[:, :, :3]
+    pixel_floats = np.flipud(pixel_floats)
+    pixel_data.pixel_data = (pixel_floats.ravel() * 255.0).round().astype(np.ubyte)
+
+    pixel_datas[image] = pixel_data
     return pixel_data
 
 
 def create_fallback_property(target_shape, material) -> None:
     bl_image = nif_shader.get_base_texture_image(material)
-    if bl_image:
-        ni_prop = nif.NiMaterialProperty()
-        ni_prop.ambient_color[:] = 1.0
-        ni_prop.diffuse_color[:] = 1.0
-        ni_prop.alpha = 1.0
-        target_shape.properties.append(ni_prop)
-        ni_prop = nif.NiTexturingProperty()
-        target_shape.properties.append(ni_prop)
-        texture = ni_prop.base_texture = nif.NiTexturingPropertyMap()
-        texture.source = nif.NiSourceTexture()
-        texture.source.filename = bpy.path.abspath(bl_image.filepath)
+    if not bl_image:
+        return
+
+    mat_prop = nif.NiMaterialProperty()
+    mat_prop.ambient_color[:] = 1.0
+    mat_prop.diffuse_color[:] = 1.0
+    mat_prop.alpha = 1.0
+    target_shape.properties.append(mat_prop)
+
+    tex_prop = nif.NiTexturingProperty()
+    target_shape.properties.append(tex_prop)
+    texture = tex_prop.base_texture = nif.NiTexturingPropertyMap()
+    texture.source = nif.NiSourceTexture()
+    texture.source.filename = bpy.path.abspath(bl_image.filepath)

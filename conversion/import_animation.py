@@ -51,10 +51,12 @@ def create_uv_controller(controller, target_object, ctx: ImportAnimationContext)
     data = controller.data
     if data is None:
         return
+
     try:
         bl_prop = target_object.active_material.mw
     except AttributeError:
         return
+
     action = ensure_action(bl_prop.texture_group.node_tree)
     try:
         uv_name = target_object.data.uv_layers[controller.texture_set].name
@@ -63,6 +65,7 @@ def create_uv_controller(controller, target_object, ctx: ImportAnimationContext)
     except (IndexError, StopIteration):
         ctx.warn("skipping NiUVController due to invalid texture set")
         return
+
     channels = {
         (data.u_offset_data, data.v_offset_data): (
             bl_node.inputs["Location"].path_from_id("default_value"),
@@ -83,6 +86,7 @@ def create_uv_controller(controller, target_object, ctx: ImportAnimationContext)
             fcurve.keyframe_points.foreach_set("co", curve_data.keys[:, :2].ravel())
             create_interpolation_data(curve_data, fcurve)
             fcurve.update()
+
     update_frame_range(ctx.scene, controller)
 
 
@@ -95,12 +99,14 @@ def create_color_controller(bl_prop, ni_prop, ctx: ImportAnimationContext) -> No
     keys = controller.data.keys
     if len(keys) == 0:
         return
+
     if controller.color_field == "DIFFUSE":
         data_path = bl_prop.diffuse_input.path_from_id("default_value")
     elif controller.color_field == "EMISSIVE":
         data_path = bl_prop.emissive_input.path_from_id("default_value")
     else:
         raise NotImplementedError(f"'{controller.color_field}' animations are not supported")
+
     action = ensure_action(bl_prop.material.node_tree)
     for i in range(3):
         fcurve = ensure_fcurve(action, data_path, index=i, group=bl_prop.material.name)
@@ -108,6 +114,7 @@ def create_color_controller(bl_prop, ni_prop, ctx: ImportAnimationContext) -> No
         fcurve.keyframe_points.foreach_set("co", keys[:, (0, i + 1)].ravel())
         create_interpolation_data(controller.data, fcurve)
         fcurve.update()
+
     update_frame_range(ctx.scene, controller)
 
 
@@ -120,6 +127,7 @@ def create_alpha_controller(bl_prop, ni_prop, ctx: ImportAnimationContext) -> No
     keys = controller.data.keys
     if len(keys) == 0:
         return
+
     action = ensure_action(bl_prop.material.node_tree)
     data_path = bl_prop.opacity_input.path_from_id("default_value")
     fcurve = ensure_fcurve(action, data_path, index=0, group=bl_prop.material.name)
@@ -127,6 +135,7 @@ def create_alpha_controller(bl_prop, ni_prop, ctx: ImportAnimationContext) -> No
     fcurve.keyframe_points.foreach_set("co", keys[:, :2].ravel())
     create_interpolation_data(controller.data, fcurve)
     fcurve.update()
+
     update_frame_range(ctx.scene, controller)
 
 
@@ -137,6 +146,7 @@ def import_object_animation(source_node, target, bone_name: str, ctx: ImportAnim
 def set_mute(target, state: bool, ctx: ImportAnimationContext, fcurves=None) -> None:
     if ctx.options.ignore_animations:
         return
+
     if fcurves is None:
         try:
             action = target.id_data.animation_data.action
@@ -145,6 +155,7 @@ def set_mute(target, state: bool, ctx: ImportAnimationContext, fcurves=None) -> 
         if action is None:
             return
         fcurves = action_fcurves(action)
+
     if not fcurves:
         return
     set_fcurves_mute(fcurves, state)
@@ -160,6 +171,7 @@ class _ObjectAnimation:
     def create(self) -> None:
         if self.ctx.options.ignore_animations:
             return
+
         bl_object = self.target.id_data
         if self.source.extra_data:
             self.create_text_keys(bl_object)
@@ -171,6 +183,7 @@ class _ObjectAnimation:
         text_data = self.source.extra_datas.find_type(nif.NiTextKeyExtraData)
         if text_data is None:
             return
+
         action = ensure_action(bl_object)
         for frame, text in text_data.keys.tolist():
             for name in filter(None, text.splitlines()):
@@ -181,6 +194,7 @@ class _ObjectAnimation:
         controller = self.source.controllers.find_type(nif.NiKeyframeController)
         if not (controller and controller.data):
             return
+
         action = ensure_action(bl_object)
         self.create_translations(controller, action)
         self.create_rotations(controller, action)
@@ -191,6 +205,7 @@ class _ObjectAnimation:
         data = controller.data.translations
         if len(data.keys) == 0:
             return
+
         data_path = self.target.path_from_id("location")
         for i in range(3):
             fcurve = ensure_fcurve(action, data_path, index=i, group=self.bone_name)
@@ -208,6 +223,7 @@ class _ObjectAnimation:
                 self.target.rotation_mode = controller.data.rotations.euler_axis_order.name
                 self.create_euler_rotations(controller, action)
                 return
+
         self.target.rotation_mode = "QUATERNION"
         self.create_quaternion_rotations(controller, action)
 
@@ -226,6 +242,7 @@ class _ObjectAnimation:
         data = controller.data.rotations
         if len(data.keys) == 0:
             return
+
         data_path = self.target.path_from_id("rotation_quaternion")
         for i in range(4):
             fcurve = ensure_fcurve(action, data_path, index=i, group=self.target.name)
@@ -237,6 +254,7 @@ class _ObjectAnimation:
         data = controller.data.scales
         if len(data.keys) == 0:
             return
+
         data_path = self.target.path_from_id("scale")
         for i in range(3):
             fcurve = ensure_fcurve(action, data_path, index=i, group=self.target.name)
@@ -249,16 +267,19 @@ class _ObjectAnimation:
         controller = self.source.controllers.find_type(nif.NiVisController)
         if controller is None or controller.data is None or len(controller.data.keys) == 0:
             return
+
         data = controller.data
         keys = np.empty((len(data.keys), 2), dtype=np.float32)
         keys[:, 0] = data.times
         keys[:, 1] = 1 - data.values
+
         action = ensure_action(bl_object)
         try:
             data_path = self.target.path_from_id("hide_viewport")
         except AttributeError:
             self.ctx.warn(f"NiVisController on bones are not supported ({self.source.name})")
             return
+
         fcurve = ensure_fcurve(action, data_path, index=0, group=self.target.name)
         fcurve.keyframe_points.add(len(keys))
         fcurve.keyframe_points.foreach_set("co", keys.ravel())
