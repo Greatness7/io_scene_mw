@@ -207,16 +207,16 @@ class OBJECT_MT_mw_lod_range(bpy.types.Menu):
     bl_label = "LOD Range"
 
     def draw(self, context):
-        row = getattr(context, "mw_lod_range", None)
+        child = getattr(context, "mw_lod_child", None)
         lod = get_lod(context)
-        if lod is None:
+        if lod is None or child is None:
             return
-        if row is None:
-            child = getattr(context, "mw_lod_child", None)
-            if child is not None:
-                self.layout.operator(LODAddRange.bl_idname, text="Add Range", icon="ADD").child = child.name
+        # Layout context can retain a preceding child's range; resolve from the clicked child instead.
+        index = next((i for i, row in enumerate(lod.mw.lod_ranges) if row.child == child), None)
+        if index is None:
+            self.layout.operator(LODAddRange.bl_idname, text="Add Range", icon="ADD").child = child.name
             return
-        index = next(i for i, r in enumerate(lod.mw.lod_ranges) if r.as_pointer() == row.as_pointer())
+        row = lod.mw.lod_ranges[index]
         layout = self.layout
         unlimited = nif_switch.is_no_limit(row.far)
         icon = "CHECKBOX_HLT" if unlimited else "CHECKBOX_DEHLT"
@@ -366,7 +366,6 @@ class ObjectPanel(bpy.types.Panel):
                 fallback.operator(LODAddRange.bl_idname, text="Near 0").child = child.name
                 fallback.operator(LODAddRange.bl_idname, text="No Limit").child = child.name
             else:
-                line.context_pointer_set("mw_lod_range", row)
                 line.prop(row, "near")
                 if nif_switch.is_no_limit(row.far):
                     far = line.row(align=True)
