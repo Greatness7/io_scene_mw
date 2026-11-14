@@ -536,8 +536,8 @@ def build_mw_shader_tree():
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Specular Color", default=(0, 0, 0, 1))
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Emissive Color", default=(0, 0, 0, 1))
     new_socket(tree, 'INPUT', 'NodeSocketColor', "Glow Texture", default=(0, 0, 0, 1))
-    # Keep this socket at the old Alpha Factor index. Blender preserves group-node
-    # links/defaults by interface index when a material migrates to a new node tree.
+    # Keep the legacy input order for socket-index animation paths. MaterialProperties.upgrade
+    # restores links/defaults by name because Blender's automatic remap uses interface identifiers.
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Alpha Blend Enabled")
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Base Alpha", default=1.0)
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Dark Alpha", default=1.0)
@@ -551,7 +551,7 @@ def build_mw_shader_tree():
         min_value=0.0,
         max_value=1.0,
     )
-    # New sockets must remain after the legacy interface prefix; see the index note above.
+    # Append new sockets so existing socket-index animation paths remain valid.
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Additive Blend Enabled")
     new_socket(tree, 'INPUT', 'NodeSocketFloat', "Alpha Test Function", default=4.0)
     # Detail's unlinked linear 0.5 is a synthetic neutral, not a decoded texture sample.

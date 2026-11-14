@@ -266,7 +266,7 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
         return "Alpha Test Function" not in self.inputs or "Use Vertex Colors" not in self.inputs
 
     def upgrade(self):
-        """One-time migration for materials using an older generated MW Shader node group."""
+        """One-time migration for materials using an older asset or generated MW Shader node group."""
         if not self.needs_upgrade:
             return
 
@@ -289,7 +289,38 @@ class MaterialProperties(bpy.types.PropertyGroup, NodeTreeWrapper):
                 if link.from_node == self.vertex_color:
                     vertex_source = link.from_socket
                     break
-        self.shader.node_tree = get_current_mw_shader_tree()
+
+        # Blender carries inputs across a group swap by identifier, not by name or index.
+        # The shipped asset uses different identifiers; on 3.6 some even collide with unrelated new inputs.
+        input_defaults = {}
+        input_links = {}
+        for socket in self.inputs:
+            name = "Alpha Blend Enabled" if socket.name == "Alpha Factor" else socket.name
+            input_defaults[name] = socket.default_value[:] if socket.type == 'RGBA' else socket.default_value
+            input_links[name] = [link.from_socket for link in socket.links]
+
+        current = get_current_mw_shader_tree()
+
+        # Blender 5 also removes/remaps animation by socket identifier. Leave the action and
+        # drivers in place, but detach its slot while replacing inputs so their index paths survive.
+        animation = self.node_tree.animation_data
+        action_slot = getattr(animation, "action_slot", None)
+        if action_slot is not None:
+            animation.action_slot = None
+        try:
+            self.shader.node_tree = None  # discard identifier remapping, including defaults on new-only inputs
+            self.shader.node_tree = current
+        finally:
+            if action_slot is not None:
+                animation.action_slot = action_slot
+
+        for name, default in input_defaults.items():
+            socket = self.inputs.get(name)
+            if socket is not None:
+                socket.default_value = default
+                for source in input_links[name]:
+                    self.links.new(source, socket)
+
         if vertex_source is not None:
             self.remove_link(self.diffuse_input)
             self.links.new(vertex_source, self.vertex_input)
